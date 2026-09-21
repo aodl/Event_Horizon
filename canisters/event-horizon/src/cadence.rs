@@ -90,7 +90,12 @@ fn fallback_from(max_mode: PollingMode, balance: u128) -> PollingMode {
         return candidate;
     }
     // Hysteresis gaps: retain the highest lower mode whose exit threshold is still covered.
-    for mode in [PollingMode::VeryFast, PollingMode::Fast, PollingMode::Standard, PollingMode::Economy] {
+    for mode in [
+        PollingMode::VeryFast,
+        PollingMode::Fast,
+        PollingMode::Standard,
+        PollingMode::Economy,
+    ] {
         if rank(mode) <= rank(max_mode) && balance >= mode.exit_threshold() {
             return mode;
         }
@@ -115,29 +120,53 @@ mod tests {
 
     #[test]
     fn accelerates_directly_to_fastest_enterable_mode() {
-        assert_eq!(next_mode(PollingMode::Economy, 100 * TRILLION), PollingMode::Continuous);
+        assert_eq!(
+            next_mode(PollingMode::Economy, 100 * TRILLION),
+            PollingMode::Continuous
+        );
     }
 
     #[test]
     fn very_fast_holds_inside_hysteresis_band() {
-        assert_eq!(next_mode(PollingMode::VeryFast, 20 * TRILLION), PollingMode::VeryFast);
-        assert_eq!(next_mode(PollingMode::VeryFast, 15 * TRILLION), PollingMode::VeryFast);
+        assert_eq!(
+            next_mode(PollingMode::VeryFast, 20 * TRILLION),
+            PollingMode::VeryFast
+        );
+        assert_eq!(
+            next_mode(PollingMode::VeryFast, 15 * TRILLION),
+            PollingMode::VeryFast
+        );
     }
 
     #[test]
     fn very_fast_falls_once_exit_is_crossed() {
-        assert_eq!(next_mode(PollingMode::VeryFast, 14 * TRILLION), PollingMode::Fast);
+        assert_eq!(
+            next_mode(PollingMode::VeryFast, 14 * TRILLION),
+            PollingMode::Fast
+        );
     }
 
     #[test]
     fn economy_survives_until_one_trillion() {
-        assert_eq!(next_mode(PollingMode::Economy, TRILLION), PollingMode::Economy);
-        assert_eq!(next_mode(PollingMode::Economy, TRILLION - 1), PollingMode::ReserveProtection);
+        assert_eq!(
+            next_mode(PollingMode::Economy, TRILLION),
+            PollingMode::Economy
+        );
+        assert_eq!(
+            next_mode(PollingMode::Economy, TRILLION - 1),
+            PollingMode::ReserveProtection
+        );
     }
 
     #[test]
     fn reserve_requires_economy_entry_to_resume() {
-        assert_eq!(next_mode(PollingMode::ReserveProtection, TRILLION + 500_000_000_000), PollingMode::ReserveProtection);
-        assert_eq!(next_mode(PollingMode::ReserveProtection, 2 * TRILLION), PollingMode::Economy);
+        assert_eq!(
+            next_mode(PollingMode::ReserveProtection, TRILLION + 500_000_000_000),
+            PollingMode::ReserveProtection
+        );
+        assert_eq!(
+            next_mode(PollingMode::ReserveProtection, 2 * TRILLION),
+            PollingMode::Economy
+        );
     }
 }

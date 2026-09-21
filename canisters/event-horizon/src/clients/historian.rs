@@ -6,13 +6,23 @@ use crate::config::{REQUIRED_ENDOWMENT_E8S, RESERVE_PROTECTION_CYCLES};
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum CommitmentRoute {
-    CyclesTopUp { canister_id: Principal },
-    RawIcp { destination_canister_id: Principal, memo: Vec<u8> },
-    NeuronStake { neuron_id: u64, memo: Option<Vec<u8>> },
+    CyclesTopUp {
+        canister_id: Principal,
+    },
+    RawIcp {
+        destination_canister_id: Principal,
+        memo: Vec<u8>,
+    },
+    NeuronStake {
+        neuron_id: u64,
+        memo: Option<Vec<u8>>,
+    },
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-struct Args { routes: Vec<CommitmentRoute> }
+struct Args {
+    routes: Vec<CommitmentRoute>,
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 struct Summary {
@@ -42,18 +52,29 @@ pub async fn route_is_admitted(
     destination: Principal,
     memo: Vec<u8>,
 ) -> Result<bool, String> {
-    let route = CommitmentRoute::RawIcp { destination_canister_id: destination, memo };
-    let args = Args { routes: vec![route.clone()] };
+    let route = CommitmentRoute::RawIcp {
+        destination_canister_id: destination,
+        memo,
+    };
+    let args = Args {
+        routes: vec![route.clone()],
+    };
     let call = Call::bounded_wait(historian, "get_commitment_route_summaries").with_arg(&args);
-    if ic_cdk::api::canister_liquid_cycle_balance() < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost()) {
+    if ic_cdk::api::canister_liquid_cycle_balance()
+        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
+    {
         return Err("reserve_protection".to_string());
     }
-    let response = call.await
+    let response = call
+        .await
         .map_err(|e| format!("historian transport: {e:?}"))?
         .candid::<Response>()
         .map_err(|e| format!("historian decode: {e:?}"))?;
 
-    if response.truncated || !response.complete_from_genesis || response.commitment_index_fault.is_some() {
+    if response.truncated
+        || !response.complete_from_genesis
+        || response.commitment_index_fault.is_some()
+    {
         return Ok(false);
     }
     let Some(summary) = response.items.into_iter().find(|item| item.route == route) else {

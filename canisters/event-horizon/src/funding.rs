@@ -1,12 +1,15 @@
 use crate::{
     account::{account_identifier_bytes, principal_to_subaccount},
     clients::{cmc, ledger},
-    config,
-    logging,
+    config, logging,
     state::{self, CmcState},
 };
 
-fn transfer_arg(amount_e8s: u64, fee_e8s: u64, created_at_time_nanos: u64) -> ledger::LegacyTransferArg {
+fn transfer_arg(
+    amount_e8s: u64,
+    fee_e8s: u64,
+    created_at_time_nanos: u64,
+) -> ledger::LegacyTransferArg {
     let runtime = config::runtime();
     let self_id = ic_cdk::api::canister_self();
     let cmc_subaccount = principal_to_subaccount(self_id);
@@ -17,7 +20,9 @@ fn transfer_arg(amount_e8s: u64, fee_e8s: u64, created_at_time_nanos: u64) -> le
         fee: ledger::Tokens { e8s: fee_e8s },
         from_subaccount: None,
         to: cmc_account_identifier.to_vec(),
-        created_at_time: Some(ledger::TimeStamp { timestamp_nanos: created_at_time_nanos }),
+        created_at_time: Some(ledger::TimeStamp {
+            timestamp_nanos: created_at_time_nanos,
+        }),
     }
 }
 
@@ -29,7 +34,8 @@ async fn resume_transfer(amount_e8s: u64, fee_e8s: u64, created_at_time_nanos: u
             state::write_cmc_state(CmcState::NotifyPending { block_index });
             true
         }
-        ledger::LegacyTransferOutcome::RetrySameIdentity | ledger::LegacyTransferOutcome::Uncertain(_) => false,
+        ledger::LegacyTransferOutcome::RetrySameIdentity
+        | ledger::LegacyTransferOutcome::Uncertain(_) => false,
         ledger::LegacyTransferOutcome::Replan => {
             // The Ledger proved no debit. Drop this plan so the next maintenance tick can
             // re-read the live balance/fee and construct a fresh deterministic identity.
@@ -60,7 +66,11 @@ pub async fn run_funding_maintenance() {
             resume_notify(block_index).await;
             return;
         }
-        CmcState::TransferPending { amount_e8s, fee_e8s, created_at_time_nanos } => {
+        CmcState::TransferPending {
+            amount_e8s,
+            fee_e8s,
+            created_at_time_nanos,
+        } => {
             if resume_transfer(amount_e8s, fee_e8s, created_at_time_nanos).await {
                 if let CmcState::NotifyPending { block_index } = state::read_cmc_state() {
                     resume_notify(block_index).await;
@@ -75,8 +85,13 @@ pub async fn run_funding_maintenance() {
     let self_id = ic_cdk::api::canister_self();
     let balance = match ledger::icrc1_balance_of(
         runtime.ledger_canister,
-        ledger::Account { owner: self_id, subaccount: None },
-    ).await {
+        ledger::Account {
+            owner: self_id,
+            subaccount: None,
+        },
+    )
+    .await
+    {
         Ok(value) => value,
         Err(_) => return,
     };
@@ -84,7 +99,9 @@ pub async fn run_funding_maintenance() {
         Ok(value) => value,
         Err(_) => return,
     };
-    if balance <= fee { return; }
+    if balance <= fee {
+        return;
+    }
 
     let amount_e8s = balance - fee;
     let created_at_time_nanos = ic_cdk::api::time();

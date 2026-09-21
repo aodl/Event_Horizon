@@ -16,6 +16,9 @@ mod scheduler;
 mod state;
 mod subscription;
 
+#[cfg(feature = "debug_api")]
+use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
+
 pub use account::{account_identifier_bytes, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
@@ -94,17 +97,25 @@ mod debug {
     }
 
     #[ic_cdk::update]
-    async fn debug_poll_once() { scheduler::debug_poll_once().await; }
+    async fn debug_poll_once() {
+        scheduler::debug_poll_once().await;
+    }
 
     #[ic_cdk::update]
-    async fn debug_funding_once() { scheduler::debug_funding_once().await; }
+    async fn debug_funding_once() {
+        scheduler::debug_funding_once().await;
+    }
 
     #[derive(CandidType, Deserialize)]
-    struct DebugSubscriptionArgs { subscriber: Principal, subaccount: u8 }
+    pub struct DebugSubscriptionArgs {
+        subscriber: Principal,
+        subaccount: u8,
+    }
 
     #[ic_cdk::query]
     fn debug_subscription(args: DebugSubscriptionArgs) -> Option<Subscription> {
-        let account = account_identifier_bytes(args.subscriber, numbered_subaccount(args.subaccount));
+        let account =
+            account_identifier_bytes(args.subscriber, numbered_subaccount(args.subaccount));
         state::get_subscription(account)
     }
 }

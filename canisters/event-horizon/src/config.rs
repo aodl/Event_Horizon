@@ -42,16 +42,23 @@ pub struct RuntimeConfig {
 impl RuntimeConfig {
     pub fn production() -> Self {
         Self {
-            ledger_canister: Principal::from_text(ICP_LEDGER_CANISTER).expect("valid ICP Ledger principal"),
+            ledger_canister: Principal::from_text(ICP_LEDGER_CANISTER)
+                .expect("valid ICP Ledger principal"),
             cmc_canister: Principal::from_text(CMC_CANISTER).expect("valid CMC principal"),
-            historian_canister: Principal::from_text(JUPITER_HISTORIAN_CANISTER).expect("valid Historian principal"),
-            faucet_canister: Principal::from_text(JUPITER_FAUCET_CANISTER).expect("valid Faucet principal"),
+            historian_canister: Principal::from_text(JUPITER_HISTORIAN_CANISTER)
+                .expect("valid Historian principal"),
+            faucet_canister: Principal::from_text(JUPITER_FAUCET_CANISTER)
+                .expect("valid Faucet principal"),
         }
     }
 }
 
 #[cfg(not(feature = "debug_api"))]
-pub fn runtime() -> RuntimeConfig { RuntimeConfig::production() }
+pub fn runtime() -> RuntimeConfig {
+    RuntimeConfig::production()
+}
 
 #[cfg(feature = "debug_api")]
-pub fn runtime() -> RuntimeConfig { crate::state::read_debug_config() }
+pub fn runtime() -> RuntimeConfig {
+    crate::state::read_debug_config()
+}
