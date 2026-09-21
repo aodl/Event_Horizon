@@ -1,6 +1,8 @@
 /target/
 /.icp/
 /node_modules/
+/release-artifacts/
+/tools/__pycache__/
 *.wasm
 *.wasm.gz
 .DS_Store

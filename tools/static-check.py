@@ -1,5 +1,9 @@
 from pathlib import Path
-import hashlib, json, tomllib
+import hashlib, json
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 hosts
+    import tomli as tomllib
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
