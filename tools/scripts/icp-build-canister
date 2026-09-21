@@ -5,6 +5,11 @@ package="$1"; stem="$2"
 : "${ICP_WASM_OUTPUT_PATH:?ICP_WASM_OUTPUT_PATH is required}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+# icp-cli may build both canisters concurrently, while build-release recreates
+# the shared artifact directory. Hold this lock through the final copy.
+mkdir -p target
+exec 9>target/icp-build-release.lock
+flock 9
 artifact="release-artifacts/${stem}.wasm"
 if [ "${EVENT_HORIZON_USE_CANONICAL_ARTIFACTS:-0}" = "1" ]; then
   test -f release-artifacts/release-artifacts.sha256 || { echo "run ./tools/scripts/docker-build first" >&2; exit 1; }
