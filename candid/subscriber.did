@@ -1,0 +1,3 @@
+service : {
+  poke : (vec nat8) -> ();
+}

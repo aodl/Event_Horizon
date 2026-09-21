@@ -1,0 +1,6 @@
+.git
+.icp/cache
+target
+release-artifacts
+node_modules
+EVENT_HORIZON-*.zip

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
+for tool in cargo cargo-audit cargo-deny npm osv-scanner; do
+  command -v "$tool" >/dev/null || { echo "$tool is required for the security gate" >&2; exit 1; }
+done
+cargo audit
+cargo deny check advisories licenses bans sources
+npm audit --omit=dev
+osv-scanner scan -L Cargo.lock -L package-lock.json

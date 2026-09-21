@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
+command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
+rm -rf release-artifacts; mkdir -p release-artifacts
+id="$(docker create "$(docker build --quiet --file Dockerfile.repro --target artifact .)" /bin/true)"
+trap 'docker rm -f "$id" >/dev/null 2>&1 || true' EXIT
+docker cp "$id:/release-artifacts/." release-artifacts/
+(cd release-artifacts && sha256sum -c release-artifacts.sha256)

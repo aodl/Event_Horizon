@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Event Horizon</title>
+  <meta name="description" content="Low-latency ICP event triggers powered by Jupiter Faucet endowments.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="background" aria-hidden="true"></div>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Powered by Jupiter Faucet</p>
+      <h1>Event Horizon</h1>
+      <p class="lead">Best-effort wake-ups for ICP-aware canisters, without making notification delivery part of their correctness path.</p>
+    </header>
+
+    <section class="card">
+      <h2>Subscription memo</h2>
+      <p>Endow at least <strong>10 ICP</strong> through Jupiter Faucet. Leave the trigger amount blank to react to every incoming transfer, or set an inclusive minimum.</p>
+      <form id="memo-form">
+        <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
+        <label>Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
+        <label>Minimum trigger amount (ICP, optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
+      </form>
+      <output id="memo-output" class="memo"></output>
+      <p id="memo-help" class="help"></p>
+    </section>
+
+    <section class="grid">
+      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the ICP Ledger directly and calls <code>poke(subaccounts)</code> after a poll sees relevant activity.</p></article>
+      <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative Ledger/Index cursor and a slower independent reconciliation timer.</p></article>
+      <article class="card"><h2>It can beat the Index</h2><p>A poke may arrive before the ICP Index exposes the new transaction. Your application chooses its own retry/backoff policy.</p></article>
+      <article class="card"><h2>Best effort by design</h2><p>Only matched subaccount numbers are passed; there are no transaction payloads, acknowledgements, retry queue or delivery guarantee. Missed pokes affect responsiveness, not completeness.</p></article>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

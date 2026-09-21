@@ -1,0 +1,40 @@
+canisters:
+  - name: event_horizon
+    settings:
+      status_visibility: public
+      log_visibility: public
+      log_memory_limit: 4096
+    build:
+      steps:
+        - type: script
+          commands:
+            - ./tools/scripts/icp-build-canister event-horizon event_horizon
+
+  - name: event_horizon_frontend
+    settings:
+      status_visibility: public
+    build:
+      steps:
+        - type: script
+          commands:
+            - ./tools/scripts/icp-build-canister event-horizon-frontend event_horizon_frontend
+
+networks:
+  - name: local
+    mode: managed
+    version: 15.0.0-2026-08-20-03-30
+    gateway:
+      bind: 127.0.0.1
+      port: 4943
+
+environments:
+  - name: local
+    network: local
+    canisters:
+      - event_horizon
+      - event_horizon_frontend
+  - name: ic
+    network: ic
+    canisters:
+      - event_horizon
+      - event_horizon_frontend

@@ -1,0 +1,37 @@
+FROM debian:bookworm-slim@sha256:74d56e3931e0d5a1dd51f8c8a2466d21de84a271cd3b5a733b803aa91abf4421 AS builder
+
+ARG DEBIAN_SNAPSHOT=20250331T000000Z
+ARG RUST_TOOLCHAIN=1.94.1
+ARG RUSTUP_VERSION=1.28.1
+ARG RUSTUP_INIT_SHA256=a3339fb004c3d0bb9862ba0bce001861fe5cbde9c10d16591eb3f39ee6cd3e7f
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/opt/ic-wasm/bin:/root/.cargo/bin:${PATH}"
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_FUND=false
+ENV NPM_CONFIG_AUDIT=false
+ENV CARGO_TERM_COLOR=never
+
+RUN printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s bookworm main\n' "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
+    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s bookworm-security main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
+    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s bookworm-updates main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates curl git nodejs npm python3 xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -fsSLo /tmp/rustup-init \
+        "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}" \
+    && rm -f /tmp/rustup-init
+RUN rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+RUN cargo install ic-wasm --version 0.9.7 --locked --root /opt/ic-wasm
+
+WORKDIR /build
+COPY . /build
+RUN chmod +x tools/scripts/*
+RUN ./tools/scripts/build-release
+
+FROM scratch AS artifact
+COPY --from=builder /build/release-artifacts/ /release-artifacts/

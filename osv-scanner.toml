@@ -1,0 +1,15 @@
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0012"
+reason = "backoff 0.4.0 is confined to PocketIC integration-test tooling and is not present in production canister runtime paths."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0384"
+reason = "instant 0.1.13 is confined to PocketIC integration-test tooling through backoff."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "paste is Candid proc-macro/build support; current compatible Candid still depends on it."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2021-0127"
+reason = "serde_cbor is confined to certified informational frontend dependencies and PocketIC test tooling, not the value-moving backend runtime."

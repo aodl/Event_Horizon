@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+  "canisters/event-horizon",
+  "canisters/frontend",
+  "tools/xtask",
+  "tests/mocks/mock-icp-ledger",
+  "tests/mocks/mock-historian",
+  "tests/mocks/mock-cmc",
+  "tests/mocks/mock-subscriber",
+  "tests/pocketic",
+]
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+candid = "0.10"
+crc32fast = "1"
+hex = "0.4"
+ic-cdk = "0.20.1"
+ic-cdk-timers = "1.0.0"
+ic-stable-structures = "0.7"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "1"
+anyhow = "1"
+pocket-ic = "=15.0.0"
+tokio = { version = "1", features = ["rt"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+strip = "symbols"

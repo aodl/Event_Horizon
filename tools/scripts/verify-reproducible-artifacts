@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
+command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+build_one() {
+  local dest="$1" image container
+  image="$(docker build --no-cache --quiet --file Dockerfile.repro --target artifact .)"
+  container="$(docker create "$image" /bin/true)"
+  mkdir -p "$dest"; docker cp "$container:/release-artifacts/." "$dest/"
+  docker rm -f "$container" >/dev/null
+}
+build_one "$work/a"; build_one "$work/b"
+(cd "$work/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/a.sum"
+(cd "$work/b" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/b.sum"
+diff -u "$work/a.sum" "$work/b.sum"
+echo "release artifacts match across two clean builds"

@@ -1,0 +1,30 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal --component rustfmt --component clippy
+          rustup target add wasm32-unknown-unknown --toolchain 1.94.1
+          rustup default 1.94.1
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Static checks
+        run: python3 tools/static-check.py
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Unit tests
+        run: cargo test --locked --workspace
+      - name: Frontend tests
+        run: npm test
+      - name: PocketIC integration
+        run: cargo test --locked -p event-horizon-pocketic -- --ignored --nocapture

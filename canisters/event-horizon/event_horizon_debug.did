@@ -1,0 +1,25 @@
+type PollingMode = variant { ReserveProtection; Economy; Standard; Fast; VeryFast; Continuous };
+type DebugInitArgs = record {
+  ledger_canister : principal;
+  cmc_canister : principal;
+  historian_canister : principal;
+  faucet_canister : principal;
+};
+type DebugState = record {
+  bootstrapped : bool;
+  next_block : nat64;
+  polling_mode : PollingMode;
+  subscriptions : nat64;
+  cmc_state : text;
+};
+type Subscription = record {
+  subscriber : principal;
+  numbered_subaccount : nat8;
+  minimum_e8s : nat64;
+};
+service : (DebugInitArgs) -> {
+  debug_state : () -> (DebugState) query;
+  debug_poll_once : () -> ();
+  debug_funding_once : () -> ();
+  debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
+}

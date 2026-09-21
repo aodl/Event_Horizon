@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "$ROOT"
+export TZ=UTC LC_ALL=C.UTF-8 LANG=C.UTF-8
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${ROOT}=/build --remap-path-prefix=${CARGO_HOME:-/root/.cargo}=/cargo"
+
+rm -rf release-artifacts
+mkdir -p release-artifacts
+cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon -p event-horizon-frontend
+
+ic-wasm target/wasm32-unknown-unknown/release/event_horizon.wasm \
+  -o release-artifacts/event_horizon.wasm shrink
+ic-wasm target/wasm32-unknown-unknown/release/event_horizon_frontend.wasm \
+  -o release-artifacts/event_horizon_frontend.wasm shrink
+
+python3 tools/audit-wasm.py release-artifacts/event_horizon.wasm --backend
+python3 tools/audit-wasm.py release-artifacts/event_horizon_frontend.wasm --frontend
+
+(
+  cd release-artifacts
+  sha256sum event_horizon.wasm event_horizon_frontend.wasm > release-artifacts.sha256
+)
+python3 - <<'PY' > release-artifacts/build-info.json
+from pathlib import Path
+import hashlib, json, os, subprocess
+
+def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def ver(args): return subprocess.check_output(args, text=True).strip()
+print(json.dumps({
+  "source_date_epoch": os.environ.get("SOURCE_DATE_EPOCH"),
+  "inputs": {x: sha(x) for x in ["Cargo.lock","package-lock.json","rust-toolchain.toml","SPEC.md","tools/scripts/build-release"]},
+  "toolchain": {"rustc":ver(["rustc","-V"]),"cargo":ver(["cargo","-V"]),"ic-wasm":ver(["ic-wasm","--version"]),"node":ver(["node","-v"]),"npm":ver(["npm","-v"])},
+}, sort_keys=True, indent=2))
+PY
+(
+  cd release-artifacts
+  sha256sum build-info.json >> release-artifacts.sha256
+  sha256sum -c release-artifacts.sha256
+)

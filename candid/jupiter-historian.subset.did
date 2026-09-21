@@ -1,0 +1,26 @@
+type CommitmentIndexFault = record {
+  observed_at_ts : nat64;
+  last_cursor_tx_id : opt nat64;
+  offending_tx_id : nat64;
+  message : text;
+};
+type CommitmentRoute = variant {
+  CyclesTopUp : record { canister_id : principal };
+  RawIcp : record { destination_canister_id : principal; memo : blob };
+  NeuronStake : record { neuron_id : nat64; memo : opt blob };
+};
+type CommitmentRouteSummary = record {
+  route : CommitmentRoute;
+  qualifying_commitment_count : nat64;
+  total_qualifying_committed_e8s : nat64;
+};
+type GetCommitmentRouteSummariesArgs = record { routes : vec CommitmentRoute };
+type GetCommitmentRouteSummariesResponse = record {
+  items : vec CommitmentRouteSummary;
+  truncated : bool;
+  complete_from_genesis : bool;
+  commitment_index_fault : opt CommitmentIndexFault;
+};
+service : {
+  get_commitment_route_summaries : (GetCommitmentRouteSummariesArgs) -> (GetCommitmentRouteSummariesResponse) query;
+}

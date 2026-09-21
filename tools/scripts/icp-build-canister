@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$#" -ne 2 ]; then echo "usage: $0 <cargo-package> <artifact-stem>" >&2; exit 2; fi
+package="$1"; stem="$2"
+: "${ICP_WASM_OUTPUT_PATH:?ICP_WASM_OUTPUT_PATH is required}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+artifact="release-artifacts/${stem}.wasm"
+if [ "${EVENT_HORIZON_USE_CANONICAL_ARTIFACTS:-0}" = "1" ]; then
+  test -f release-artifacts/release-artifacts.sha256 || { echo "run ./tools/scripts/docker-build first" >&2; exit 1; }
+  (cd release-artifacts && sha256sum --status -c release-artifacts.sha256) || { echo "canonical manifest verification failed" >&2; exit 1; }
+  test -f "$artifact" || { echo "missing canonical artifact $artifact" >&2; exit 1; }
+else
+  ./tools/scripts/build-release
+  test -f "$artifact"
+fi
+cp "$artifact" "$ICP_WASM_OUTPUT_PATH"
