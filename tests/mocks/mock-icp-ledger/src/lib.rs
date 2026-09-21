@@ -132,6 +132,7 @@ struct LegacyDedup {
 struct State {
     blocks: Vec<Block>,
     first_local: u64,
+    suppress_archive_info: bool,
     fee_e8s: u64,
     balances: Vec<Balance>,
     legacy_dedup: Vec<LegacyDedup>,
@@ -143,6 +144,7 @@ impl Default for State {
         Self {
             blocks: vec![],
             first_local: 0,
+            suppress_archive_info: false,
             fee_e8s: 10_000,
             balances: vec![],
             legacy_dedup: vec![],
@@ -237,7 +239,7 @@ fn query_blocks(args: GetBlocksArgs) -> QueryBlocksResponse {
         let request_end = args.start.saturating_add(args.length).min(chain);
         let archive_end = s.first_local.min(request_end);
         let mut archived = vec![];
-        if args.start < archive_end {
+        if args.start < archive_end && !s.suppress_archive_info {
             archived.push(ArchivedRange {
                 start: args.start,
                 length: archive_end - args.start,
@@ -378,6 +380,10 @@ fn debug_set_first_local_block(index: u64) {
         let len = s.borrow().blocks.len() as u64;
         s.borrow_mut().first_local = index.min(len);
     });
+}
+#[ic_cdk::update]
+fn debug_suppress_archive_info(value: bool) {
+    STATE.with(|s| s.borrow_mut().suppress_archive_info = value);
 }
 #[ic_cdk::update]
 fn debug_set_balance(arg: DebugSetBalance) {

@@ -519,6 +519,31 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let source = account_id(Principal::from_slice(&[8]), [0; 32]);
+        let destination = account_id(Principal::from_slice(&[9]), [0; 32]);
+        for _ in 0..5 {
+            env.append(source.clone(), destination.clone(), 1_000_000, None)?;
+        }
+        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 3u64)?;
+        update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", true)?;
+        env.poll()?;
+        assert_eq!(
+            env.state()?.next_block,
+            0,
+            "unexplained hole must be retried"
+        );
+
+        update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", false)?;
+        env.poll()?;
+        assert_eq!(env.state()?.next_block, 5);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn funding_sweep_uses_legacy_transfer_and_reaches_cmc() -> Result<()> {
         let env = Env::new()?;
         update::<_, ()>(
