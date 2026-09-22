@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+manifest="MANIFEST.sha256"
+tracked_files() {
+  git ls-files -z --cached | python3 -c 'import sys
+for path in sys.stdin.buffer.read().split(b"\0"):
+    if path and path != b"MANIFEST.sha256" and not path.startswith(b"release-artifacts/"):
+        sys.stdout.buffer.write(path + b"\0")'
+}
+case "${1:-}" in
+  generate)
+    tracked_files | sort -z | xargs -0 sha256sum > "$manifest"
+    ;;
+  verify)
+    sha256sum -c "$manifest"
+    ;;
+  *)
+    echo "usage: $0 <generate|verify>" >&2
+    exit 2
+    ;;
+esac
