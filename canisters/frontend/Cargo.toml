@@ -9,7 +9,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 candid = { workspace = true }
-serde = { workspace = true }
 ic-cdk = { workspace = true }
 ic-asset-certification = "3.2.0"
 ic-http-certification = "3.2.0"

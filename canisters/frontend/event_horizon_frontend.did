@@ -2,5 +2,4 @@ type HttpRequest = record { method : text; url : text; headers : vec record { te
 type HttpResponse = record { status_code : nat16; headers : vec record { text; text }; body : blob; upgrade : opt bool; streaming_strategy : opt variant {} };
 service : () -> {
   http_request : (HttpRequest) -> (HttpResponse) query;
-  http_request_update : (HttpRequest) -> (HttpResponse);
 }

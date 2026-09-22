@@ -1,6 +1,5 @@
-use candid::{CandidType, Deserialize, Principal};
 use ic_asset_certification::{Asset, AssetCertificationError, AssetConfig, AssetRouter};
-use ic_cdk::{api::data_certificate, call::Call, init, post_upgrade, query, update};
+use ic_cdk::{api::data_certificate, init, post_upgrade, query};
 use ic_http_certification::HttpCertificationTree;
 use ic_http_certification::{HeaderField, HttpRequest, HttpResponse, StatusCode};
 use include_dir::{include_dir, Dir};
@@ -32,106 +31,7 @@ fn http_request(req: HttpRequest) -> HttpResponse<'static> {
     if req.get_path().is_err() {
         return plain_error_response(StatusCode::BAD_REQUEST, "bad request path");
     }
-    if req.get_path().ok().as_deref() == Some("/pricing.json") {
-        return HttpResponse::builder()
-            .with_status_code(StatusCode::OK)
-            .with_headers(vec![("cache-control".to_string(), NO_CACHE.to_string())])
-            .with_upgrade(true)
-            .build();
-    }
     serve_asset(&req)
-}
-
-#[derive(CandidType, Deserialize)]
-struct Price {
-    account_icp: u64,
-    global_icp: u64,
-}
-
-#[derive(CandidType, Deserialize)]
-struct Pricing {
-    initialized: bool,
-    current: Price,
-    current_effective_at: u64,
-    next: Option<Price>,
-    next_effective_at: u64,
-    next_freeze_at: u64,
-    observed_floor_xdr_permyriad: u64,
-    floor_observed_at: u64,
-    latest_xdr_permyriad: u64,
-    latest_observed_at: u64,
-    next_carried_forward_due_to_stale_rate: bool,
-}
-
-#[update]
-async fn http_request_update(req: HttpRequest<'static>) -> HttpResponse<'static> {
-    if req.method() != "GET" || req.get_path().ok().as_deref() != Some("/pricing.json") {
-        return plain_error_response(StatusCode::NOT_FOUND, "not found");
-    }
-    let id_text = ic_cdk::api::env_var_value("PUBLIC_CANISTER_ID:event_horizon");
-    let Ok(backend) = Principal::from_text(id_text) else {
-        return plain_error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "backend canister ID unavailable",
-        );
-    };
-    let pricing = match Call::bounded_wait(backend, "get_pricing").await {
-        Ok(response) => match response.candid::<Pricing>() {
-            Ok(value) => value,
-            Err(_) => {
-                return plain_error_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "pricing temporarily unavailable",
-                )
-            }
-        },
-        Err(_) => {
-            return plain_error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "pricing temporarily unavailable",
-            )
-        }
-    };
-    json_response(pricing)
-}
-
-fn json_response(value: Pricing) -> HttpResponse<'static> {
-    let next = value.next.map_or("null".to_string(), |price| {
-        format!(
-            "{{\"account_icp\":{},\"global_icp\":{}}}",
-            price.account_icp, price.global_icp
-        )
-    });
-    let body = format!(
-        concat!(
-            "{{\"initialized\":{},\"current\":{{\"account_icp\":{},\"global_icp\":{}}},",
-            "\"current_effective_at\":{},\"next\":{},\"next_effective_at\":{},",
-            "\"next_freeze_at\":{},\"observed_floor_xdr_permyriad\":{},",
-            "\"floor_observed_at\":{},\"latest_xdr_permyriad\":{},",
-            "\"latest_observed_at\":{},\"next_carried_forward_due_to_stale_rate\":{}}}"
-        ),
-        value.initialized,
-        value.current.account_icp,
-        value.current.global_icp,
-        value.current_effective_at,
-        next,
-        value.next_effective_at,
-        value.next_freeze_at,
-        value.observed_floor_xdr_permyriad,
-        value.floor_observed_at,
-        value.latest_xdr_permyriad,
-        value.latest_observed_at,
-        value.next_carried_forward_due_to_stale_rate,
-    );
-    HttpResponse::builder()
-        .with_status_code(StatusCode::OK)
-        .with_headers(vec![
-            ("content-type".to_string(), "application/json".to_string()),
-            ("cache-control".to_string(), NO_CACHE.to_string()),
-            ("x-content-type-options".to_string(), "nosniff".to_string()),
-        ])
-        .with_body(body.into_bytes())
-        .build()
 }
 
 fn collect_assets<'content, 'path>(
@@ -204,12 +104,51 @@ fn serve_asset(req: &HttpRequest) -> HttpResponse<'static> {
         return plain_error_response(StatusCode::INTERNAL_SERVER_ERROR, "certificate unavailable");
     };
 
-    ASSET_ROUTER.with_borrow(
-        |asset_router| match asset_router.serve_asset(&certificate, req) {
+    let mut response = ASSET_ROUTER.with_borrow(|asset_router| {
+        match asset_router.serve_asset(&certificate, req) {
             Ok(response) => response,
             Err(err) => asset_error_response(&err),
-        },
-    )
+        }
+    });
+    if matches!(
+        req.get_path().ok().as_deref(),
+        Some("/") | Some("/index.html")
+    ) {
+        if let Some(cookie) = canister_discovery_cookie() {
+            response.add_header(("set-cookie".to_string(), cookie));
+        }
+    }
+    response
+}
+
+fn canister_discovery_cookie() -> Option<String> {
+    let backend = ic_cdk::api::env_var_value("PUBLIC_CANISTER_ID:event_horizon");
+    if backend.is_empty() {
+        return None;
+    }
+    let mut value = format!("PUBLIC_CANISTER_ID:event_horizon={backend}");
+    let root_key = ic_cdk::api::env_var_value("IC_ROOT_KEY");
+    if !root_key.is_empty() {
+        value.push_str("&IC_ROOT_KEY=");
+        value.push_str(&root_key);
+    }
+    Some(format!(
+        "ic_env={}; Path=/; SameSite=Lax",
+        percent_encode_cookie_value(&value)
+    ))
+}
+
+fn percent_encode_cookie_value(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            use std::fmt::Write;
+            write!(&mut encoded, "%{byte:02X}").expect("write to String");
+        }
+    }
+    encoded
 }
 
 fn asset_error_response(err: &AssetCertificationError) -> HttpResponse<'static> {

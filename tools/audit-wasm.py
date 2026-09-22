@@ -82,11 +82,11 @@ def main() -> None:
             if needle in data:
                 raise SystemExit(f"production backend contains debug marker {needle!r}")
     else:
-        if "canister_query http_request" not in names:
-            raise SystemExit("frontend does not export certified http_request query")
-        debug = [n for n in app_methods if "debug" in n.lower()]
-        if debug:
-            raise SystemExit(f"frontend unexpectedly exports debug methods: {debug}")
+        expected = ["canister_query http_request"]
+        if app_methods != expected:
+            raise SystemExit(f"frontend application surface is {app_methods}, expected {expected}")
+        if b"http_request_update" in data:
+            raise SystemExit("frontend contains removed HTTP update proxy marker")
     print(f"{args.wasm}: export audit passed ({len(names)} exports)")
 
 

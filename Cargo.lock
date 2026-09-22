@@ -386,7 +386,6 @@ dependencies = [
  "ic-cdk",
  "ic-http-certification",
  "include_dir",
- "serde",
 ]
 
 [[package]]

@@ -9,6 +9,8 @@ export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${ROOT}=/build --remap-path
 
 rm -rf release-artifacts
 mkdir -p release-artifacts
+npm ci
+npm run build:frontend
 cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon -p event-horizon-frontend
 
 ic-wasm target/wasm32-unknown-unknown/release/event_horizon.wasm \

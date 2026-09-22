@@ -31,6 +31,15 @@ for cargo in root.rglob('Cargo.toml'):
 assert (root/'Cargo.lock').exists(), 'release checkpoint requires Cargo.lock'
 assert (root/'package-lock.json').exists(), 'release checkpoint requires package-lock.json'
 json.loads((root/'package-lock.json').read_text())
+frontend=(root/'canisters/frontend/src/lib.rs').read_text()
+frontend_did=(root/'canisters/frontend/event_horizon_frontend.did').read_text()
+frontend_app=(root/'canisters/frontend/public/app.js').read_text()
+frontend_client=(root/'canisters/frontend/public/pricing-client.js').read_text()
+assert 'http_request_update' not in frontend
+assert 'http_request_update' not in frontend_did
+assert 'queryBackendPricing()' in frontend_app
+assert "get_pricing: IDL.Func([], [Pricing], ['query'])" in frontend_client
+assert "fetch('/pricing.json'" not in frontend_app
 
 memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src

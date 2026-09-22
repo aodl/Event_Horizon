@@ -1327,6 +1327,37 @@ mod tests {
         }
         assert_eq!(assembled, svg);
 
+        let pricing_response: HttpResponse = query(
+            &pic,
+            id,
+            "http_request",
+            HttpRequest {
+                method: "GET".to_string(),
+                url: "/pricing.json".to_string(),
+                headers: vec![],
+                body: vec![],
+                certificate_version: Some(2),
+            },
+        )?;
+        assert_eq!(pricing_response.status_code, 404);
+
+        let removed_update = pic.update_call(
+            id,
+            Principal::anonymous(),
+            "http_request_update",
+            encode_one(HttpRequest {
+                method: "GET".to_string(),
+                url: "/pricing.json".to_string(),
+                headers: vec![],
+                body: vec![],
+                certificate_version: Some(2),
+            })?,
+        );
+        assert!(
+            removed_update.is_err(),
+            "the frontend must not expose the removed pricing update proxy"
+        );
+
         Ok(())
     }
 }
