@@ -16,3 +16,5 @@ Both calculations use checked integer arithmetic. Prices freeze seven 24-hour da
 Admission compares the exact Historian route total with the current requirement at evaluation time. Existing admissions remain permanent. Larger endowments buy no additional service.
 
 The backend records the last successful pricing call's `Call::get_cost()` in stable pricing state for test and operational analysis; it is deliberately absent from the public query. The final validation report records any measurable value available in the executed environment.
+
+The daily observation is nonessential. Event Horizon obtains the pending call's current `get_cost()` and issues it only when `liquid cycles >= RESERVE_PROTECTION_CYCLES + call cost`. A reserve-protected skip consumes the UTC day's single opportunity and leaves all pricing state unchanged, allowing the existing stale-data carry-forward rule to apply. Ledger polling, CMC funding recovery, and existing admissions continue independently.

@@ -7,7 +7,7 @@ Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - `get_pricing` is the backend's only production application method and exposes no subscription data.
 - Public native status and logs remain the operational interface.
-- The mutable frontend presents backend pricing but cannot change backend admission decisions.
+- The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets are certified; backend admission remains authoritative.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 

@@ -164,7 +164,7 @@ Only the minimum durable financial state necessary to avoid duplicate/stranded v
 
 ## 10. Dynamic admission pricing
 
-The CMC's integer `xdr_permyriad_per_icp` is the sole pricing input. Event Horizon stores at most one successful observation per UTC day and makes roughly one ordinary observation attempt per day. Failed or missed days cause no retry loop, alternate oracle, or backfill.
+The CMC's integer `xdr_permyriad_per_icp` is the sole pricing input. Event Horizon stores at most one successful observation per UTC day and makes roughly one ordinary observation attempt per day. Before issuing the nonessential CMC query it requires the current liquid cycles balance to cover both `RESERVE_PROTECTION_CYCLES` and the query's current `Call::get_cost()`. A day skipped to protect the reserve is consumed as that day's attempt. Failed, skipped, or missed days cause no retry loop, alternate oracle, or backfill.
 
 The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration and 100 ICP for a global declaration.
 
@@ -216,4 +216,4 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The mutable frontend reads `get_pricing` through its same-origin update HTTP response and displays authoritative current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Static assets remain certified and embedded in the frontend Wasm.
+The mutable frontend's certified embedded JavaScript discovers the backend canister through the deployment environment and directly issues the read-only `get_pricing` query. No frontend update call is involved. It displays authoritative current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.

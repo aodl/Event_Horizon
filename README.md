@@ -21,7 +21,7 @@ account price = ceil(10 × F / C) ICP
 global price  = ceil(100 × F / C) ICP
 ```
 
-Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query; the certified frontend calls that query directly from its bundled browser client.
 
 ## Validation
 

@@ -60,6 +60,8 @@ Controller removal is a separate operational decision. During the controlled obs
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
 10. the production export audit reports only `get_pricing` as an application method;
 11. global subscription poke volume is sustainable at the observed registry size.
+12. the frontend export audit reports only `http_request` and direct browser pricing reads succeed using the injected backend canister ID;
+13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 
 Only after that evidence is satisfactory should `docs/controller-removal.md` be followed.
 

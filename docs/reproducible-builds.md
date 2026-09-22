@@ -42,7 +42,7 @@ This performs two clean Docker builds and compares every produced artifact byte-
 
 `tools/audit-wasm.py` parses the Wasm export section directly. The release build fails if the backend exports any
 `canister_update`, `canister_query`, or `canister_composite_query` application method, or if debug markers occur in the
-production module. The frontend build must expose `canister_query http_request` and must not expose debug methods.
+production module. The frontend build must expose exactly `canister_query http_request` as its application method and must not expose `http_request_update`, pricing proxies, or debug methods. The canonical build runs the pinned JavaScript bundle step before compiling the embedded frontend Wasm.
 
 This supplements, rather than replaces, the checked-in production DID:
 
