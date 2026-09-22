@@ -38,7 +38,11 @@ assert 'subscriber::poke(principal, subaccounts.into_iter().collect())' in polli
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
-assert 'Call::bounded_wait(ledger, "transfer")' in ledger
+assert 'Call::unbounded_wait(ledger, "transfer")' in ledger
+assert 'Call::bounded_wait(ledger, "query_blocks")' in ledger
+assert 'Call::bounded_wait(ledger, "icrc1_balance_of")' in ledger
+assert 'Call::bounded_wait(ledger, "icrc1_fee")' in ledger
+assert 'CallErrorExt' in ledger
 assert 'icrc1_transfer' not in funding, 'CMC top-up must use legacy ICP transfer convention'
 assert 'TOP_UP_CANISTER_MEMO' in funding
 
