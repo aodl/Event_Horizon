@@ -1,17 +1,32 @@
-Event Horizon global subscriptions and dynamic pricing are implemented on branch codex/global-pricing from validated commit c48778d1744f3b645d0165cfdccec2ee704db71c, preserved by local tag event-horizon-core-validated.
+Event Horizon pre-mainnet hardening summary
 
-The backend now accepts global `<subscriber>`, account `<subscriber>.<subaccount>`, and threshold `<subscriber>.<subaccount>:<amount>` declarations. Global subscribers are stored directly. Active polls incorporate them once after reaching the pinned Ledger boundary. `poke([])` represents a global-only match; sorted non-empty account hints take precedence. Delivery remains best effort and subscriber reconciliation remains authoritative.
+Starting baseline: 774b2906fc752590292316aaf7704c690aa7d3fb
 
-Pricing uses only the CMC integer ICP/XDR rate. It stores at most one success per UTC date for the current day plus 1,460 prior UTC day buckets. Prices are independently calculated as ceil(10×F/C) and ceil(100×F/C), freeze seven days before first-of-month 00:00 UTC, and carry forward when the latest eligible rate is more than seven days old. Admission uses the current price at evaluation time. Stable memory additions use IDs 4–6 and preserve validated IDs 0–2.
+Implemented:
+- Daily CMC pricing observations now use the exact bounded call's current get_cost() and are skipped unless the liquid balance can retain RESERVE_PROTECTION_CYCLES after reserving that cost.
+- A reserve skip consumes that UTC day's ordinary observation opportunity, causes no retry, and leaves pricing, polling, funding recovery, and admissions unchanged.
+- Removed the frontend /pricing.json update proxy and the http_request_update production export.
+- Bundled the pinned ICP JavaScript agent into certified embedded assets. Browser code discovers PUBLIC_CANISTER_ID:event_horizon through the deployment environment and directly queries backend get_pricing.
+- Frontend display renders recorded CMC permyriad values as exact four-decimal XDR/ICP, such as 23147 -> 2.3147 XDR/ICP.
+- Updated release/static audits, tests, protocol text, architecture, economics, trust, deployment, frontend, reproducibility, and controller-removal documentation.
 
-The backend's only production application method is read-only get_pricing. The certified embedded frontend consumes it through a same-origin consensus update proxy, shows authoritative current/frozen prices and UTC timestamps, builds all three memo forms, and recommends a higher announced requirement when Faucet delay could cross an increase.
+Validation completed successfully:
+- npm ci
+- xtask check: 31 backend Rust unit tests and 8 frontend tests passed
+- xtask pocketic: 20/20 passed
+- xtask local-smoke: 20/20 passed
+- xtask security: no actionable vulnerabilities; four existing permitted unmaintained transitive warnings
+- xtask release
+- canonical Docker build
+- two-clean-build reproducibility comparison: all release artifacts matched byte-for-byte
+- icp build -e local under DFX_IDENTITY=codex_local
+- backend export audit: only get_pricing as an application method
+- frontend export audit: only http_request as an application method; no http_request_update
 
-Validation passed: 30 backend unit tests, 5 frontend tests, 19/19 PocketIC tests, 19/19 local-smoke tests, security with zero vulnerabilities and four documented allowed warnings, release audits, canonical Docker build, two clean byte-identical Docker builds, and `icp build -e local`. The real PocketIC pinned-boundary interleaving and exact old-Wasm upgrade fixture both passed. Independent certificate/witness verification was not added because it would require disproportionate test-only agent and root-key infrastructure; the existing certified SVG range reconstruction remains.
+Canonical Wasm SHA-256:
+- backend: 3ff42f18c38fc126909080c0ae06043e6a7a572a7b399e684ace7f835a5c1f07
+- frontend: d0acc19fa6f6e4d6d76c9d147818827f4ec985306e240e13e72cc5b41275028f
 
-Canonical Docker hashes:
-- backend Wasm: e71d53a4748959cdd0ad9d0d71ad0e4dd74d699827f842dedd7977cf73a0a82d
-- frontend Wasm: 83aa275ec24a13c3ec05a2bd8c6805564454f5f2ad2343c0158d825030798def
+Initial clean-build attempts failed before compilation after repeated builds filled Docker's overlay filesystem. Reclaiming 12.52 GB of disposable build cache resolved the invalid-download symptom; the unchanged two-clean-build gate then passed.
 
-A PocketIC measurement observed a 42,102,445,000-cycle reserved upper-bound `Call::get_cost()` for one daily pricing query; this is not net mainnet burn after response refunds. No mainnet deployment, Jupiter Faucet X alias publication, or controller removal occurred.
-
-See docs/codex/global-pricing-validation.md for the exact migration design, protocol definitions, commands, evidence, and remaining limitations. The exact final commit and archive SHA-256 are reported in the external handoff because a commit cannot contain its own SHA.
+No mainnet deployment, Jupiter Faucet X publication, or controller removal was performed.
