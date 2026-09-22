@@ -33,14 +33,58 @@ enum Behavior {
 struct State {
     behavior: Behavior,
     calls: u64,
+    pricing_calls: u64,
+    xdr_permyriad_per_icp: u64,
+    rate_timestamp_seconds: u64,
+    pricing_fail: bool,
 }
 impl Default for State {
     fn default() -> Self {
         Self {
             behavior: Behavior::Ok,
             calls: 0,
+            pricing_calls: 0,
+            xdr_permyriad_per_icp: 10_000,
+            rate_timestamp_seconds: 0,
+            pricing_fail: false,
         }
     }
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct IcpXdrConversionRate {
+    timestamp_seconds: u64,
+    xdr_permyriad_per_icp: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct IcpXdrConversionRateResponse {
+    data: IcpXdrConversionRate,
+    hash_tree: Vec<u8>,
+    certificate: Vec<u8>,
+}
+
+#[ic_cdk::query]
+fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateResponse {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.pricing_calls += 1;
+        if s.pricing_fail {
+            ic_cdk::trap("forced pricing failure");
+        }
+        IcpXdrConversionRateResponse {
+            data: IcpXdrConversionRate {
+                timestamp_seconds: if s.rate_timestamp_seconds == 0 {
+                    ic_cdk::api::time() / 1_000_000_000
+                } else {
+                    s.rate_timestamp_seconds
+                },
+                xdr_permyriad_per_icp: s.xdr_permyriad_per_icp,
+            },
+            hash_tree: vec![],
+            certificate: vec![],
+        }
+    })
 }
 thread_local! {static STATE:RefCell<State>=RefCell::new(State::default());}
 #[ic_cdk::init]
@@ -75,6 +119,26 @@ fn debug_set_behavior(value: Behavior) {
 #[ic_cdk::query]
 fn debug_calls() -> u64 {
     STATE.with(|s| s.borrow().calls)
+}
+
+#[ic_cdk::update]
+fn debug_set_rate(value: u64) {
+    STATE.with(|s| s.borrow_mut().xdr_permyriad_per_icp = value)
+}
+
+#[ic_cdk::update]
+fn debug_set_rate_timestamp(value: u64) {
+    STATE.with(|s| s.borrow_mut().rate_timestamp_seconds = value)
+}
+
+#[ic_cdk::update]
+fn debug_set_pricing_fail(value: bool) {
+    STATE.with(|s| s.borrow_mut().pricing_fail = value)
+}
+
+#[ic_cdk::query]
+fn debug_pricing_calls() -> u64 {
+    STATE.with(|s| s.borrow().pricing_calls)
 }
 
 ic_cdk::export_candid!();

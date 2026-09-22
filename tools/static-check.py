@@ -11,7 +11,10 @@ expected_svg='edb8090a06441848fbd58c1385c56e1184dc58010d7ffb1704e3fecf43698650'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
 print('svg_sha256', expected_svg)
 
-assert (root/'canisters/event-horizon/event_horizon.did').read_text().strip() == 'service : () -> {}'
+backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
+assert 'get_pricing : () -> (Pricing) query;' in backend_did
+assert backend_did.count(' query;') == 1
+assert ' -> ();' not in backend_did
 assert (root/'candid/subscriber.did').read_text().strip() == 'service : {\n  poke : (vec nat8) -> ();\n}'
 thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
 unfiltered='X.r5m5ydiaaaaaaaaqanaacai.7'
@@ -33,8 +36,9 @@ memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src
 assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
-assert 'BTreeMap<Principal, BTreeSet<u8>>' in polling
-assert 'subscriber::poke(principal, subaccounts.into_iter().collect())' in polling
+assert 'BTreeMap<Principal, MatchState>' in polling
+assert 'for principal in state::global_subscribers()' in polling
+assert 'matched.matched_subaccounts.into_iter().collect()' in polling
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding

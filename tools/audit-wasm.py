@@ -71,10 +71,13 @@ def main() -> None:
         and n != internal_timer
     ]
     if args.backend:
-        if app_methods:
-            raise SystemExit(f"production backend unexpectedly exports application methods: {app_methods}")
+        expected = ["canister_query get_pricing"]
+        if app_methods != expected:
+            raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")
         # The IC system import `debug_print` is used for exceptional logs.
-        forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_subscription", b"debug_state"]
+        forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_pricing_once",
+                     b"debug_start_schedulers", b"debug_timer_count",
+                     b"debug_subscription", b"debug_global_subscription", b"debug_state"]
         for needle in forbidden:
             if needle in data:
                 raise SystemExit(f"production backend contains debug marker {needle!r}")

@@ -129,7 +129,36 @@ mod tests {
         next_block: u64,
         polling_mode: PollingMode,
         subscriptions: u64,
+        global_subscriptions: u64,
         cmc_state: String,
+        pricing: Pricing,
+    }
+    #[derive(CandidType, Deserialize, Debug)]
+    struct ValidatedCoreDebugState {
+        bootstrapped: bool,
+        next_block: u64,
+        polling_mode: PollingMode,
+        subscriptions: u64,
+        cmc_state: String,
+    }
+    #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+    struct Price {
+        account_icp: u64,
+        global_icp: u64,
+    }
+    #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+    struct Pricing {
+        initialized: bool,
+        current: Price,
+        current_effective_at: u64,
+        next: Option<Price>,
+        next_effective_at: u64,
+        next_freeze_at: u64,
+        observed_floor_xdr_permyriad: u64,
+        floor_observed_at: u64,
+        latest_xdr_permyriad: u64,
+        latest_observed_at: u64,
+        next_carried_forward_due_to_stale_rate: bool,
     }
     #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
     enum PollingMode {
@@ -206,6 +235,24 @@ mod tests {
     }
     impl Env {
         fn new() -> Result<Self> {
+            let env = Self::new_unpriced()?;
+            env.price_once()?;
+            Ok(env)
+        }
+        fn new_unpriced() -> Result<Self> {
+            Self::with_event_horizon_wasm(wasm(
+                &EVENT_HORIZON_WASM,
+                "event-horizon",
+                Some("debug_api"),
+            )?)
+        }
+        fn validated_baseline() -> Result<Self> {
+            Self::with_event_horizon_wasm(
+                include_bytes!("../../fixtures/event_horizon_core_validated_c48778d_debug.wasm")
+                    .to_vec(),
+            )
+        }
+        fn with_event_horizon_wasm(event_horizon_wasm: Vec<u8>) -> Result<Self> {
             let pic = PocketIcBuilder::new().with_application_subnet().build();
             let ledger = pic.create_canister();
             let historian = pic.create_canister();
@@ -237,7 +284,7 @@ mod tests {
             let faucet = Principal::from_slice(&[42]);
             pic.install_canister(
                 event_horizon,
-                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                event_horizon_wasm,
                 encode_one(DebugInitArgs {
                     ledger_canister: ledger,
                     cmc_canister: cmc,
@@ -261,6 +308,12 @@ mod tests {
         }
         fn fund(&self) -> Result<()> {
             update::<_, ()>(&self.pic, self.event_horizon, "debug_funding_once", ())
+        }
+        fn price_once(&self) -> Result<()> {
+            update::<_, ()>(&self.pic, self.event_horizon, "debug_pricing_once", ())
+        }
+        fn pricing(&self) -> Result<Pricing> {
+            query(&self.pic, self.event_horizon, "get_pricing", ())
         }
         fn append(
             &self,
@@ -306,6 +359,26 @@ mod tests {
                     subaccount,
                 },
             )
+        }
+        fn global_subscription(&self) -> Result<bool> {
+            query(
+                &self.pic,
+                self.event_horizon,
+                "debug_global_subscription",
+                self.subscriber,
+            )
+        }
+        fn admit_global(&self, total: u64) -> Result<Vec<u8>> {
+            let memo = self.subscriber.to_text().replace('-', "").into_bytes();
+            self.set_route(memo.clone(), total)?;
+            self.append(
+                account_id(self.faucet, [0; 32]),
+                account_id(self.event_horizon, [0; 32]),
+                1,
+                Some(memo.clone()),
+            )?;
+            self.poll()?;
+            Ok(memo)
         }
         fn admit(&self, subaccount: u8, threshold: Option<&str>, total: u64) -> Result<Vec<u8>> {
             let compact = self.subscriber.to_text().replace('-', "");
@@ -471,6 +544,201 @@ mod tests {
             env.subscription(7)?.is_some(),
             "later perpetual payout admits after evidence recovers"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn global_admission_and_poke_precedence_are_enforced() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+
+        env.admit_global(9_999_999_999)?;
+        assert!(
+            !env.global_subscription()?,
+            "global price is enforced separately"
+        );
+
+        let global_memo = env.subscriber.to_text().replace('-', "").into_bytes();
+        env.set_route(global_memo.clone(), 10_000_000_000)?;
+        env.append(
+            account_id(Principal::from_slice(&[99]), [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(global_memo),
+        )?;
+        env.poll()?;
+        assert!(
+            !env.global_subscription()?,
+            "a forged non-Faucet transfer cannot admit"
+        );
+
+        env.admit_global(10_000_000_000)?;
+        assert!(env.global_subscription()?);
+        env.admit(7, None, 1_000_000_000)?;
+
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.poll()?;
+        for _ in 0..3 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before,
+            "an empty poll produces no global poke"
+        );
+
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let unrelated = account_id(Principal::from_slice(&[8]), [0; 32]);
+        env.append(source.clone(), unrelated.clone(), 1, None)?;
+        env.append(source.clone(), unrelated, 1, None)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 1,
+            "many transactions coalesce into one global poke"
+        );
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
+        );
+
+        env.append(
+            source.clone(),
+            account_id(Principal::from_slice(&[6]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 2
+        );
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7],
+            "specific account information takes precedence over the global empty hint"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn pricing_initialization_failure_recovery_freeze_and_activation() -> Result<()> {
+        let env = Env::new_unpriced()?;
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_pricing_fail", true)?;
+        env.price_once()?;
+        assert!(!env.pricing()?.initialized);
+
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_pricing_fail", false)?;
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_rate", 10_000u64)?;
+        env.price_once()?;
+        let initialized = env.pricing()?;
+        assert_eq!(
+            initialized.current,
+            Price {
+                account_icp: 10,
+                global_icp: 100
+            }
+        );
+
+        // Move to a daily observation before the currently prepared freeze. If launch
+        // occurred in the final week, activate that carried epoch first.
+        let mut pricing = initialized;
+        let mut now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        if pricing.next_freeze_at <= now + 86_400 {
+            env.pic.advance_time(std::time::Duration::from_secs(
+                pricing.next_effective_at - now,
+            ));
+            env.price_once()?;
+            pricing = env.pricing()?;
+            now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        }
+        let observation_at = pricing.next_freeze_at - 86_400;
+        env.pic
+            .advance_time(std::time::Duration::from_secs(observation_at - now));
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_rate", 20_000u64)?;
+        env.price_once()?;
+
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        env.price_once()?;
+        let frozen = env.pricing()?;
+        assert_eq!(
+            frozen.next,
+            Some(Price {
+                account_icp: 5,
+                global_icp: 50
+            })
+        );
+        assert!(!frozen.next_carried_forward_due_to_stale_rate);
+
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_rate", 50_000u64)?;
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        env.price_once()?;
+        assert_eq!(
+            env.pricing()?.next,
+            frozen.next,
+            "the announced price is immutable"
+        );
+
+        let now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        env.pic.advance_time(std::time::Duration::from_secs(
+            frozen.next_effective_at - now,
+        ));
+        env.price_once()?;
+        assert_eq!(env.pricing()?.current, frozen.next.unwrap());
+
+        env.poll()?;
+        env.admit(7, None, 499_999_999)?;
+        assert!(
+            env.subscription(7)?.is_none(),
+            "N-1 e8s does not meet the dynamic price"
+        );
+        env.admit(7, None, 500_000_000)?;
+        assert!(
+            env.subscription(7)?.is_some(),
+            "N e8s meets the dynamic price"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn stale_rate_at_freeze_carries_current_prices_forward() -> Result<()> {
+        let env = Env::new_unpriced()?;
+        let original_timestamp = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_rate_timestamp",
+            original_timestamp,
+        )?;
+        env.price_once()?;
+        let first = env.pricing()?;
+
+        // Reach the following epoch so its freeze is more than seven days after
+        // the deliberately fixed CMC observation timestamp.
+        let mut now = original_timestamp;
+        env.pic.advance_time(std::time::Duration::from_secs(
+            first.next_effective_at - now,
+        ));
+        env.price_once()?;
+        let preparing = env.pricing()?;
+        now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        env.pic.advance_time(std::time::Duration::from_secs(
+            preparing.next_freeze_at - now,
+        ));
+        env.price_once()?;
+        let frozen = env.pricing()?;
+        assert_eq!(frozen.next, Some(frozen.current));
+        assert!(frozen.next_carried_forward_due_to_stale_rate);
         Ok(())
     }
 
@@ -880,7 +1148,67 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn production_wasm_exposes_no_debug_application_surface() -> Result<()> {
+    fn validated_core_fixture_upgrades_additively() -> Result<()> {
+        let env = Env::validated_baseline()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_balance",
+            SetBalance {
+                account: Account {
+                    owner: env.event_horizon,
+                    subaccount: None,
+                },
+                e8s: 100_000_000,
+            },
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        let before: ValidatedCoreDebugState =
+            query(&env.pic, env.event_horizon, "debug_state", ())?;
+        assert!(before.bootstrapped);
+        assert_eq!(before.subscriptions, 1);
+        assert!(before.cmc_state.contains("TransferPending"));
+
+        env.upgrade_same_debug_wasm()?;
+        let after = env.state()?;
+        assert_eq!(after.next_block, before.next_block);
+        assert_eq!(after.polling_mode, before.polling_mode);
+        assert_eq!(after.subscriptions, before.subscriptions);
+        assert!(after.cmc_state.contains("TransferPending"));
+        assert_eq!(after.global_subscriptions, 0);
+        assert!(!after.pricing.initialized);
+        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 1_000_000);
+
+        env.price_once()?;
+        assert!(
+            env.pricing()?.initialized,
+            "the first post-upgrade CMC observation initializes pricing"
+        );
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        assert_eq!(
+            query::<_, u8>(&env.pic, env.event_horizon, "debug_timer_count", ())?,
+            3
+        );
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        assert_eq!(
+            query::<_, u8>(&env.pic, env.event_horizon, "debug_timer_count", ())?,
+            3,
+            "restarting replaces each timer instead of duplicating it"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn production_wasm_exposes_only_pricing_application_surface() -> Result<()> {
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
@@ -890,6 +1218,8 @@ mod tests {
             vec![],
             None,
         );
+        let pricing: Pricing = query(&pic, id, "get_pricing", ())?;
+        assert!(!pricing.initialized);
         let result = pic.query_call(id, Principal::anonymous(), "debug_state", encode_one(())?);
         assert!(
             result.is_err(),
