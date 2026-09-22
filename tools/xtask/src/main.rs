@@ -1,23 +1,59 @@
-use std::{env, process::{Command, exit}};
+use std::{
+    env,
+    process::{exit, Command},
+};
 
 fn run(program: &str, args: &[&str]) {
-    let status = Command::new(program).args(args).status().unwrap_or_else(|e| panic!("failed to run {program}: {e}"));
-    if !status.success() { exit(status.code().unwrap_or(1)); }
+    let status = Command::new(program)
+        .args(args)
+        .status()
+        .unwrap_or_else(|e| panic!("failed to run {program}: {e}"));
+    if !status.success() {
+        exit(status.code().unwrap_or(1));
+    }
 }
 
-fn script(path: &str) { run(path, &[]); }
+fn script(path: &str) {
+    run(path, &[]);
+}
 
 fn main() {
     match env::args().nth(1).as_deref() {
         Some("unit") => {
-            run("cargo", &["test", "--locked", "-p", "event-horizon", "--lib"]);
+            run(
+                "cargo",
+                &["test", "--locked", "-p", "event-horizon", "--lib"],
+            );
             run("npm", &["test"]);
         }
-        Some("pocketic") => run("cargo", &["test", "--locked", "-p", "event-horizon-pocketic", "--", "--ignored", "--nocapture"]),
+        Some("pocketic") => run(
+            "cargo",
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "event-horizon-pocketic",
+                "--",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+        ),
         Some("check") => {
             run("python3", &["tools/static-check.py"]);
             run("cargo", &["fmt", "--all", "--", "--check"]);
-            run("cargo", &["clippy", "--locked", "--workspace", "--all-targets", "--", "-D", "warnings"]);
+            run(
+                "cargo",
+                &[
+                    "clippy",
+                    "--locked",
+                    "--workspace",
+                    "--all-targets",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+            );
             run("cargo", &["test", "--locked", "--workspace"]);
             run("npm", &["test"]);
         }

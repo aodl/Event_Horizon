@@ -1,11 +1,9 @@
-use ic_asset_certification::{
-    Asset, AssetCertificationError, AssetConfig, AssetRouter,
-};
+use ic_asset_certification::{Asset, AssetCertificationError, AssetConfig, AssetRouter};
 use ic_cdk::{api::data_certificate, init, post_upgrade, query};
+use ic_http_certification::HttpCertificationTree;
 use ic_http_certification::{HeaderField, HttpRequest, HttpResponse, StatusCode};
 use include_dir::{include_dir, Dir};
 use std::{cell::RefCell, rc::Rc};
-use ic_http_certification::HttpCertificationTree;
 
 thread_local! {
     static HTTP_TREE: Rc<RefCell<HttpCertificationTree>> = Default::default();
@@ -97,7 +95,7 @@ fn certify_all_assets() {
         if let Err(err) = asset_router.certify_assets(assets, configs) {
             ic_cdk::trap(format!("failed to certify frontend assets: {err}"));
         }
-        ic_cdk::api::certified_data_set(&asset_router.root_hash());
+        ic_cdk::api::certified_data_set(asset_router.root_hash());
     });
 }
 
@@ -106,10 +104,12 @@ fn serve_asset(req: &HttpRequest) -> HttpResponse<'static> {
         return plain_error_response(StatusCode::INTERNAL_SERVER_ERROR, "certificate unavailable");
     };
 
-    ASSET_ROUTER.with_borrow(|asset_router| match asset_router.serve_asset(&certificate, req) {
-        Ok(response) => response,
-        Err(err) => asset_error_response(&err),
-    })
+    ASSET_ROUTER.with_borrow(
+        |asset_router| match asset_router.serve_asset(&certificate, req) {
+            Ok(response) => response,
+            Err(err) => asset_error_response(&err),
+        },
+    )
 }
 
 fn asset_error_response(err: &AssetCertificationError) -> HttpResponse<'static> {
@@ -129,7 +129,10 @@ fn plain_error_response(status: StatusCode, message: &str) -> HttpResponse<'stat
         .with_status_code(status)
         .with_body(message.as_bytes().to_vec())
         .with_headers(vec![
-            ("content-type".to_string(), "text/plain; charset=utf-8".to_string()),
+            (
+                "content-type".to_string(),
+                "text/plain; charset=utf-8".to_string(),
+            ),
             ("cache-control".to_string(), NO_CACHE.to_string()),
             ("x-content-type-options".to_string(), "nosniff".to_string()),
         ])

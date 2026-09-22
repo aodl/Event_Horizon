@@ -23,7 +23,9 @@ pub fn history_gap(start: u64, end_exclusive: u64) {
     });
 }
 
-pub fn history_live_progress() { HISTORY_GAP_ACTIVE.with(|flag| flag.set(false)); }
+pub fn history_live_progress() {
+    HISTORY_GAP_ACTIVE.with(|flag| flag.set(false));
+}
 
 pub fn ledger_failure(message: &str) {
     LEDGER_UNAVAILABLE.with(|flag| {
@@ -33,7 +35,9 @@ pub fn ledger_failure(message: &str) {
     });
 }
 
-pub fn ledger_recovered() { LEDGER_UNAVAILABLE.with(|flag| flag.set(false)); }
+pub fn ledger_recovered() {
+    LEDGER_UNAVAILABLE.with(|flag| flag.set(false));
+}
 
 pub fn historian_failure(message: &str) {
     HISTORIAN_UNAVAILABLE.with(|flag| {
@@ -43,7 +47,9 @@ pub fn historian_failure(message: &str) {
     });
 }
 
-pub fn historian_recovered() { HISTORIAN_UNAVAILABLE.with(|flag| flag.set(false)); }
+pub fn historian_recovered() {
+    HISTORIAN_UNAVAILABLE.with(|flag| flag.set(false));
+}
 
 pub fn reserve_mode(active: bool, balance: u128) {
     IN_RESERVE_PROTECTION.with(|flag| {
@@ -56,4 +62,10 @@ pub fn reserve_mode(active: bool, balance: u128) {
     });
 }
 
-pub fn cmc_terminal(reason: &str) { ic_cdk::println!("CMC_TERMINAL_FAILURE {}", reason); }
+pub fn cmc_terminal(reason: &str) {
+    ic_cdk::println!("CMC_TERMINAL_FAILURE {}", reason);
+}
+
+pub fn cmc_transfer_identity_expired() {
+    ic_cdk::println!("CMC_TRANSFER_IDENTITY_EXPIRED");
+}

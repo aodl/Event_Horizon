@@ -17,8 +17,9 @@ allow = [
   "Apache-2.0 WITH LLVM-exception",
   "Unicode-3.0",
   "Zlib",
-  "BlueOak-1.0.0",
-  "CC0-1.0",
+  "BSD-3-Clause",
+  "ISC",
+  "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 

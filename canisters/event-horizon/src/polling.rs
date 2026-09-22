@@ -5,13 +5,11 @@ use candid::Principal;
 use crate::{
     account::default_account_identifier,
     clients::{historian, ledger, subscriber},
-    config,
-    logging,
+    config, logging,
     memo::parse_subscription_memo,
     state,
     subscription::Subscription,
 };
-
 
 fn archived_prefix_end(ranges: &[ledger::ArchivedBlocksRange], start: u64, boundary: u64) -> u64 {
     let mut end = start;
@@ -23,13 +21,17 @@ fn archived_prefix_end(ranges: &[ledger::ArchivedBlocksRange], start: u64, bound
                 advanced = advanced.max(range_end);
             }
         }
-        if advanced == end { return end; }
+        if advanced == end {
+            return end;
+        }
         end = advanced;
     }
 }
 fn account_id(bytes: &[u8]) -> Option<[u8; 32]> {
     let mut out = [0u8; 32];
-    if bytes.len() != out.len() { return None; }
+    if bytes.len() != out.len() {
+        return None;
+    }
     out.copy_from_slice(bytes);
     Some(out)
 }
@@ -52,13 +54,19 @@ async fn process_transfer(
     if from_id == Some(faucet_account) && to_id == Some(self_account) {
         if let Some(memo) = icrc1_memo {
             if let Ok(declaration) = parse_subscription_memo(memo) {
-                match historian::route_is_admitted(runtime.historian_canister, self_id, memo.to_vec()).await {
+                match historian::route_is_admitted(
+                    runtime.historian_canister,
+                    self_id,
+                    memo.to_vec(),
+                )
+                .await
+                {
                     Ok(true) => {
                         state::put_subscription(Subscription::from(declaration));
                         logging::historian_recovered();
                     }
                     Ok(false) => logging::historian_recovered(),
-                    Err(error) if error == "reserve_protection" => {},
+                    Err(error) if error == "reserve_protection" => {}
                     Err(error) => logging::historian_failure(&error),
                 }
             }
@@ -83,7 +91,9 @@ async fn process_page(
     boundary: u64,
     pokes: &mut BTreeMap<Principal, BTreeSet<u8>>,
 ) -> Result<u64, String> {
-    if cursor >= boundary { return Ok(cursor); }
+    if cursor >= boundary {
+        return Ok(cursor);
+    }
 
     let original_cursor = cursor;
     let archived_end = archived_prefix_end(&response.archived_blocks, cursor, boundary);
@@ -94,7 +104,9 @@ async fn process_page(
     }
 
     if response.blocks.is_empty() {
-        if cursor > original_cursor || cursor >= boundary { return Ok(cursor); }
+        if cursor > original_cursor || cursor >= boundary {
+            return Ok(cursor);
+        }
         return Err("query_blocks returned no live progress for the requested cursor".to_string());
     }
 
@@ -108,14 +120,30 @@ async fn process_page(
     let mut processed_end = cursor;
     for (offset, block) in response.blocks.into_iter().enumerate() {
         let index = response.first_block_index.saturating_add(offset as u64);
-        if index < cursor { continue; }
-        if index >= boundary { break; }
+        if index < cursor {
+            continue;
+        }
+        if index >= boundary {
+            break;
+        }
         if index != processed_end {
-            return Err(format!("non-contiguous block response expected={processed_end} got={index}"));
+            return Err(format!(
+                "non-contiguous block response expected={processed_end} got={index}"
+            ));
         }
 
-        if let Some(ledger::Operation::Transfer { from, to, amount, .. }) = &block.transaction.operation {
-            process_transfer(from, to, amount.e8s, block.transaction.icrc1_memo.as_deref(), pokes).await;
+        if let Some(ledger::Operation::Transfer {
+            from, to, amount, ..
+        }) = &block.transaction.operation
+        {
+            process_transfer(
+                from,
+                to,
+                amount.e8s,
+                block.transaction.icrc1_memo.as_deref(),
+                pokes,
+            )
+            .await;
         }
         processed_end = index.saturating_add(1);
     }
@@ -140,20 +168,30 @@ pub async fn run_poll() {
                 state::write_metadata(meta);
                 logging::ledger_recovered();
             }
-            Err(error) if error == "reserve_protection" => {},
+            Err(error) if error == "reserve_protection" => {}
             Err(error) => logging::ledger_failure(&error),
         }
         return;
     }
 
     let mut cursor = meta.next_block;
-    let first = match ledger::query_blocks(runtime.ledger_canister, cursor, config::LEDGER_PAGE_SIZE).await {
-        Ok(response) => { logging::ledger_recovered(); response }
-        Err(error) if error == "reserve_protection" => return,
-        Err(error) => { logging::ledger_failure(&error); return; }
-    };
+    let first =
+        match ledger::query_blocks(runtime.ledger_canister, cursor, config::LEDGER_PAGE_SIZE).await
+        {
+            Ok(response) => {
+                logging::ledger_recovered();
+                response
+            }
+            Err(error) if error == "reserve_protection" => return,
+            Err(error) => {
+                logging::ledger_failure(&error);
+                return;
+            }
+        };
     let boundary = first.chain_length;
-    if cursor >= boundary { return; }
+    if cursor >= boundary {
+        return;
+    }
 
     let mut pokes: BTreeMap<Principal, BTreeSet<u8>> = BTreeMap::new();
     let mut next_response = Some(first);
@@ -163,15 +201,24 @@ pub async fn run_poll() {
         } else {
             let length = config::LEDGER_PAGE_SIZE.min(boundary.saturating_sub(cursor));
             match ledger::query_blocks(runtime.ledger_canister, cursor, length).await {
-                Ok(response) => { logging::ledger_recovered(); response }
+                Ok(response) => {
+                    logging::ledger_recovered();
+                    response
+                }
                 Err(error) if error == "reserve_protection" => return,
-                Err(error) => { logging::ledger_failure(&error); return; }
+                Err(error) => {
+                    logging::ledger_failure(&error);
+                    return;
+                }
             }
         };
         match process_page(response, cursor, boundary, &mut pokes).await {
             Ok(new_cursor) if new_cursor > cursor => cursor = new_cursor,
             Ok(_) => return,
-            Err(error) => { logging::ledger_failure(&error); return; }
+            Err(error) => {
+                logging::ledger_failure(&error);
+                return;
+            }
         }
     }
 

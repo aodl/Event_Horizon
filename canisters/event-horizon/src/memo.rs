@@ -52,7 +52,8 @@ fn parse_principal(text: &str) -> Result<Principal, MemoParseError> {
         return Err(MemoParseError::InvalidPrincipal);
     }
     let normalized = with_group_separators(text);
-    let principal = Principal::from_text(normalized).map_err(|_| MemoParseError::InvalidPrincipal)?;
+    let principal =
+        Principal::from_text(normalized).map_err(|_| MemoParseError::InvalidPrincipal)?;
     if principal == Principal::anonymous() || principal == Principal::management_canister() {
         return Err(MemoParseError::InvalidPrincipal);
     }
@@ -62,7 +63,11 @@ fn parse_principal(text: &str) -> Result<Principal, MemoParseError> {
 /// Parses the deliberately human-readable ICP amount grammar into e8s.
 /// Integers or 1-2 decimal places are accepted. No sign/exponent/.1 shorthand.
 fn parse_amount_e8s(text: &str) -> Result<u64, MemoParseError> {
-    if text.is_empty() || text.starts_with('+') || text.starts_with('-') || text.contains(['e', 'E']) {
+    if text.is_empty()
+        || text.starts_with('+')
+        || text.starts_with('-')
+        || text.contains(['e', 'E'])
+    {
         return Err(MemoParseError::InvalidAmount);
     }
     let mut parts = text.split('.');
@@ -80,7 +85,11 @@ fn parse_amount_e8s(text: &str) -> Result<u64, MemoParseError> {
         None => 0u64,
         Some(f) if (1..=2).contains(&f.len()) && f.bytes().all(|b| b.is_ascii_digit()) => {
             let n: u64 = f.parse().map_err(|_| MemoParseError::InvalidAmount)?;
-            if f.len() == 1 { n * 10_000_000 } else { n * 1_000_000 }
+            if f.len() == 1 {
+                n * 10_000_000
+            } else {
+                n * 1_000_000
+            }
         }
         Some(_) => return Err(MemoParseError::InvalidAmount),
     };
@@ -103,7 +112,9 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
     // so split at the first separator rather than the last.
     let (principal_text, rest) = text.split_once('.').ok_or(MemoParseError::InvalidShape)?;
     let (subaccount_text, amount_text) = match rest.split_once(':') {
-        Some((subaccount, amount)) if !amount.contains(':') && !amount.is_empty() => (subaccount, Some(amount)),
+        Some((subaccount, amount)) if !amount.contains(':') && !amount.is_empty() => {
+            (subaccount, Some(amount))
+        }
         Some(_) => return Err(MemoParseError::InvalidShape),
         None => (rest, None),
     };
@@ -112,8 +123,11 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
     if subaccount_text.is_empty() || !subaccount_text.bytes().all(|b| b.is_ascii_digit()) {
         return Err(MemoParseError::InvalidSubaccount);
     }
-    let subaccount_u16: u16 = subaccount_text.parse().map_err(|_| MemoParseError::InvalidSubaccount)?;
-    let numbered_subaccount = u8::try_from(subaccount_u16).map_err(|_| MemoParseError::InvalidSubaccount)?;
+    let subaccount_u16: u16 = subaccount_text
+        .parse()
+        .map_err(|_| MemoParseError::InvalidSubaccount)?;
+    let numbered_subaccount =
+        u8::try_from(subaccount_u16).map_err(|_| MemoParseError::InvalidSubaccount)?;
 
     // Zero is reserved as an internal sentinel for "all incoming transfers" and can
     // only arise by omitting the threshold entirely. Explicit amounts retain the
@@ -129,7 +143,11 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
         }
     };
 
-    Ok(SubscriptionDeclaration { subscriber, numbered_subaccount, minimum_e8s })
+    Ok(SubscriptionDeclaration {
+        subscriber,
+        numbered_subaccount,
+        minimum_e8s,
+    })
 }
 
 #[cfg(test)]
@@ -144,7 +162,10 @@ mod tests {
         assert_eq!(parsed.subscriber.to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
         assert_eq!(parsed.numbered_subaccount, 7);
         assert_eq!(parsed.minimum_e8s, 1_000_000);
-        assert_eq!(format!("X.{}", std::str::from_utf8(memo).unwrap()).len(), 32);
+        assert_eq!(
+            format!("X.{}", std::str::from_utf8(memo).unwrap()).len(),
+            32
+        );
     }
 
     #[test]
@@ -171,7 +192,9 @@ mod tests {
 
     #[test]
     fn rejects_confusing_or_over_precise_amounts() {
-        for s in ["", ".1", "0.001", "+1", "-1", "1e2", "1.", "01", "01.0", "01..0"] {
+        for s in [
+            "", ".1", "0.001", "+1", "-1", "1e2", "1.", "01", "01.0", "01..0",
+        ] {
             assert!(parse_amount_e8s(s).is_err(), "{s}");
         }
     }

@@ -62,11 +62,19 @@ def main() -> None:
     args = ap.parse_args()
     data = Path(args.wasm).read_bytes()
     names = exports(data)
-    app_methods = [n for n in names if n.startswith(("canister_update ", "canister_query ", "canister_composite_query "))]
+    # ic-cdk-timers exports this reserved callback for the global timer. It is
+    # not an application method; reject every other query/update export.
+    internal_timer = "canister_update <ic-cdk internal> timer_executor"
+    app_methods = [
+        n for n in names
+        if n.startswith(("canister_update ", "canister_query ", "canister_composite_query "))
+        and n != internal_timer
+    ]
     if args.backend:
         if app_methods:
             raise SystemExit(f"production backend unexpectedly exports application methods: {app_methods}")
-        forbidden = [b"debug_", b"debug_poll_once", b"debug_funding_once", b"debug_subscription"]
+        # The IC system import `debug_print` is used for exceptional logs.
+        forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_subscription", b"debug_state"]
         for needle in forbidden:
             if needle in data:
                 raise SystemExit(f"production backend contains debug marker {needle!r}")

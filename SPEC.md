@@ -148,7 +148,7 @@ The working subscription requirement is **10 ICP** qualifying Jupiter Faucet end
 
 Larger endowments do not buy priority or lower latency.
 
-Raw ICP accumulated in Event Horizon is periodically converted to cycles. The conversion uses the ICP Ledger's legacy `transfer` method to the CMC account identifier derived from Event Horizon's principal, with the standard top-up memo, followed by `notify_top_up(block_index)`. It deliberately does not use `icrc1_transfer` for the CMC leg.
+Raw ICP accumulated in Event Horizon is periodically converted to cycles. The conversion uses the ICP Ledger's legacy `transfer` method to the CMC account identifier derived from Event Horizon's principal, with the standard top-up memo, followed by `notify_top_up(block_index)`. This value-moving Ledger call uses guaranteed-response (unbounded-wait) semantics while its deterministic identity remains persisted. It deliberately does not use `icrc1_transfer` for the CMC leg.
 
 Only the minimum durable financial state necessary to avoid duplicate/stranded value is retained: an idle state, a deterministic legacy-transfer identity awaiting a definitive Ledger block, or an accepted block awaiting CMC notification. Transport ambiguity reuses the same transfer identity; explicit CMC refunds clear naturally; there is no administrative recovery API or financial journal.
 

@@ -1,13 +1,17 @@
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
-use ic_cdk::call::Call;
+use ic_cdk::call::{Call, CallErrorExt};
 
 use crate::config::RESERVE_PROTECTION_CYCLES;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct Tokens { pub e8s: u64 }
+pub struct Tokens {
+    pub e8s: u64,
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct TimeStamp { pub timestamp_nanos: u64 }
+pub struct TimeStamp {
+    pub timestamp_nanos: u64,
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
@@ -19,9 +23,22 @@ pub struct Transaction {
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum Operation {
-    Mint { to: Vec<u8>, amount: Tokens },
-    Burn { from: Vec<u8>, spender: Option<Vec<u8>>, amount: Tokens },
-    Transfer { from: Vec<u8>, to: Vec<u8>, amount: Tokens, fee: Tokens, spender: Option<Vec<u8>> },
+    Mint {
+        to: Vec<u8>,
+        amount: Tokens,
+    },
+    Burn {
+        from: Vec<u8>,
+        spender: Option<Vec<u8>>,
+        amount: Tokens,
+    },
+    Transfer {
+        from: Vec<u8>,
+        to: Vec<u8>,
+        amount: Tokens,
+        fee: Tokens,
+        spender: Option<Vec<u8>>,
+    },
     Approve {
         from: Vec<u8>,
         spender: Vec<u8>,
@@ -41,12 +58,18 @@ pub struct Block {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct GetBlocksArgs { pub start: u64, pub length: u64 }
+pub struct GetBlocksArgs {
+    pub start: u64,
+    pub length: u64,
+}
 
 /// Event Horizon intentionally does not decode or call archive callbacks. Candid record
 /// subtyping permits this narrow range representation containing only the location.
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct ArchivedBlocksRange { pub start: u64, pub length: u64 }
+pub struct ArchivedBlocksRange {
+    pub start: u64,
+    pub length: u64,
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct QueryBlocksResponse {
@@ -57,7 +80,10 @@ pub struct QueryBlocksResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct Account { pub owner: Principal, pub subaccount: Option<Vec<u8>> }
+pub struct Account {
+    pub owner: Principal,
+    pub subaccount: Option<Vec<u8>>,
+}
 
 /// Legacy ICP Ledger transfer argument. CMC top-ups use the legacy transfer endpoint and
 /// account identifier convention, not ICRC-1 Account/memo fields.
@@ -86,10 +112,16 @@ fn nat_to_u64(n: &Nat) -> Result<u64, String> {
     u64::try_from(n.0.clone()).map_err(|_| format!("Nat does not fit u64: {n}"))
 }
 
-pub async fn query_blocks(ledger: Principal, start: u64, length: u64) -> Result<QueryBlocksResponse, String> {
+pub async fn query_blocks(
+    ledger: Principal,
+    start: u64,
+    length: u64,
+) -> Result<QueryBlocksResponse, String> {
     let args = GetBlocksArgs { start, length };
     let call = Call::bounded_wait(ledger, "query_blocks").with_arg(&args);
-    if ic_cdk::api::canister_liquid_cycle_balance() < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost()) {
+    if ic_cdk::api::canister_liquid_cycle_balance()
+        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
+    {
         return Err("reserve_protection".to_string());
     }
     call.await
@@ -122,6 +154,7 @@ pub enum LegacyTransferOutcome {
     Accepted(u64),
     RetrySameIdentity,
     Replan,
+    IdentityExpired,
     Uncertain(String),
 }
 
@@ -131,8 +164,9 @@ pub enum LegacyTransferOutcome {
 /// that can only be repaired by changing the fee/time/amount request a fresh plan. Duplicate
 /// semantics recover the original accepted block index.
 pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> LegacyTransferOutcome {
-    let response = match Call::bounded_wait(ledger, "transfer").with_arg(arg).await {
+    let response = match Call::unbounded_wait(ledger, "transfer").with_arg(arg).await {
         Ok(response) => response,
+        Err(e) if e.is_clean_reject() => return LegacyTransferOutcome::Replan,
         Err(e) => return LegacyTransferOutcome::Uncertain(format!("transfer transport: {e:?}")),
     };
     let result = match response.candid::<LegacyTransferResult>() {
@@ -141,10 +175,12 @@ pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> Lega
     };
     match result {
         Ok(block) => LegacyTransferOutcome::Accepted(block),
-        Err(LegacyTransferError::TxDuplicate { duplicate_of }) => LegacyTransferOutcome::Accepted(duplicate_of),
+        Err(LegacyTransferError::TxDuplicate { duplicate_of }) => {
+            LegacyTransferOutcome::Accepted(duplicate_of)
+        }
         Err(LegacyTransferError::TxCreatedInFuture) => LegacyTransferOutcome::RetrySameIdentity,
+        Err(LegacyTransferError::TxTooOld { .. }) => LegacyTransferOutcome::IdentityExpired,
         Err(LegacyTransferError::BadFee { .. })
-        | Err(LegacyTransferError::InsufficientFunds { .. })
-        | Err(LegacyTransferError::TxTooOld { .. }) => LegacyTransferOutcome::Replan,
+        | Err(LegacyTransferError::InsufficientFunds { .. }) => LegacyTransferOutcome::Replan,
     }
 }
