@@ -1,0 +1,17 @@
+Event Horizon global subscriptions and dynamic pricing are implemented on branch codex/global-pricing from validated commit c48778d1744f3b645d0165cfdccec2ee704db71c, preserved by local tag event-horizon-core-validated.
+
+The backend now accepts global `<subscriber>`, account `<subscriber>.<subaccount>`, and threshold `<subscriber>.<subaccount>:<amount>` declarations. Global subscribers are stored directly. Active polls incorporate them once after reaching the pinned Ledger boundary. `poke([])` represents a global-only match; sorted non-empty account hints take precedence. Delivery remains best effort and subscriber reconciliation remains authoritative.
+
+Pricing uses only the CMC integer ICP/XDR rate. It stores at most one success per UTC date for the current day plus 1,460 prior UTC day buckets. Prices are independently calculated as ceil(10×F/C) and ceil(100×F/C), freeze seven days before first-of-month 00:00 UTC, and carry forward when the latest eligible rate is more than seven days old. Admission uses the current price at evaluation time. Stable memory additions use IDs 4–6 and preserve validated IDs 0–2.
+
+The backend's only production application method is read-only get_pricing. The certified embedded frontend consumes it through a same-origin consensus update proxy, shows authoritative current/frozen prices and UTC timestamps, builds all three memo forms, and recommends a higher announced requirement when Faucet delay could cross an increase.
+
+Validation passed: 30 backend unit tests, 5 frontend tests, 19/19 PocketIC tests, 19/19 local-smoke tests, security with zero vulnerabilities and four documented allowed warnings, release audits, canonical Docker build, two clean byte-identical Docker builds, and `icp build -e local`. The real PocketIC pinned-boundary interleaving and exact old-Wasm upgrade fixture both passed. Independent certificate/witness verification was not added because it would require disproportionate test-only agent and root-key infrastructure; the existing certified SVG range reconstruction remains.
+
+Canonical Docker hashes:
+- backend Wasm: e71d53a4748959cdd0ad9d0d71ad0e4dd74d699827f842dedd7977cf73a0a82d
+- frontend Wasm: 83aa275ec24a13c3ec05a2bd8c6805564454f5f2ad2343c0158d825030798def
+
+A PocketIC measurement observed a 42,102,445,000-cycle reserved upper-bound `Call::get_cost()` for one daily pricing query; this is not net mainnet burn after response refunds. No mainnet deployment, Jupiter Faucet X alias publication, or controller removal occurred.
+
+See docs/codex/global-pricing-validation.md for the exact migration design, protocol definitions, commands, evidence, and remaining limitations. The exact final commit and archive SHA-256 are reported in the external handoff because a commit cannot contain its own SHA.
