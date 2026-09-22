@@ -41,7 +41,7 @@ The PocketIC CMC call-cost value used at the tested boundary is `42,102,445,000 
 | `DFX_IDENTITY=codex_local icp build -e local` | Pass; both canisters built successfully. |
 | `python3 tools/audit-wasm.py release-artifacts/event_horizon.wasm --backend` | Pass; 9 total exports, with exactly `canister_query get_pricing` as the application method. |
 | `python3 tools/audit-wasm.py release-artifacts/event_horizon_frontend.wasm --frontend` | Pass; 7 total exports, with exactly `canister_query http_request` as the application method and no update proxy marker. |
-| `./tools/scripts/source-manifest generate && ./tools/scripts/source-manifest verify` | Run after the final evidence and handover commit; result recorded below before archive creation. |
+| `./tools/scripts/source-manifest generate && ./tools/scripts/source-manifest verify` | Pass after the evidence report and `summary.txt` were committed; every tracked source entry verified. |
 
 ## Canonical artifacts
 

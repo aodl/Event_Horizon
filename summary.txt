@@ -22,6 +22,7 @@ Validation completed successfully:
 - icp build -e local under DFX_IDENTITY=codex_local
 - backend export audit: only get_pricing as an application method
 - frontend export audit: only http_request as an application method; no http_request_update
+- tracked-source manifest generation and verification: every entry passed
 
 Canonical Wasm SHA-256:
 - backend: 3ff42f18c38fc126909080c0ae06043e6a7a572a7b399e684ace7f835a5c1f07
