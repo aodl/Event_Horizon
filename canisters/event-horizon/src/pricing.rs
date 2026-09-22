@@ -441,4 +441,22 @@ mod tests {
         assert!(today - 1_460 >= oldest_retained_day(now));
         assert!(today - 1_461 < oldest_retained_day(now));
     }
+
+    #[test]
+    fn floor_latest_expiry_and_missed_days_need_no_synthetic_records() {
+        let today = 2_000;
+        let mut observations = vec![obs(today - 1_461, 1), obs(today - 100, 8), obs(today, 12)];
+        observations.retain(|value| value.utc_day >= oldest_retained_day(today * SECONDS_PER_DAY));
+        assert_eq!(observations.len(), 2, "missing days create no records");
+        let (floor, latest) = reference_before(&observations, u64::MAX).unwrap();
+        assert_eq!(floor.xdr_permyriad_per_icp, 8, "expired minimum falls out");
+        assert_eq!(latest.xdr_permyriad_per_icp, 12);
+        observations.push(obs(today + 1, 7));
+        let (floor, latest) = reference_before(&observations, u64::MAX).unwrap();
+        assert_eq!(
+            floor.xdr_permyriad_per_icp, 7,
+            "new lower observation becomes floor"
+        );
+        assert_eq!(latest.xdr_permyriad_per_icp, 7);
+    }
 }

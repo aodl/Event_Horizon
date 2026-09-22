@@ -35,7 +35,7 @@ EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 icp deploy -e ic
 - `log_memory_limit: 4096`
 
 These settings must be verified on mainnet before controller removal. Public status is the intended source
-for current cycles balance, running state and module hash; Event Horizon deliberately exposes no status API.
+for current cycles balance, running state and module hash; `get_pricing` is not a status API.
 
 ## Initial funding
 
@@ -43,8 +43,7 @@ Provide an initial cycles balance large enough to keep the backend comfortably o
 its observation period. Jupiter Faucet endowments are recurring funding and should not be confused with immediate
 spendable cycles.
 
-The planned protocol baseline is approximately 100 ICP endowed to Event Horizon through Jupiter Faucet, plus the
-10 ICP requirement for each subscription declaration. Those endowments do not replace the initial cycle balance.
+Account and global admission requirements come from `get_pricing`; they begin at 10 and 100 ICP after the first successful CMC observation. Those pooled endowments do not replace the initial cycle balance.
 
 ## Observation period
 
@@ -58,6 +57,9 @@ Controller removal is a separate operational decision. During the controlled obs
 6. honest subscribers receive prompt pokes while their independent reconciliation remains sufficient when pokes are absent;
 7. actual cycle burn is compatible with the starting threshold table;
 8. the installed backend module hash matches the canonical reproducible artifact.
+9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
+10. the production export audit reports only `get_pricing` as an application method;
+11. global subscription poke volume is sustainable at the observed registry size.
 
 Only after that evidence is satisfactory should `docs/controller-removal.md` be followed.
 

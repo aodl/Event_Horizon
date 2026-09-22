@@ -648,6 +648,13 @@ mod tests {
                 global_icp: 100
             }
         );
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_rate", 30_000u64)?;
+        env.price_once()?;
+        assert_eq!(
+            env.pricing()?.latest_xdr_permyriad,
+            10_000,
+            "only one successful observation is stored per UTC date"
+        );
 
         // Move to a daily observation before the currently prepared freeze. If launch
         // occurred in the final week, activate that carried epoch first.
