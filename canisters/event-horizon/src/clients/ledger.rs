@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
-use ic_cdk::call::Call;
+use ic_cdk::call::{Call, CallErrorExt};
 
 use crate::config::RESERVE_PROTECTION_CYCLES;
 
@@ -154,6 +154,7 @@ pub enum LegacyTransferOutcome {
     Accepted(u64),
     RetrySameIdentity,
     Replan,
+    IdentityExpired,
     Uncertain(String),
 }
 
@@ -163,8 +164,9 @@ pub enum LegacyTransferOutcome {
 /// that can only be repaired by changing the fee/time/amount request a fresh plan. Duplicate
 /// semantics recover the original accepted block index.
 pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> LegacyTransferOutcome {
-    let response = match Call::bounded_wait(ledger, "transfer").with_arg(arg).await {
+    let response = match Call::unbounded_wait(ledger, "transfer").with_arg(arg).await {
         Ok(response) => response,
+        Err(e) if e.is_clean_reject() => return LegacyTransferOutcome::Replan,
         Err(e) => return LegacyTransferOutcome::Uncertain(format!("transfer transport: {e:?}")),
     };
     let result = match response.candid::<LegacyTransferResult>() {
@@ -177,8 +179,8 @@ pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> Lega
             LegacyTransferOutcome::Accepted(duplicate_of)
         }
         Err(LegacyTransferError::TxCreatedInFuture) => LegacyTransferOutcome::RetrySameIdentity,
+        Err(LegacyTransferError::TxTooOld { .. }) => LegacyTransferOutcome::IdentityExpired,
         Err(LegacyTransferError::BadFee { .. })
-        | Err(LegacyTransferError::InsufficientFunds { .. })
-        | Err(LegacyTransferError::TxTooOld { .. }) => LegacyTransferOutcome::Replan,
+        | Err(LegacyTransferError::InsufficientFunds { .. }) => LegacyTransferOutcome::Replan,
     }
 }

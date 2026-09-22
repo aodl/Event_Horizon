@@ -1,27 +1,25 @@
-# Decision required: ambiguous ICP transfer after the Ledger deduplication window
+# Resolved decision: expired ICP transfer identity
 
-## Observed problem
+## Decision
 
-`TransferPending` preserves the exact legacy transfer identity after a lost Ledger response. A prompt retry safely recovers the original block through `TxDuplicate`. If retries remain unavailable beyond the Ledger's 24-hour acceptance window, the same request returns `TxTooOld`. The current code treats that as a definite no-debit result and clears the plan.
+Event Horizon uses `Call::unbounded_wait` for the trusted ICP Ledger legacy `transfer` call that moves ICP to the CMC account. The deterministic `created_at_time`, amount, fee, destination, memo, and source identity remain persisted in `TransferPending` until the Ledger returns a usable result. Ledger reads, Historian calls, subscriber pokes, and CMC notification remain bounded.
 
-## Evidence / failing test
+A successful transfer or `TxDuplicate` pins the accepted block index in `NotifyPending` for `notify_top_up`. A non-clean transport reject or response decode failure retains the same transfer identity. A clean reject establishes that this call did not execute and permits replanning from live balance and fee data.
 
-The [ICP Ledger Candid](https://github.com/dfinity/ic/blob/master/rs/ledger_suite/icp/ledger.did) describes `TxTooOld` as an expired request and `TxDuplicate` as the original accepted block index. The existing PocketIC test proves prompt duplicate recovery; it does not prove recovery after expiry. The [ICP idempotency guidance](https://legacy.internetcomputer.org/docs/building-apps/best-practices/idempotency) notes that an accepted transfer with a lost response may become unresolvable after the deduplication window. The [CMC Candid](https://github.com/dfinity/ic/blob/master/rs/nns/cmc/cmc.did) requires the exact block index for `notify_top_up`.
+If retrying an existing identity eventually returns `TxTooOld`, Event Horizon logs one concise `CMC_TRANSFER_IDENTITY_EXPIRED` event and clears the plan. A later maintenance run re-reads the live balance and fee and creates a fresh deterministic identity. This choice preserves autonomous funding liveness without an Index, archive traversal, administrative recovery endpoint, journal, or transaction search.
 
-## Current specified behavior
+## Why this resolves the controllerless concern
 
-`SPEC.md` requires autonomous legacy transfer to CMC, duplicate-safe recovery, and no archive traversal, Index dependency, operator recovery endpoint, or financial journal.
+The earlier implementation used bounded wait for the value-moving Ledger call. A `SYS_UNKNOWN` response could hide an ordinary accepted transfer and leave only duplicate-window recovery. Guaranteed-response semantics remove that ordinary timeout ambiguity for the trusted ICP Ledger: once delivered and completed without a trap, its response is delivered to Event Horizon.
 
-## Why a code-only fix is unsafe
+The persisted identity and duplicate handling remain defense in depth for retries after clean failures, rejects, upgrades, and other interruptions. The subsequent CMC notification continues from the accepted block index and stays bounded because the transfer itself is already identified.
 
-After expiry, `TxTooOld` proves only that the retry did not debit. It cannot prove whether the original call debited before its response was lost. Clearing the plan may strand an accepted CMC payment without a block index for notification. Keeping the plan indefinitely protects against a mistaken new spend but can stop future funding sweeps. Neither choice satisfies autonomous recovery in every case.
+## Narrow residual risk
 
-## Smallest viable alternatives
+After an extraordinary non-clean Ledger failure, a previous payment could theoretically have been accepted without its block being recoverable. If the persisted identity later expires, clearing it can strand that one CMC payment. Completely eliminating this pathological ambiguity would require durable transaction lookup, archive traversal, or operator recovery machinery deliberately excluded from Event Horizon v1.
 
-1. Accept and document this rare bounded-window loss of autonomous recovery, with operational monitoring before controller removal.
-2. Amend the protocol to permit a narrowly scoped, durable payment lookup or recovery mechanism capable of finding the accepted block after expiry, including archived history when necessary.
-3. Amend the protocol to preserve the ambiguous state indefinitely and explicitly accept funding liveness loss until an external resolution.
+This residual risk is accepted in favor of autonomous liveness. The exceptional expiry log preserves operational evidence without adding a production control surface.
 
-## Recommendation
+## History
 
-Decide the required behavior for a transfer whose response remains ambiguous after 24 hours before calling the funding lane ready for controllerless operation. The current code remains unchanged pending that decision.
+The initial validation identified that bounded-wait ambiguity could outlive the Ledger deduplication window. The prior decision record offered three choices: accept a narrow residual risk, add recovery machinery, or preserve ambiguity indefinitely and lose funding liveness. This hardening pass adopts the first choice together with unbounded wait for the narrowly trusted value-moving call.

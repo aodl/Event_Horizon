@@ -127,8 +127,18 @@ mod tests {
     struct DebugState {
         bootstrapped: bool,
         next_block: u64,
+        polling_mode: PollingMode,
         subscriptions: u64,
         cmc_state: String,
+    }
+    #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+    enum PollingMode {
+        ReserveProtection,
+        Economy,
+        Standard,
+        Fast,
+        VeryFast,
+        Continuous,
     }
     #[derive(CandidType, Deserialize, Debug)]
     struct Subscription {
@@ -544,6 +554,62 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn transaction_after_pinned_boundary_waits_for_following_poll() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let memo = env.admit(7, None, 1_000_000_000)?;
+
+        // Put a qualifying Faucet transfer at the head so processing the pinned page
+        // reaches the existing Historian await after the Ledger response is captured.
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        let poll = env
+            .pic
+            .submit_call(
+                env.event_horizon,
+                Principal::anonymous(),
+                "debug_poll_once",
+                encode_one(())?,
+            )
+            .map_err(|e| anyhow!("submit poll: {e:?}"))?;
+        // First round starts the poll; second executes the Ledger query and fixes its
+        // chain_length response before this transaction is appended.
+        env.pic.tick();
+        env.pic.tick();
+
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.pic
+            .await_call(poll)
+            .map_err(|e| anyhow!("await poll: {e:?}"))?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            0,
+            "transaction beyond the pinned boundary must not be poked in this poll"
+        );
+
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            1,
+            "following poll must process the deferred transaction"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn funding_sweep_uses_legacy_transfer_and_reaches_cmc() -> Result<()> {
         let env = Env::new()?;
         update::<_, ()>(
@@ -610,6 +676,94 @@ mod tests {
         );
         assert_eq!(query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?, 1);
         assert!(env.state()?.cmc_state.contains("Idle"));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn expired_transfer_identity_clears_and_later_replans() -> Result<()> {
+        let env = Env::new()?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_balance",
+            SetBalance {
+                account: Account {
+                    owner: env.event_horizon,
+                    subaccount: None,
+                },
+                e8s: 100_000_000,
+            },
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("TransferPending"));
+
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::TooOld,
+        )?;
+        env.fund()?;
+        assert!(
+            env.state()?.cmc_state.contains("Idle"),
+            "expired identity must restore autonomous funding liveness"
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.ledger, "debug_accepted_legacy_transfers", ())?,
+            1
+        );
+        assert_eq!(query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn successful_cmc_top_up_immediately_accelerates_polling_mode() -> Result<()> {
+        let env = Env::new()?;
+        assert_eq!(env.state()?.polling_mode, PollingMode::ReserveProtection);
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_balance",
+            SetBalance {
+                account: Account {
+                    owner: env.event_horizon,
+                    subaccount: None,
+                },
+                e8s: 100_000_000,
+            },
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("NotifyPending"));
+        assert_eq!(env.state()?.polling_mode, PollingMode::ReserveProtection);
+
+        // PocketIC cannot let the mock CMC mint cycles. Model the real CMC side effect
+        // before returning Success, then prove the funding callback reschedules immediately.
+        env.pic.add_cycles(env.event_horizon, 20_000_000_000_000);
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert_eq!(env.state()?.polling_mode, PollingMode::Continuous);
         Ok(())
     }
 

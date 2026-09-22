@@ -65,3 +65,7 @@ pub fn reserve_mode(active: bool, balance: u128) {
 pub fn cmc_terminal(reason: &str) {
     ic_cdk::println!("CMC_TERMINAL_FAILURE {}", reason);
 }
+
+pub fn cmc_transfer_identity_expired() {
+    ic_cdk::println!("CMC_TRANSFER_IDENTITY_EXPIRED");
+}

@@ -60,8 +60,11 @@ fn schedule_funding(delay: Duration) {
             schedule_funding(Duration::from_secs(60));
             return;
         }
-        funding::run_funding_maintenance().await;
+        let cycles_minted = funding::run_funding_maintenance().await;
         FUNDING_RUNNING.with(|flag| flag.set(false));
+        if cycles_minted {
+            schedule_from_balance();
+        }
         schedule_funding(Duration::from_secs(config::FUNDING_MAINTENANCE_SECONDS));
     });
     FUNDING_TIMER.with_borrow_mut(|slot| {
@@ -112,5 +115,7 @@ pub async fn debug_poll_once() {
 
 #[cfg(feature = "debug_api")]
 pub async fn debug_funding_once() {
-    funding::run_funding_maintenance().await;
+    if funding::run_funding_maintenance().await {
+        schedule_from_balance();
+    }
 }
