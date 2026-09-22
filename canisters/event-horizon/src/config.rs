@@ -11,7 +11,6 @@ pub const CMC_CANISTER: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const JUPITER_HISTORIAN_CANISTER: &str = "j5gs6-uiaaa-aaaar-qb5cq-cai";
 pub const JUPITER_FAUCET_CANISTER: &str = "acjuz-liaaa-aaaar-qb4qq-cai";
 
-pub const REQUIRED_ENDOWMENT_E8S: u64 = 10 * 100_000_000;
 pub const MIN_TRIGGER_E8S: u64 = 1_000_000; // 0.01 ICP
 pub const LEDGER_PAGE_SIZE: u64 = 256;
 pub const FUNDING_MAINTENANCE_SECONDS: u64 = 60 * 60;

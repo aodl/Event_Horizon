@@ -1,1 +1,9 @@
-service : () -> {}
+type Price = record { account_icp : nat64; global_icp : nat64 };
+type Pricing = record {
+  initialized : bool; current : Price; current_effective_at : nat64;
+  next : opt Price; next_effective_at : nat64; next_freeze_at : nat64;
+  observed_floor_xdr_permyriad : nat64; floor_observed_at : nat64;
+  latest_xdr_permyriad : nat64; latest_observed_at : nat64;
+  next_carried_forward_due_to_stale_rate : bool;
+};
+service : () -> { get_pricing : () -> (Pricing) query; }

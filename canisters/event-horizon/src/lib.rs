@@ -12,9 +12,13 @@ mod funding;
 mod logging;
 mod memo;
 mod polling;
+mod pricing;
 mod scheduler;
 mod state;
 mod subscription;
+
+#[cfg(feature = "debug_api")]
+use candid::Principal;
 
 #[cfg(feature = "debug_api")]
 use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
@@ -22,6 +26,7 @@ use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
 pub use account::{account_identifier_bytes, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
+pub use pricing::{Price, Pricing};
 pub use subscription::{merge_subscription, Subscription};
 
 #[cfg(not(feature = "debug_api"))]
@@ -36,6 +41,11 @@ fn init() {
 fn post_upgrade() {
     state::initialize_if_needed();
     scheduler::start();
+}
+
+#[ic_cdk::query]
+fn get_pricing() -> Pricing {
+    pricing::get_pricing()
 }
 
 #[cfg(feature = "debug_api")]
@@ -81,7 +91,9 @@ mod debug {
         pub next_block: u64,
         pub polling_mode: PollingMode,
         pub subscriptions: u64,
+        pub global_subscriptions: u64,
         pub cmc_state: String,
+        pub pricing: Pricing,
     }
 
     #[ic_cdk::query]
@@ -92,7 +104,9 @@ mod debug {
             next_block: meta.next_block,
             polling_mode: meta.polling_mode,
             subscriptions: state::subscription_count(),
+            global_subscriptions: state::global_subscription_count(),
             cmc_state: format!("{:?}", state::read_cmc_state()),
+            pricing: pricing::get_pricing(),
         }
     }
 
@@ -106,6 +120,21 @@ mod debug {
         scheduler::debug_funding_once().await;
     }
 
+    #[ic_cdk::update]
+    async fn debug_pricing_once() {
+        scheduler::debug_pricing_once().await;
+    }
+
+    #[ic_cdk::update]
+    fn debug_start_schedulers() {
+        scheduler::debug_start();
+    }
+
+    #[ic_cdk::query]
+    fn debug_timer_count() -> u8 {
+        scheduler::debug_timer_count()
+    }
+
     #[derive(CandidType, Deserialize)]
     pub struct DebugSubscriptionArgs {
         subscriber: Principal,
@@ -117,6 +146,11 @@ mod debug {
         let account =
             account_identifier_bytes(args.subscriber, numbered_subaccount(args.subaccount));
         state::get_subscription(account)
+    }
+
+    #[ic_cdk::query]
+    fn debug_global_subscription(subscriber: Principal) -> bool {
+        state::has_global_subscriber(subscriber)
     }
 }
 

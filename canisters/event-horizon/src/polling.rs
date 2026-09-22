@@ -6,10 +6,16 @@ use crate::{
     account::default_account_identifier,
     clients::{historian, ledger, subscriber},
     config, logging,
-    memo::parse_subscription_memo,
-    state,
+    memo::{parse_subscription_memo, SubscriptionDeclaration},
+    pricing, state,
     subscription::Subscription,
 };
+
+#[derive(Default)]
+struct MatchState {
+    global_matched: bool,
+    matched_subaccounts: BTreeSet<u8>,
+}
 
 fn archived_prefix_end(ranges: &[ledger::ArchivedBlocksRange], start: u64, boundary: u64) -> u64 {
     let mut end = start;
@@ -41,7 +47,7 @@ async fn process_transfer(
     to: &[u8],
     amount_e8s: u64,
     icrc1_memo: Option<&[u8]>,
-    pokes: &mut BTreeMap<Principal, BTreeSet<u8>>,
+    matches: &mut BTreeMap<Principal, MatchState>,
 ) {
     let runtime = config::runtime();
     let self_id = ic_cdk::api::canister_self();
@@ -54,15 +60,27 @@ async fn process_transfer(
     if from_id == Some(faucet_account) && to_id == Some(self_account) {
         if let Some(memo) = icrc1_memo {
             if let Ok(declaration) = parse_subscription_memo(memo) {
+                let global = matches!(declaration, SubscriptionDeclaration::Global { .. });
+                let Some(required_e8s) = pricing::current_admission_e8s(global) else {
+                    return;
+                };
                 match historian::route_is_admitted(
                     runtime.historian_canister,
                     self_id,
                     memo.to_vec(),
+                    required_e8s,
                 )
                 .await
                 {
                     Ok(true) => {
-                        state::put_subscription(Subscription::from(declaration));
+                        match declaration {
+                            SubscriptionDeclaration::Global { subscriber } => {
+                                state::put_global_subscriber(subscriber);
+                            }
+                            account @ SubscriptionDeclaration::Account { .. } => {
+                                state::put_subscription(Subscription::from(account));
+                            }
+                        }
                         logging::historian_recovered();
                     }
                     Ok(false) => logging::historian_recovered(),
@@ -76,9 +94,10 @@ async fn process_transfer(
     if let Some(destination) = to_id {
         if let Some(subscription) = state::get_subscription(destination) {
             if subscription.matches(amount_e8s) {
-                pokes
+                matches
                     .entry(subscription.subscriber)
                     .or_default()
+                    .matched_subaccounts
                     .insert(subscription.numbered_subaccount);
             }
         }
@@ -89,7 +108,8 @@ async fn process_page(
     response: ledger::QueryBlocksResponse,
     mut cursor: u64,
     boundary: u64,
-    pokes: &mut BTreeMap<Principal, BTreeSet<u8>>,
+    matches: &mut BTreeMap<Principal, MatchState>,
+    processed_any_transactions: &mut bool,
 ) -> Result<u64, String> {
     if cursor >= boundary {
         return Ok(cursor);
@@ -132,6 +152,8 @@ async fn process_page(
             ));
         }
 
+        *processed_any_transactions = true;
+
         if let Some(ledger::Operation::Transfer {
             from, to, amount, ..
         }) = &block.transaction.operation
@@ -141,7 +163,7 @@ async fn process_page(
                 to,
                 amount.e8s,
                 block.transaction.icrc1_memo.as_deref(),
-                pokes,
+                matches,
             )
             .await;
         }
@@ -193,7 +215,8 @@ pub async fn run_poll() {
         return;
     }
 
-    let mut pokes: BTreeMap<Principal, BTreeSet<u8>> = BTreeMap::new();
+    let mut matches: BTreeMap<Principal, MatchState> = BTreeMap::new();
+    let mut processed_any_transactions = false;
     let mut next_response = Some(first);
     while cursor < boundary {
         let response = if let Some(response) = next_response.take() {
@@ -212,7 +235,15 @@ pub async fn run_poll() {
                 }
             }
         };
-        match process_page(response, cursor, boundary, &mut pokes).await {
+        match process_page(
+            response,
+            cursor,
+            boundary,
+            &mut matches,
+            &mut processed_any_transactions,
+        )
+        .await
+        {
             Ok(new_cursor) if new_cursor > cursor => cursor = new_cursor,
             Ok(_) => return,
             Err(error) => {
@@ -222,7 +253,17 @@ pub async fn run_poll() {
         }
     }
 
-    for (principal, subaccounts) in pokes {
-        let _ = subscriber::poke(principal, subaccounts.into_iter().collect());
+    if processed_any_transactions {
+        for principal in state::global_subscribers() {
+            matches.entry(principal).or_default().global_matched = true;
+        }
+    }
+
+    for (principal, matched) in matches {
+        if !matched.matched_subaccounts.is_empty() {
+            let _ = subscriber::poke(principal, matched.matched_subaccounts.into_iter().collect());
+        } else if matched.global_matched {
+            let _ = subscriber::poke(principal, vec![]);
+        }
     }
 }

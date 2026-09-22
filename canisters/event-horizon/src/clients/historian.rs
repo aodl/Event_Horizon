@@ -2,7 +2,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk::call::Call;
 
-use crate::config::{REQUIRED_ENDOWMENT_E8S, RESERVE_PROTECTION_CYCLES};
+use crate::config::RESERVE_PROTECTION_CYCLES;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum CommitmentRoute {
@@ -51,6 +51,7 @@ pub async fn route_is_admitted(
     historian: Principal,
     destination: Principal,
     memo: Vec<u8>,
+    required_e8s: u64,
 ) -> Result<bool, String> {
     let route = CommitmentRoute::RawIcp {
         destination_canister_id: destination,
@@ -80,5 +81,5 @@ pub async fn route_is_admitted(
     let Some(summary) = response.items.into_iter().find(|item| item.route == route) else {
         return Ok(false);
     };
-    Ok(summary.total_qualifying_committed_e8s >= REQUIRED_ENDOWMENT_E8S)
+    Ok(summary.total_qualifying_committed_e8s >= required_e8s)
 }
