@@ -72,7 +72,7 @@ Executed from `/home/codexdev/src/Event_Horizon`:
 - `./tools/scripts/docker-build` — canonical Docker build passed and its manifest verified.
 - `./tools/scripts/verify-reproducible-artifacts` — passed: `release artifacts match across two clean builds`.
 - `DFX_IDENTITY=codex_local icp build -e local` — passed: `Canisters built successfully`.
-- `./tools/scripts/source-manifest` — run after this report and `summary.txt` were committed; root verification passed.
+- `./tools/scripts/source-manifest generate && ./tools/scripts/source-manifest verify` — passed after this report and `summary.txt` were committed.
 - `python3 tools/audit-wasm.py release-artifacts/event_horizon.wasm --backend` — covered by release and canonical builds; passed with 9 total Wasm exports and exactly `canister_query get_pricing` as the application surface.
 
 Canonical Docker Wasm SHA-256:
