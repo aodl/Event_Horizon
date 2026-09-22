@@ -29,3 +29,12 @@ export function buildMemo(principalText, subaccountText, amountText = '') {
   if (bytes > MAX_JUPITER_MEMO_BYTES) throw new Error(`Memo is ${bytes} bytes; Jupiter Faucet allows ${MAX_JUPITER_MEMO_BYTES}.`);
   return { memo, bytes, thresholded: Boolean(amount) };
 }
+
+export function buildGlobalMemo(principalText) {
+  const principal = compactPrincipal(principalText);
+  if (!principal || !/^[a-z0-9]+$/i.test(principal)) throw new Error('Enter a canister principal.');
+  const memo = `X.${principal}`;
+  const bytes = new TextEncoder().encode(memo).length;
+  if (bytes > MAX_JUPITER_MEMO_BYTES) throw new Error(`Memo is ${bytes} bytes; Jupiter Faucet allows ${MAX_JUPITER_MEMO_BYTES}.`);
+  return { memo, bytes, thresholded: false, global: true };
+}
