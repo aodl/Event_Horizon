@@ -64,7 +64,7 @@ struct IcpXdrConversionRateResponse {
     certificate: Vec<u8>,
 }
 
-#[ic_cdk::query]
+#[ic_cdk::update]
 fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateResponse {
     STATE.with(|s| {
         let mut s = s.borrow_mut();

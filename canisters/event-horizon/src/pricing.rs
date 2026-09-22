@@ -267,6 +267,10 @@ pub fn get_pricing() -> Pricing {
     public_pricing(&state::read_pricing_state(), &state::price_observations())
 }
 
+pub fn observation_preserves_reserve(liquid_balance: u128, call_cost: u128) -> bool {
+    liquid_balance >= config::RESERVE_PROTECTION_CYCLES.saturating_add(call_cost)
+}
+
 pub async fn run_maintenance() {
     let now = ic_cdk::api::time() / 1_000_000_000;
     state::prune_price_observations(oldest_retained_day(now));
@@ -283,7 +287,12 @@ pub async fn run_maintenance() {
     state::write_pricing_state(pricing.clone());
 
     let runtime = config::runtime();
-    let Ok((rate, call_cost)) = cmc::get_icp_xdr_conversion_rate(runtime.cmc_canister).await else {
+    let call = cmc::icp_xdr_conversion_rate_call(runtime.cmc_canister);
+    let call_cost = call.get_cost();
+    if !observation_preserves_reserve(ic_cdk::api::canister_liquid_cycle_balance(), call_cost) {
+        return;
+    }
+    let Ok((rate, call_cost)) = cmc::get_icp_xdr_conversion_rate(call).await else {
         return;
     };
     if state::price_observation(today).is_some() {
@@ -365,6 +374,16 @@ mod tests {
         assert!(calculate_price(10, 0, 1).is_err());
         assert!(calculate_price(10, 1, 0).is_err());
         assert!(calculate_price(u64::MAX, u64::MAX, 1).is_err());
+    }
+
+    #[test]
+    fn pricing_observation_never_encroaches_on_reserve() {
+        let cost = 42_102_445_000;
+        let required = config::RESERVE_PROTECTION_CYCLES + cost;
+        assert!(!observation_preserves_reserve(required - 1, cost));
+        assert!(observation_preserves_reserve(required, cost));
+        assert!(observation_preserves_reserve(required + 1, cost));
+        assert!(!observation_preserves_reserve(u128::MAX - 1, u128::MAX));
     }
 
     #[test]

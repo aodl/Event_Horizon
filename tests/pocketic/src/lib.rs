@@ -9,7 +9,7 @@ mod tests {
 
     use anyhow::{anyhow, bail, Context, Result};
     use candid::{decode_one, encode_one, CandidType, Deserialize, Principal};
-    use pocket_ic::{PocketIc, PocketIcBuilder};
+    use pocket_ic::{CreateCanisterParams, PocketIc, PocketIcBuilder};
     use sha2::{Digest, Sha224};
 
     static LEDGER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
@@ -240,26 +240,41 @@ mod tests {
             Ok(env)
         }
         fn new_unpriced() -> Result<Self> {
-            Self::with_event_horizon_wasm(wasm(
-                &EVENT_HORIZON_WASM,
-                "event-horizon",
-                Some("debug_api"),
-            )?)
+            Self::new_unpriced_with_cycles(200_000_000_000_000)
+        }
+        fn new_unpriced_with_cycles(event_horizon_cycles: u128) -> Result<Self> {
+            Self::with_event_horizon_wasm(
+                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                event_horizon_cycles,
+            )
         }
         fn validated_baseline() -> Result<Self> {
             Self::with_event_horizon_wasm(
                 include_bytes!("../../fixtures/event_horizon_core_validated_c48778d_debug.wasm")
                     .to_vec(),
+                200_000_000_000_000,
             )
         }
-        fn with_event_horizon_wasm(event_horizon_wasm: Vec<u8>) -> Result<Self> {
+        fn with_event_horizon_wasm(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+        ) -> Result<Self> {
             let pic = PocketIcBuilder::new().with_application_subnet().build();
             let ledger = pic.create_canister();
             let historian = pic.create_canister();
             let cmc = pic.create_canister();
             let subscriber = pic.create_canister();
-            let event_horizon = pic.create_canister();
-            for id in [ledger, historian, cmc, subscriber, event_horizon] {
+            let event_horizon = pic
+                .create_canister_with_params(
+                    None,
+                    CreateCanisterParams {
+                        cycles: Some(event_horizon_cycles),
+                        settings: None,
+                        placement: None,
+                    },
+                )
+                .map_err(|error| anyhow!("create Event Horizon canister: {error}"))?;
+            for id in [ledger, historian, cmc, subscriber] {
                 pic.add_cycles(id, 200_000_000_000_000);
             }
             pic.install_canister(
@@ -746,6 +761,36 @@ mod tests {
         let frozen = env.pricing()?;
         assert_eq!(frozen.next, Some(frozen.current));
         assert!(frozen.next_carried_forward_due_to_stale_rate);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn pricing_observation_skips_the_day_before_spending_into_reserve() -> Result<()> {
+        let env = Env::new_unpriced_with_cycles(1_030_000_000_000)?;
+        env.price_once()?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            0,
+            "the CMC rate call must not be issued when its cost would encroach on reserve"
+        );
+        assert!(!env.pricing()?.initialized);
+
+        env.pic.add_cycles(env.event_horizon, 200_000_000_000_000);
+        env.price_once()?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            0,
+            "a reserve skip consumes the day's single observation opportunity"
+        );
+
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        env.price_once()?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            1
+        );
+        assert!(env.pricing()?.initialized);
         Ok(())
     }
 
@@ -1281,6 +1326,7 @@ mod tests {
             assembled.extend(response.body);
         }
         assert_eq!(assembled, svg);
+
         Ok(())
     }
 }

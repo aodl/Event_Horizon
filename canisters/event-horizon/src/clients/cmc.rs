@@ -84,9 +84,8 @@ pub async fn notify_top_up(
 }
 
 pub async fn get_icp_xdr_conversion_rate(
-    cmc: Principal,
+    call: Call<'static, 'static>,
 ) -> Result<(IcpXdrConversionRate, u128), String> {
-    let call = Call::bounded_wait(cmc, "get_icp_xdr_conversion_rate");
     let cost = call.get_cost();
     let response = call
         .await
@@ -97,4 +96,8 @@ pub async fn get_icp_xdr_conversion_rate(
         return Err("pricing rate is zero".to_string());
     }
     Ok((response.data, cost))
+}
+
+pub fn icp_xdr_conversion_rate_call(cmc: Principal) -> Call<'static, 'static> {
+    Call::bounded_wait(cmc, "get_icp_xdr_conversion_rate")
 }
