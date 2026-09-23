@@ -20,16 +20,18 @@ const rawPricing = {
 
 test('pricing is read directly from the discovered backend query', async () => {
   let actorOptions;
+  let agentOptions;
   let calls = 0;
   const pricing = await queryBackendPricing({
     canisterEnv: { 'PUBLIC_CANISTER_ID:event_horizon': 'r5m5y-diaaa-aaaaa-qanaa-cai' },
-    createAgent: async options => ({ options }),
+    createAgent: async options => { agentOptions = options; return { options }; },
     createActor: (_factory, options) => {
       actorOptions = options;
       return { get_pricing: async () => { calls += 1; return rawPricing; } };
     },
   });
   assert.equal(calls, 1);
+  assert.equal(agentOptions.host, 'https://icp-api.io');
   assert.equal(actorOptions.canisterId, 'r5m5y-diaaa-aaaaa-qanaa-cai');
   assert.deepEqual(pricing.current, { account_icp: 5, global_icp: 50 });
   assert.deepEqual(pricing.next, { account_icp: 6, global_icp: 60 });
@@ -60,4 +62,5 @@ test('frontend production interface has no HTTP update proxy', async () => {
   assert.doesNotMatch(did, /http_request_update/);
   assert.doesNotMatch(rust, /http_request_update/);
   assert.doesNotMatch(rust, /get_icp_xdr_conversion_rate/);
+  assert.match(rust, /connect-src 'self' https:\/\/icp-api\.io/);
 });

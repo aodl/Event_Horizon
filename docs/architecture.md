@@ -30,6 +30,6 @@ Production installs three one-shot timers: Ledger polling, hourly funding mainte
 
 ## Frontend
 
-Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
+Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The client uses the page origin for local replicas and the ICP API gateway on mainnet; the certified content security policy permits only those connection targets. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.

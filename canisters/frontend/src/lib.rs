@@ -51,7 +51,7 @@ fn headers(cache_control: &str) -> Vec<HeaderField> {
         ("cache-control".to_string(), cache_control.to_string()),
         (
             "content-security-policy".to_string(),
-            "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'".to_string(),
+            "default-src 'self'; connect-src 'self' https://icp-api.io; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'".to_string(),
         ),
         ("x-content-type-options".to_string(), "nosniff".to_string()),
         ("referrer-policy".to_string(), "no-referrer".to_string()),

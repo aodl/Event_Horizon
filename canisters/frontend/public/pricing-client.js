@@ -51,6 +51,7 @@ export async function queryBackendPricing({
   if (!canisterId) throw new Error('Event Horizon backend canister ID is unavailable.');
   const localHost = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const agent = await createAgent({
+    host: localHost ? location.origin : 'https://icp-api.io',
     rootKey: canisterEnv.IC_ROOT_KEY,
     shouldFetchRootKey: !canisterEnv.IC_ROOT_KEY && localHost,
   });

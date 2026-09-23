@@ -6,7 +6,7 @@ Implemented:
 - Daily CMC pricing observations now use the exact bounded call's current get_cost() and are skipped unless the liquid balance can retain RESERVE_PROTECTION_CYCLES after reserving that cost.
 - A reserve skip consumes that UTC day's ordinary observation opportunity, causes no retry, and leaves pricing, polling, funding recovery, and admissions unchanged.
 - Removed the frontend /pricing.json update proxy and the http_request_update production export.
-- Bundled the pinned ICP JavaScript agent into certified embedded assets. Browser code discovers PUBLIC_CANISTER_ID:event_horizon through the deployment environment and directly queries backend get_pricing.
+- Bundled the pinned ICP JavaScript agent into certified embedded assets. Browser code discovers PUBLIC_CANISTER_ID:event_horizon through the deployment environment and directly queries backend get_pricing, using the page origin locally and the CSP-allowed ICP API gateway on mainnet.
 - Frontend display renders recorded CMC permyriad values as exact four-decimal XDR/ICP, such as 23147 -> 2.3147 XDR/ICP.
 - Updated release/static audits, tests, protocol text, architecture, economics, trust, deployment, frontend, reproducibility, and controller-removal documentation.
 
