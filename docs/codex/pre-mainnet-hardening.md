@@ -32,8 +32,8 @@ The PocketIC CMC call-cost value used at the tested boundary is `42,102,445,000 
 |---|---|
 | `npm ci` | Pass; 13 packages installed from the lockfile. |
 | `DFX_IDENTITY=codex_local cargo run -p xtask -- check` | Pass; static checks, format, Clippy/build checks, 31 Rust unit tests, doc tests, and 8 frontend tests passed. |
-| `DFX_IDENTITY=codex_local cargo run -p xtask -- pocketic` | Pass; 20/20 integration tests passed in 174.07 seconds. |
-| `DFX_IDENTITY=codex_local cargo run -p xtask -- local-smoke` | Pass; 20/20 integration tests passed in 171.83 seconds. |
+| `DFX_IDENTITY=codex_local cargo run -p xtask -- pocketic` | Pass; 20/20 integration tests passed in 119.20 seconds. |
+| `DFX_IDENTITY=codex_local cargo run -p xtask -- local-smoke` | Pass; 20/20 integration tests passed in 93.05 seconds. |
 | `DFX_IDENTITY=codex_local cargo run -p xtask -- security` | Pass; RustSec found no vulnerabilities and four permitted unmaintained transitive warnings; cargo-deny passed; npm audit and OSV reported no issues after the four documented filters. |
 | `DFX_IDENTITY=codex_local cargo run -p xtask -- release` | Pass; both Wasm audits and the local release artifact checksum manifest passed. |
 | `./tools/scripts/docker-build` | Pass; canonical Docker artifacts and their checksum manifest verified. |
@@ -46,7 +46,7 @@ The PocketIC CMC call-cost value used at the tested boundary is `42,102,445,000 
 ## Canonical artifacts
 
 - Backend Wasm SHA-256: `3ff42f18c38fc126909080c0ae06043e6a7a572a7b399e684ace7f835a5c1f07`.
-- Frontend Wasm SHA-256: `d0acc19fa6f6e4d6d76c9d147818827f4ec985306e240e13e72cc5b41275028f`.
+- Frontend Wasm SHA-256: `eb68bd898aea5cd01989b9864ad16aef5448221edfc947b9599f63e649e37387`.
 - Backend production application surface: `canister_query get_pricing` only.
 - Frontend production application surface: `canister_query http_request` only.
 
