@@ -30,7 +30,7 @@ impl From<Price> for PublicPrice {
     fn from(value: Price) -> Self {
         Self {
             account_icp: value.account_icp,
-            range_icp: ceil_div(value.global_icp, 5),
+            range_icp: ceil_div(value.global_icp, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
             global_icp: value.global_icp,
         }
     }
@@ -289,7 +289,7 @@ pub fn current_admission_e8s(class: PricingClass) -> Option<u64> {
     }
     let whole_icp = match class {
         PricingClass::Account => state.current.account_icp,
-        PricingClass::Range => ceil_div(state.current.global_icp, 5),
+        PricingClass::Range => ceil_div(state.current.global_icp, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
         PricingClass::Global => state.current.global_icp,
     };
     whole_icp.checked_mul(100_000_000)
