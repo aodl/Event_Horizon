@@ -80,7 +80,22 @@ async fn process_transfer(
                             account @ SubscriptionDeclaration::Account { .. } => {
                                 state::put_subscription(Subscription::from(account));
                             }
-                            SubscriptionDeclaration::Range { .. } => {}
+                            SubscriptionDeclaration::Range {
+                                subscriber,
+                                start_subaccount,
+                                end_subaccount,
+                                minimum_e8s,
+                            } => {
+                                // Expansion is protocol-bounded to 256 stable-map merges and
+                                // keeps the per-transfer path as one account-identifier lookup.
+                                for numbered_subaccount in start_subaccount..=end_subaccount {
+                                    state::put_subscription(Subscription {
+                                        subscriber,
+                                        numbered_subaccount,
+                                        minimum_e8s,
+                                    });
+                                }
+                            }
                         }
                         logging::historian_recovered();
                     }
