@@ -10,7 +10,7 @@ Checkpoint 03 was the supplied release-hardening source package. Its original ha
 
 [`docs/codex/initial-validation.md`](docs/codex/initial-validation.md) is the preserved report for the first executable validation pass. It records the imported ZIP hash, environment, baseline failures, source fixes, exact commands, 21 Rust unit tests, 12 PocketIC tests, security results, canonical Docker Wasm hashes, reproducibility evidence, and the then-unresolved CMC transfer-expiry decision.
 
-## Current post-validation state
+## Post-validation hardening
 
 [`docs/codex/post-validation-hardening.md`](docs/codex/post-validation-hardening.md) is the current handover. This pass narrowly changes the trusted ICP Ledger value-moving transfer to guaranteed-response semantics, resolves expired transfer identities while documenting the residual pathological risk, immediately reconsiders polling cadence after successful CMC minting, adds the pinned-boundary interleaving regression, and refreshes source provenance.
 
@@ -21,3 +21,13 @@ That post-validation hardening stage made no mainnet deployment, Jupiter Faucet 
 ## Global subscriptions and dynamic pricing
 
 Development from the validated-core tag `event-horizon-core-validated` is recorded in [`docs/codex/global-pricing-validation.md`](docs/codex/global-pricing-validation.md). This stage adds a direct global subscriber registry, `poke([])` semantics with account-hint precedence, CMC-based rolling-floor pricing, monthly frozen epochs, additive stable memory IDs 4–6, and the sole production application query `get_pricing`. The prior validation reports and Checkpoint 03 manifest remain historical evidence.
+
+## Range subscriptions
+
+Development from `c3cb4b41f390cbe7ce81e8ef6976ff2527ee5161` is recorded in [`docs/codex/range-subscriptions-validation.md`](docs/codex/range-subscriptions-validation.md). This stage adds the bounded inclusive range grammar, admission-time expansion into the existing account map, independent 20-ICP pricing, frontend memo support, exact pre-range upgrade coverage, and validation of the maximum 256-account range. It ends at validated commit `304b26e9e6facc6f8812e61c56f98e712e05f803`.
+
+## Adaptive surplus diversion
+
+Development from exact range baseline `304b26e9e6facc6f8812e61c56f98e712e05f803` is recorded in [`docs/codex/surplus-diversion-validation.md`](docs/codex/surplus-diversion-validation.md). This stage adds the optional immutable receiver (currently disabled in production), seven-day observed-liquid-cycles controller, retained-first FundingStateV2, additive stable IDs 7–8, and deterministic surplus Ledger recovery. The exact baseline fixture exercises old Idle, TransferPending, and NotifyPending migration; current-state upgrades cover every new pending phase. Production surfaces remain backend `get_pricing` and frontend `http_request` only.
+
+The root `MANIFEST.sha256` is regenerated only after the surplus implementation and final evidence are complete. Historical validation documents and the Checkpoint 03 manifest remain unchanged evidence. No stage in this chain deployed to mainnet, published the Jupiter Faucet `X` alias, or removed/changed controllers.
