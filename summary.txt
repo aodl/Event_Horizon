@@ -29,3 +29,11 @@ Canonical Wasm SHA-256:
 - frontend: 51991f35fa07152ea9b65f90c562604b5c65a6b968e2a86d5d3e93e904d04857
 
 Production application surfaces remain backend `get_pricing` only and frontend `http_request` only. No mainnet deployment, Jupiter Faucet X publication, or controller change/removal was performed.
+
+Financial identity hardening follow-up from 4d21a35822d0b9ce04fd097a5e99abb39ccb23d3:
+- Every new split freezes its 32-byte surplus account identifier and u64 `SURPLUS1` memo before retained ICP moves.
+- CMC transfer/notify states carry those exact values; pending surplus state also persists amount, fee, and creation time and never rereads the configured receiver or memo constant.
+- Destination changes or disablement apply only to later plans after Idle.
+- Exact 304b26e pre-surplus migration remains zero-surplus with no fabricated destination.
+- Exact tracked 4d21a35 debug-Wasm migration and ambiguous accepted-transfer duplicate recovery remain bound to destination A after configuration changes to B.
+- Full validation evidence and refreshed canonical hashes are in docs/codex/surplus-identity-hardening.md.
