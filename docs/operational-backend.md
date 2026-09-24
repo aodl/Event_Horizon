@@ -16,7 +16,7 @@ An independent one-shot timer handles daily CMC observations and exact freeze/ef
 
 ## Funding lane
 
-Hourly funding remains separate and is the only money-moving worker. Each opportunity records the current liquid balance into the surplus policy's seven-day observed minimum, then resumes the single durable FundingStateV2 before considering any new raw balance. A successful mint immediately recalculates polling cadence from liquid cycles. Pricing queries do not alter funding state.
+Hourly funding remains separate and is the only money-moving worker. Each opportunity records the current liquid balance into the surplus policy's seven-day observed minimum, then resumes the single durable `FundingState` before considering any new raw balance. A successful mint immediately recalculates polling cadence from liquid cycles. Pricing queries do not alter funding state.
 
 With no compiled surplus destination, the policy resets to level zero and the legacy single CMC transfer is unchanged. When enabled and currently at least 150 T, a new balance may be split after reserving two current Ledger fees. The exact retained amount, surplus amount, fees, destination account identifier, and fixed memo are persisted before the retained legacy transfer. CMC `Processing` keeps the notification and plan pending. A later runtime/compiled destination change applies only after the pending plan reaches Idle. Refund or terminal error cancels the planned surplus.
 

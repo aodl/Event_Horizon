@@ -179,7 +179,7 @@ The complete plan is persisted before value moves, including the surplus destina
 
 The surplus transfer uses legacy Ledger transfer recovery to the frozen default account with memo `6004796182999946033` (big-endian ASCII `SURPLUS1`). A pending transfer is self-contained: destination account identifier, memo, amount, fee, and creation time are all stable. Acceptance or duplicate recovery completes the plan. Uncertain outcomes retain the exact identity; definite no-debit outcomes clear it for later replanning; `TxTooOld` logs `SURPLUS_TRANSFER_IDENTITY_EXPIRED`, clears it, and preserves autonomous liveness. There is no transaction-history recovery, administrative repair, or second money-moving worker.
 
-Only the minimum durable financial state necessary to avoid duplicate/stranded value is retained. Funding state V2 atomically describes the next CMC transfer, CMC notification, or surplus transfer action. On first use it migrates the old CMC state exactly once: old Idle to new Idle, old TransferPending to CMC-transfer-pending with zero planned surplus, and old NotifyPending to CMC-notify-pending with zero planned surplus. The old cell remains untouched as historical storage.
+Only the minimum durable financial state necessary to avoid duplicate/stranded value is retained. One durable `FundingState` at stable-memory ID 7 atomically describes the next retained CMC transfer, CMC notification, or surplus transfer action and initializes directly to `Idle` on first installation. A split plan freezes the complete future surplus destination, memo, amount, and fee before the retained transfer begins.
 
 ## 10. Dynamic admission pricing
 

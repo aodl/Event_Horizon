@@ -35,3 +35,7 @@ The root `MANIFEST.sha256` is regenerated only after the surplus implementation 
 ## Surplus identity hardening
 
 The narrowly scoped follow-up from `4d21a35822d0b9ce04fd097a5e99abb39ccb23d3` is recorded in [`docs/codex/surplus-identity-hardening.md`](docs/codex/surplus-identity-hardening.md). It freezes the destination account identifier and `SURPLUS1` memo in every split plan before the retained transfer begins, and makes the eventual pending surplus transfer fully self-contained across upgrades. Exact `304b26e…` migration remains intact; a newly tracked exact `4d21a35…` fixture proves an uncertain accepted transfer stays bound to destination A after upgrading and changing debug configuration to B. Policy, economics, stable-memory IDs, subscription/pricing/polling behavior, and production surfaces are unchanged.
+
+## First-deployment schema cleanup
+
+The final pre-deployment cleanup from `419cf8bd5fde877f7f6ac250aa267f1e2992948b` is recorded in [`docs/codex/predeployment-schema-cleanup.md`](docs/codex/predeployment-schema-cleanup.md). Because Event Horizon had never been deployed, development-only compatibility with the checkpoint Wasms was removed rather than made part of the product contract. ID 2 is unused; ID 7 initializes directly to the canonical `FundingState::Idle`; and `Option<PlannedSurplus>` makes every planned split structurally complete. Historical fixtures and reports remain inert provenance, while current-schema upgrade and recovery coverage remains active.
