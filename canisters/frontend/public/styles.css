@@ -15,6 +15,8 @@ form { display:grid; grid-template-columns:2fr 1fr; gap:12px; margin:20px 0; }
 .builder { margin-top:18px; }
 .account-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; grid-column:1/-1; }
 .account-fields[hidden] { display:none; }
+.range-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.range-fields[hidden] { display:none; }
 .pricing { color:#dce8f5; line-height:1.5; }
 label { display:grid; gap:7px; font-size:.82rem; color:#c8d0da; }
 input, select { width:100%; border:1px solid rgba(255,255,255,.16); background:rgba(0,0,0,.34); color:#fff; padding:12px 13px; border-radius:10px; font:inherit; }
@@ -22,4 +24,4 @@ input, select { width:100%; border:1px solid rgba(255,255,255,.16); background:r
 .help { min-height:1.5em; color:#b8c3cf; }
 .help.error { color:#ffb4aa; }
 code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#d7e7ff; }
-@media(max-width:720px) { .grid { grid-template-columns:1fr; } form, .account-fields { grid-template-columns:1fr; } main { padding-top:8vh; } }
+@media(max-width:720px) { .grid { grid-template-columns:1fr; } form, .account-fields, .range-fields { grid-template-columns:1fr; } main { padding-top:8vh; } }

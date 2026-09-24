@@ -6,7 +6,7 @@
 cargo run -p xtask -- unit
 ```
 
-Covers subscription syntax, account derivation, threshold merging and polling hysteresis, plus frontend memo construction.
+Covers all five subscription forms, canonical range validation, account derivation, permanent minimum-threshold merging, independent range-price derivation and polling hysteresis, plus frontend parser/byte-limit parity.
 
 ## PocketIC
 
@@ -17,7 +17,9 @@ cargo run -p xtask -- pocketic
 The current integration suite builds purpose-specific mock Wasms and exercises:
 
 - prospective first-install bootstrap;
-- exact 10 ICP Historian admission;
+- exact 10 ICP account and 20 ICP range Historian admission;
+- maximum `0-255` expansion, resource reporting, ordinary matching, and upgrade health;
+- range threshold, overlap-order, unfiltered overlap, sorted/deduplicated coalescing, and global precedence;
 - incomplete/faulted Historian rejection and later natural admission on another Faucet payout;
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;

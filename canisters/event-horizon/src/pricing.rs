@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{clients::cmc, config, state};
 
 pub const STANDARD_BASE_ICP: u64 = 10;
+pub const RANGE_BASE_ICP: u64 = 20;
 pub const GLOBAL_BASE_ICP: u64 = 100;
 pub const SECONDS_PER_DAY: u64 = 86_400;
 pub const PRICE_HISTORY_DAYS: u64 = 1_461;
@@ -14,6 +15,32 @@ pub const STALE_RATE_LIMIT_SECONDS: u64 = 7 * SECONDS_PER_DAY;
 pub struct Price {
     pub account_icp: u64,
     pub global_icp: u64,
+}
+
+/// Public pricing adds the exactly derivable range tier without changing the
+/// stable `Price` encoding used by `PricingState`.
+#[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PublicPrice {
+    pub account_icp: u64,
+    pub range_icp: u64,
+    pub global_icp: u64,
+}
+
+impl From<Price> for PublicPrice {
+    fn from(value: Price) -> Self {
+        Self {
+            account_icp: value.account_icp,
+            range_icp: ceil_div(value.global_icp, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
+            global_icp: value.global_icp,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PricingClass {
+    Account,
+    Range,
+    Global,
 }
 
 impl Price {
@@ -63,9 +90,9 @@ pub struct Observation {
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Pricing {
     pub initialized: bool,
-    pub current: Price,
+    pub current: PublicPrice,
     pub current_effective_at: u64,
-    pub next: Option<Price>,
+    pub next: Option<PublicPrice>,
     pub next_effective_at: u64,
     pub next_freeze_at: u64,
     pub observed_floor_xdr_permyriad: u64,
@@ -73,6 +100,11 @@ pub struct Pricing {
     pub latest_xdr_permyriad: u64,
     pub latest_observed_at: u64,
     pub next_carried_forward_due_to_stale_rate: bool,
+}
+
+pub fn ceil_div(value: u64, divisor: u64) -> u64 {
+    assert!(divisor != 0, "ceiling division requires a nonzero divisor");
+    value / divisor + u64::from(!value.is_multiple_of(divisor))
 }
 
 pub fn utc_day(timestamp_seconds: u64) -> u64 {
@@ -237,9 +269,9 @@ pub fn public_pricing(state: &PricingState, observations: &[Observation]) -> Pri
     let reference = reference_before(observations, u64::MAX);
     Pricing {
         initialized: state.initialized,
-        current: state.current,
+        current: state.current.into(),
         current_effective_at: state.current_effective_at,
-        next: state.next,
+        next: state.next.map(Into::into),
         next_effective_at: state.next_effective_at,
         next_freeze_at: state.next_freeze_at,
         observed_floor_xdr_permyriad: reference.map(|v| v.0.xdr_permyriad_per_icp).unwrap_or(0),
@@ -250,15 +282,15 @@ pub fn public_pricing(state: &PricingState, observations: &[Observation]) -> Pri
     }
 }
 
-pub fn current_admission_e8s(global: bool) -> Option<u64> {
+pub fn current_admission_e8s(class: PricingClass) -> Option<u64> {
     let state = state::read_pricing_state();
     if !state.initialized {
         return None;
     }
-    let whole_icp = if global {
-        state.current.global_icp
-    } else {
-        state.current.account_icp
+    let whole_icp = match class {
+        PricingClass::Account => state.current.account_icp,
+        PricingClass::Range => ceil_div(state.current.global_icp, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
+        PricingClass::Global => state.current.global_icp,
     };
     whole_icp.checked_mul(100_000_000)
 }
@@ -361,6 +393,61 @@ mod tests {
         assert_eq!(rounded.account_icp, 7);
         assert_eq!(rounded.global_icp, 63);
         assert_ne!(rounded.global_icp, rounded.account_icp * 10);
+    }
+
+    #[test]
+    fn public_range_price_has_an_independent_twenty_icp_basis() {
+        let base: PublicPrice = calculate_prices(10, 10).unwrap().into();
+        assert_eq!(
+            base,
+            PublicPrice {
+                account_icp: 10,
+                range_icp: 20,
+                global_icp: 100,
+            }
+        );
+
+        let boundary: PublicPrice = calculate_prices(21, 100).unwrap().into();
+        assert_eq!(boundary.account_icp, 3);
+        assert_eq!(boundary.range_icp, 5);
+        assert_eq!(boundary.global_icp, 21);
+        assert_ne!(boundary.range_icp, 2 * boundary.account_icp);
+        assert_eq!(
+            boundary.range_icp,
+            calculate_price(RANGE_BASE_ICP, 21, 100).unwrap()
+        );
+    }
+
+    #[test]
+    fn derived_range_price_equals_direct_formula_across_integer_inputs() {
+        for floor in 1..=1_000u64 {
+            for current in 1..=1_000u64 {
+                let direct = calculate_price(RANGE_BASE_ICP, floor, current).unwrap();
+                let global = calculate_price(GLOBAL_BASE_ICP, floor, current).unwrap();
+                assert_eq!(direct, ceil_div(global, 5), "F={floor} C={current}");
+            }
+        }
+
+        for (floor, current) in [
+            (1, u64::MAX),
+            (u64::MAX, u64::MAX),
+            (u64::MAX / 100, 1),
+            (u64::MAX / 20, u64::MAX / 100),
+        ] {
+            let direct = calculate_price(RANGE_BASE_ICP, floor, current).unwrap();
+            let global = calculate_price(GLOBAL_BASE_ICP, floor, current).unwrap();
+            assert_eq!(direct, ceil_div(global, 5), "F={floor} C={current}");
+        }
+    }
+
+    #[test]
+    fn ceiling_division_does_not_add_before_dividing() {
+        assert_eq!(ceil_div(0, 5), 0);
+        assert_eq!(ceil_div(1, 5), 1);
+        assert_eq!(ceil_div(5, 5), 1);
+        assert_eq!(ceil_div(6, 5), 2);
+        assert_eq!(ceil_div(u64::MAX, 5), u64::MAX / 5);
+        assert_eq!(ceil_div(u64::MAX - 1, 5), (u64::MAX - 1) / 5 + 1);
     }
 
     #[test]

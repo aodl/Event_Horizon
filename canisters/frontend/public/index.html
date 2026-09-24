@@ -24,17 +24,22 @@
 
     <section class="card builder">
       <h2>Subscription memo</h2>
-      <p>Choose a global Ledger trigger or an account trigger. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
+      <p>Choose a global Ledger, single-subaccount, or inclusive contiguous-range trigger. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
       <form id="memo-form">
         <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
-        <label>Trigger type <select id="scope"><option value="account">Account trigger</option><option value="global">Global Ledger trigger</option></select></label>
+        <label>Subscription mode <select id="scope"><option value="global">Global Ledger</option><option value="account" selected>Single subaccount</option><option value="range">Subaccount range</option></select></label>
         <span id="account-fields" class="account-fields">
-          <label>Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
-          <label>Minimum trigger amount (ICP, optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
+          <label id="single-field">Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
+          <span id="range-fields" class="range-fields" hidden>
+            <label>Start subaccount <input id="range-start" inputmode="numeric" value="0"></label>
+            <label>End subaccount <input id="range-end" inputmode="numeric" value="1"></label>
+          </span>
+          <label>Minimum ICP amount (optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
         </span>
       </form>
       <output id="memo-output" class="memo"></output>
       <p id="memo-help" class="help"></p>
+      <p>A range subscription covers one contiguous inclusive range of numbered subaccounts and uses a 2× standard economic basis, regardless of range width.</p>
     </section>
 
     <section class="grid">

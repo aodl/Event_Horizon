@@ -60,8 +60,12 @@ async fn process_transfer(
     if from_id == Some(faucet_account) && to_id == Some(self_account) {
         if let Some(memo) = icrc1_memo {
             if let Ok(declaration) = parse_subscription_memo(memo) {
-                let global = matches!(declaration, SubscriptionDeclaration::Global { .. });
-                let Some(required_e8s) = pricing::current_admission_e8s(global) else {
+                let pricing_class = match &declaration {
+                    SubscriptionDeclaration::Global { .. } => pricing::PricingClass::Global,
+                    SubscriptionDeclaration::Account { .. } => pricing::PricingClass::Account,
+                    SubscriptionDeclaration::Range { .. } => pricing::PricingClass::Range,
+                };
+                let Some(required_e8s) = pricing::current_admission_e8s(pricing_class) else {
                     return;
                 };
                 match historian::route_is_admitted(
@@ -79,6 +83,22 @@ async fn process_transfer(
                             }
                             account @ SubscriptionDeclaration::Account { .. } => {
                                 state::put_subscription(Subscription::from(account));
+                            }
+                            SubscriptionDeclaration::Range {
+                                subscriber,
+                                start_subaccount,
+                                end_subaccount,
+                                minimum_e8s,
+                            } => {
+                                // Expansion is protocol-bounded to 256 stable-map merges and
+                                // keeps the per-transfer path as one account-identifier lookup.
+                                for numbered_subaccount in start_subaccount..=end_subaccount {
+                                    state::put_subscription(Subscription {
+                                        subscriber,
+                                        numbered_subaccount,
+                                        minimum_e8s,
+                                    });
+                                }
                             }
                         }
                         logging::historian_recovered();

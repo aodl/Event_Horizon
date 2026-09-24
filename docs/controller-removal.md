@@ -21,7 +21,7 @@ Do not continue unless all of the following are true:
 - pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
 - the Wasm export audit permits exactly `canister_query get_pricing` and no other application method;
 - the frontend Wasm export audit permits exactly `canister_query http_request` and rejects `http_request_update`;
-- account and global Historian admission totals have been tested against the current prices;
+- account, range, and global Historian admission totals have been tested against the current prices;
 - no remaining operational task requires controller access.
 
 ## Inspect

@@ -10,7 +10,7 @@ The reader uses no Index or archive traversal. A proven archived prefix is logge
 
 ## Admission and storage
 
-A Faucet-origin payout memo is parsed as either a global declaration or an account declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. Stable memory remains additive:
+A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted range expands to at most 256 ordinary entries in the existing watched-account map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
 
 | ID | Contents |
 |---:|---|
@@ -22,7 +22,7 @@ A Faucet-origin payout memo is parsed as either a global declaration or an accou
 | 5 | daily pricing observations keyed by UTC day |
 | 6 | current/frozen pricing state |
 
-IDs 0–2 retain their validated encodings.
+All IDs and durable encodings retain their validated pre-range form. In particular, pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
 
 ## Independent timer lanes
 
@@ -30,6 +30,6 @@ Production installs three one-shot timers: Ledger polling, hourly funding mainte
 
 ## Frontend
 
-Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
+Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The client uses the page origin for local replicas and the ICP API gateway on mainnet; the certified content security policy permits only those connection targets. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.

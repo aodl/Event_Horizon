@@ -43,7 +43,7 @@ Provide an initial cycles balance large enough to keep the backend comfortably o
 its observation period. Jupiter Faucet endowments are recurring funding and should not be confused with immediate
 spendable cycles.
 
-Account and global admission requirements come from `get_pricing`; they begin at 10 and 100 ICP after the first successful CMC observation. Those pooled endowments do not replace the initial cycle balance.
+Account, range, and global admission requirements come from `get_pricing`; they begin at 10, 20, and 100 ICP after the first successful CMC observation. Those pooled endowments do not replace the initial cycle balance.
 
 ## Observation period
 
@@ -59,7 +59,7 @@ Controller removal is a separate operational decision. During the controlled obs
 8. the installed backend module hash matches the canonical reproducible artifact.
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
 10. the production export audit reports only `get_pricing` as an application method;
-11. global subscription poke volume is sustainable at the observed registry size.
+11. global and range subscription poke volume is sustainable at the observed registry size, including a validated 256-account maximum range.
 12. the frontend export audit reports only `http_request` and direct browser pricing reads succeed using the injected backend canister ID;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 

@@ -2,7 +2,7 @@ import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 import { safeGetCanisterEnv } from '@icp-sdk/core/agent/canister-env';
 
 export const pricingIdlFactory = ({ IDL }) => {
-  const Price = IDL.Record({ account_icp: IDL.Nat64, global_icp: IDL.Nat64 });
+  const Price = IDL.Record({ account_icp: IDL.Nat64, range_icp: IDL.Nat64, global_icp: IDL.Nat64 });
   const Pricing = IDL.Record({
     initialized: IDL.Bool,
     current: Price,
@@ -24,7 +24,7 @@ const safeNumber = value => {
   if (!Number.isSafeInteger(number) || number < 0) throw new Error('Pricing value is outside the browser safe-integer range.');
   return number;
 };
-const price = value => ({ account_icp: safeNumber(value.account_icp), global_icp: safeNumber(value.global_icp) });
+const price = value => ({ account_icp: safeNumber(value.account_icp), range_icp: safeNumber(value.range_icp), global_icp: safeNumber(value.global_icp) });
 
 export function normalizePricing(value) {
   return {
@@ -51,6 +51,7 @@ export async function queryBackendPricing({
   if (!canisterId) throw new Error('Event Horizon backend canister ID is unavailable.');
   const localHost = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const agent = await createAgent({
+    host: localHost ? location.origin : 'https://icp-api.io',
     rootKey: canisterEnv.IC_ROOT_KEY,
     shouldFetchRootKey: !canisterEnv.IC_ROOT_KEY && localHost,
   });

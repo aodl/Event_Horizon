@@ -13,6 +13,7 @@ print('svg_sha256', expected_svg)
 
 backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
 assert 'get_pricing : () -> (Pricing) query;' in backend_did
+assert 'account_icp : nat64; range_icp : nat64; global_icp : nat64' in backend_did
 assert backend_did.count(' query;') == 1
 assert ' -> ();' not in backend_did
 assert (root/'candid/subscriber.did').read_text().strip() == 'service : {\n  poke : (vec nat8) -> ();\n}'
@@ -22,6 +23,8 @@ assert len(thresholded.encode()) == 32
 assert len(unfiltered.encode()) == 27
 print('thresholded_example_bytes', len(thresholded.encode()))
 print('unfiltered_example_bytes', len(unfiltered.encode()))
+assert 'buildRangeMemo' in (root/'canisters/frontend/public/memo.js').read_text()
+assert 'range_icp: IDL.Nat64' in (root/'canisters/frontend/public/pricing-client.js').read_text()
 
 workspace=tomllib.loads((root/'Cargo.toml').read_text())
 for member in workspace['workspace']['members']:
@@ -45,6 +48,7 @@ memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src
 assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
+assert 'SubscriptionDeclaration::Range' in polling
 assert 'BTreeMap<Principal, MatchState>' in polling
 assert 'for principal in state::global_subscribers()' in polling
 assert 'matched.matched_subaccounts.into_iter().collect()' in polling

@@ -144,7 +144,27 @@ mod tests {
     #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
     struct Price {
         account_icp: u64,
+        range_icp: u64,
         global_icp: u64,
+    }
+    #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+    struct LegacyPrice {
+        account_icp: u64,
+        global_icp: u64,
+    }
+    #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+    struct LegacyPricing {
+        initialized: bool,
+        current: LegacyPrice,
+        current_effective_at: u64,
+        next: Option<LegacyPrice>,
+        next_effective_at: u64,
+        next_freeze_at: u64,
+        observed_floor_xdr_permyriad: u64,
+        floor_observed_at: u64,
+        latest_xdr_permyriad: u64,
+        latest_observed_at: u64,
+        next_carried_forward_due_to_stale_rate: bool,
     }
     #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
     struct Pricing {
@@ -251,6 +271,13 @@ mod tests {
         fn validated_baseline() -> Result<Self> {
             Self::with_event_horizon_wasm(
                 include_bytes!("../../fixtures/event_horizon_core_validated_c48778d_debug.wasm")
+                    .to_vec(),
+                200_000_000_000_000,
+            )
+        }
+        fn pre_range_baseline() -> Result<Self> {
+            Self::with_event_horizon_wasm(
+                include_bytes!("../../fixtures/event_horizon_pre_range_c3cb4b4_debug.wasm")
                     .to_vec(),
                 200_000_000_000_000,
             )
@@ -400,6 +427,29 @@ mod tests {
             let memo = match threshold {
                 Some(v) => format!("{compact}.{subaccount}:{v}"),
                 None => format!("{compact}.{subaccount}"),
+            }
+            .into_bytes();
+            self.set_route(memo.clone(), total)?;
+            self.append(
+                account_id(self.faucet, [0; 32]),
+                account_id(self.event_horizon, [0; 32]),
+                10_000_000,
+                Some(memo.clone()),
+            )?;
+            self.poll()?;
+            Ok(memo)
+        }
+        fn admit_range(
+            &self,
+            start: u8,
+            end: u8,
+            threshold: Option<&str>,
+            total: u64,
+        ) -> Result<Vec<u8>> {
+            let compact = self.subscriber.to_text().replace('-', "");
+            let memo = match threshold {
+                Some(value) => format!("{compact}.{start}-{end}:{value}"),
+                None => format!("{compact}.{start}-{end}"),
             }
             .into_bytes();
             self.set_route(memo.clone(), total)?;
@@ -564,6 +614,209 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn range_admission_uses_exact_route_source_and_twenty_icp_tier() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7-18").into_bytes();
+
+        env.admit_range(7, 18, None, 1_999_999_999)?;
+        assert_eq!(env.state()?.subscriptions, 0, "range tier rejects N-1 e8s");
+
+        env.set_route(memo.clone(), 2_000_000_000)?;
+        env.append(
+            account_id(Principal::from_slice(&[99]), [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo.clone()),
+        )?;
+        env.poll()?;
+        assert_eq!(
+            env.state()?.subscriptions,
+            0,
+            "non-Faucet source cannot admit"
+        );
+
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        env.poll()?;
+        assert_eq!(
+            env.state()?.subscriptions,
+            12,
+            "later cumulative payout admits"
+        );
+
+        for invalid in [format!("{compact}.10-9"), format!("{compact}.7-7")] {
+            let invalid = invalid.into_bytes();
+            env.set_route(invalid.clone(), 10_000_000_000)?;
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(env.event_horizon, [0; 32]),
+                1,
+                Some(invalid),
+            )?;
+            env.poll()?;
+        }
+        assert_eq!(
+            env.state()?.subscriptions,
+            12,
+            "reverse and degenerate ranges are never normalized or admitted"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn maximum_range_expands_256_entries_and_remains_healthy() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let status_before = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|error| anyhow!("status before maximum range: {error:?}"))?;
+        let cycles_before = env.pic.cycle_balance(env.event_horizon);
+
+        env.admit_range(0, 255, None, 2_000_000_000)?;
+        let cycles_after = env.pic.cycle_balance(env.event_horizon);
+        let status_after = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|error| anyhow!("status after maximum range: {error:?}"))?;
+        assert_eq!(env.state()?.subscriptions, 256);
+        for subaccount in 0..=255u8 {
+            let subscription = env
+                .subscription(subaccount)?
+                .expect("expanded account exists");
+            assert_eq!(subscription.numbered_subaccount, subaccount);
+            assert_eq!(subscription.minimum_e8s, 0);
+        }
+        println!(
+            "maximum_range_resource cycles_consumed={} stable_memory_before={} stable_memory_after={} total_memory_before={} total_memory_after={}",
+            cycles_before.saturating_sub(cycles_after),
+            status_before.memory_metrics.stable_memory_size,
+            status_after.memory_metrics.stable_memory_size,
+            status_before.memory_size,
+            status_after.memory_size,
+        );
+
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        for subaccount in [0, 128, 255] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(subaccount)),
+                1,
+                None,
+            )?;
+        }
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![0, 128, 255]
+        );
+
+        env.upgrade_same_debug_wasm()?;
+        assert_eq!(env.state()?.subscriptions, 256);
+        assert!(env.subscription(255)?.is_some());
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn range_matching_overlap_coalescing_and_global_precedence_hold() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit_global(10_000_000_000)?;
+        env.admit_range(7, 18, Some("0.1"), 2_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+
+        for (subaccount, amount) in [
+            (6, 100_000_000),
+            (7, 9_999_999),
+            (11, 10_000_000),
+            (18, 100_000_000),
+            (19, 100_000_000),
+        ] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(subaccount)),
+                amount,
+                None,
+            )?;
+        }
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 1
+        );
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![11, 18],
+            "only actual qualifying range accounts are sent"
+        );
+
+        env.append(
+            source.clone(),
+            account_id(Principal::from_slice(&[88]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty(),
+            "unrelated activity retains the one empty global hint"
+        );
+
+        env.admit(7, Some("1"), 1_000_000_000)?;
+        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 10_000_000);
+        env.admit(7, None, 1_000_000_000)?;
+        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 0);
+        for subaccount in [18, 7, 11, 7] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(subaccount)),
+                1,
+                None,
+            )?;
+        }
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before + 1
+        );
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7],
+            "only account 7 is unfiltered; thresholded range accounts remain filtered"
+        );
+
+        let reverse = Env::new()?;
+        reverse.poll()?;
+        reverse.admit_range(5, 10, Some("0.1"), 2_000_000_000)?;
+        reverse.admit(7, Some("1"), 1_000_000_000)?;
+        assert_eq!(reverse.subscription(7)?.unwrap().minimum_e8s, 10_000_000);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn global_admission_and_poke_precedence_are_enforced() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
@@ -660,6 +913,7 @@ mod tests {
             initialized.current,
             Price {
                 account_icp: 10,
+                range_icp: 20,
                 global_icp: 100
             }
         );
@@ -696,6 +950,7 @@ mod tests {
             frozen.next,
             Some(Price {
                 account_icp: 5,
+                range_icp: 10,
                 global_icp: 50
             })
         );
@@ -1255,6 +1510,113 @@ mod tests {
             3,
             "restarting replaces each timer instead of duplicating it"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn exact_pre_range_baseline_upgrades_without_state_or_pricing_migration() -> Result<()> {
+        let env = Env::pre_range_baseline()?;
+        env.price_once()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit_global(10_000_000_000)?;
+
+        let mut legacy: LegacyPricing = query(&env.pic, env.event_horizon, "get_pricing", ())?;
+        let mut now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        if legacy.next_freeze_at <= now + 86_400 {
+            env.pic.advance_time(std::time::Duration::from_secs(
+                legacy.next_effective_at - now,
+            ));
+            env.price_once()?;
+            legacy = query(&env.pic, env.event_horizon, "get_pricing", ())?;
+            now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        }
+        env.pic.advance_time(std::time::Duration::from_secs(
+            legacy.next_freeze_at - 86_400 - now,
+        ));
+        env.price_once()?;
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        env.price_once()?;
+        let before_pricing: LegacyPricing = query(&env.pic, env.event_horizon, "get_pricing", ())?;
+        assert!(
+            before_pricing.next.is_some(),
+            "baseline next price is frozen"
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_balance",
+            SetBalance {
+                account: Account {
+                    owner: env.event_horizon,
+                    subaccount: None,
+                },
+                e8s: 100_000_000,
+            },
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        let before: ValidatedCoreDebugState =
+            query(&env.pic, env.event_horizon, "debug_state", ())?;
+        assert!(before.cmc_state.contains("TransferPending"));
+        assert!(env.global_subscription()?);
+
+        env.upgrade_same_debug_wasm()?;
+        let after = env.state()?;
+        let after_pricing = env.pricing()?;
+        assert_eq!(after.next_block, before.next_block);
+        assert_eq!(after.polling_mode, before.polling_mode);
+        assert_eq!(after.subscriptions, before.subscriptions);
+        assert_eq!(after.global_subscriptions, 1);
+        assert_eq!(after.cmc_state, before.cmc_state);
+        assert_eq!(
+            after_pricing.current.account_icp,
+            before_pricing.current.account_icp
+        );
+        assert_eq!(
+            after_pricing.current.global_icp,
+            before_pricing.current.global_icp
+        );
+        assert_eq!(
+            after_pricing
+                .next
+                .map(|price| (price.account_icp, price.global_icp)),
+            before_pricing
+                .next
+                .map(|price| (price.account_icp, price.global_icp))
+        );
+        assert_eq!(
+            after_pricing.current_effective_at,
+            before_pricing.current_effective_at
+        );
+        assert_eq!(
+            after_pricing.next_effective_at,
+            before_pricing.next_effective_at
+        );
+        assert_eq!(after_pricing.next_freeze_at, before_pricing.next_freeze_at);
+        assert_eq!(
+            after_pricing.current.range_icp,
+            after_pricing.current.global_icp / 5
+                + u64::from(!after_pricing.current.global_icp.is_multiple_of(5))
+        );
+        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 1_000_000);
+        assert!(
+            env.subscription(8)?.is_none(),
+            "upgrade creates no phantom ranges"
+        );
+
+        let required = after_pricing.current.range_icp * 100_000_000;
+        env.admit_range(8, 9, None, required)?;
+        assert_eq!(env.state()?.subscriptions, 3);
+        assert!(env.subscription(8)?.is_some());
+        assert!(env.subscription(9)?.is_some());
         Ok(())
     }
 

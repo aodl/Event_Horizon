@@ -27,8 +27,8 @@ impl From<SubscriptionDeclaration> for Subscription {
                 numbered_subaccount,
                 minimum_e8s,
             },
-            SubscriptionDeclaration::Global { .. } => {
-                panic!("global declaration cannot become an account subscription")
+            SubscriptionDeclaration::Global { .. } | SubscriptionDeclaration::Range { .. } => {
+                panic!("non-account declaration cannot become one account subscription")
             }
         }
     }
@@ -47,9 +47,11 @@ impl Subscription {
     }
 }
 
-/// Same account + lower threshold subsumes higher threshold. The internal zero
-/// sentinel is the lowest possible threshold and therefore naturally represents
-/// an unfiltered "all incoming transfers" subscription.
+/// Same account + lower threshold subsumes higher threshold. Because declarations
+/// are permanent, an effective threshold can only stay unchanged or become less
+/// restrictive. The internal zero sentinel is the lowest possible threshold and
+/// therefore naturally represents an unfiltered "all incoming transfers"
+/// subscription.
 pub fn merge_subscription(existing: Option<Subscription>, candidate: Subscription) -> Subscription {
     match existing {
         Some(existing)
