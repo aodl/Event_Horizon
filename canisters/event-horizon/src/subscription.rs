@@ -27,8 +27,8 @@ impl From<SubscriptionDeclaration> for Subscription {
                 numbered_subaccount,
                 minimum_e8s,
             },
-            SubscriptionDeclaration::Global { .. } => {
-                panic!("global declaration cannot become an account subscription")
+            SubscriptionDeclaration::Global { .. } | SubscriptionDeclaration::Range { .. } => {
+                panic!("non-account declaration cannot become one account subscription")
             }
         }
     }

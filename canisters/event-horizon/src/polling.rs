@@ -80,6 +80,7 @@ async fn process_transfer(
                             account @ SubscriptionDeclaration::Account { .. } => {
                                 state::put_subscription(Subscription::from(account));
                             }
+                            SubscriptionDeclaration::Range { .. } => {}
                         }
                         logging::historian_recovered();
                     }

@@ -1,4 +1,4 @@
-use crate::{account::numbered_subaccount, config::MIN_TRIGGER_E8S};
+use crate::config::MIN_TRIGGER_E8S;
 use candid::Principal;
 use thiserror::Error;
 
@@ -14,22 +14,20 @@ pub enum SubscriptionDeclaration {
         numbered_subaccount: u8,
         minimum_e8s: u64,
     },
+    Range {
+        subscriber: Principal,
+        start_subaccount: u8,
+        end_subaccount: u8,
+        minimum_e8s: u64,
+    },
 }
 
 impl SubscriptionDeclaration {
     pub fn subscriber(&self) -> Principal {
         match self {
-            Self::Global { subscriber } | Self::Account { subscriber, .. } => *subscriber,
-        }
-    }
-
-    pub fn subaccount(&self) -> Option<[u8; 32]> {
-        match self {
-            Self::Global { .. } => None,
-            Self::Account {
-                numbered_subaccount: number,
-                ..
-            } => Some(numbered_subaccount(*number)),
+            Self::Global { subscriber }
+            | Self::Account { subscriber, .. }
+            | Self::Range { subscriber, .. } => *subscriber,
         }
     }
 }
@@ -44,6 +42,12 @@ pub enum MemoParseError {
     InvalidPrincipal,
     #[error("numbered subaccount must be 0..255")]
     InvalidSubaccount,
+    #[error("range must have exactly two numbered subaccount endpoints")]
+    InvalidRange,
+    #[error("range end must be greater than range start")]
+    ReversedRange,
+    #[error("use the single-account form when both range endpoints are equal")]
+    DegenerateRange,
     #[error("amount must be a positive decimal ICP value with at most two fractional digits")]
     InvalidAmount,
     #[error("minimum explicit trigger amount is 0.01 ICP")]
@@ -116,6 +120,19 @@ fn parse_amount_e8s(text: &str) -> Result<u64, MemoParseError> {
         .ok_or(MemoParseError::InvalidAmount)
 }
 
+fn parse_numbered_subaccount(text: &str) -> Result<u8, MemoParseError> {
+    if text.is_empty()
+        || !text.bytes().all(|b| b.is_ascii_digit())
+        || (text.len() > 1 && text.starts_with('0'))
+    {
+        return Err(MemoParseError::InvalidSubaccount);
+    }
+    let value: u16 = text
+        .parse()
+        .map_err(|_| MemoParseError::InvalidSubaccount)?;
+    u8::try_from(value).map_err(|_| MemoParseError::InvalidSubaccount)
+}
+
 pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, MemoParseError> {
     if memo.is_empty() || !memo.is_ascii() {
         return Err(MemoParseError::NonAsciiOrEmpty);
@@ -140,16 +157,6 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
         None => (rest, None),
     };
 
-    let subscriber = parse_principal(principal_text)?;
-    if subaccount_text.is_empty() || !subaccount_text.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(MemoParseError::InvalidSubaccount);
-    }
-    let subaccount_u16: u16 = subaccount_text
-        .parse()
-        .map_err(|_| MemoParseError::InvalidSubaccount)?;
-    let numbered_subaccount =
-        u8::try_from(subaccount_u16).map_err(|_| MemoParseError::InvalidSubaccount)?;
-
     // Zero is reserved as an internal sentinel for "all incoming transfers" and can
     // only arise by omitting the threshold entirely. Explicit amounts retain the
     // natural 0.01 ICP floor.
@@ -163,12 +170,35 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
             parsed
         }
     };
-
-    Ok(SubscriptionDeclaration::Account {
-        subscriber,
-        numbered_subaccount,
-        minimum_e8s,
-    })
+    let subscriber = parse_principal(principal_text)?;
+    if subaccount_text.contains('-') {
+        let mut endpoints = subaccount_text.split('-');
+        let start = endpoints.next().ok_or(MemoParseError::InvalidRange)?;
+        let end = endpoints.next().ok_or(MemoParseError::InvalidRange)?;
+        if endpoints.next().is_some() || start.is_empty() || end.is_empty() {
+            return Err(MemoParseError::InvalidRange);
+        }
+        let start_subaccount = parse_numbered_subaccount(start)?;
+        let end_subaccount = parse_numbered_subaccount(end)?;
+        if start_subaccount > end_subaccount {
+            return Err(MemoParseError::ReversedRange);
+        }
+        if start_subaccount == end_subaccount {
+            return Err(MemoParseError::DegenerateRange);
+        }
+        Ok(SubscriptionDeclaration::Range {
+            subscriber,
+            start_subaccount,
+            end_subaccount,
+            minimum_e8s,
+        })
+    } else {
+        Ok(SubscriptionDeclaration::Account {
+            subscriber,
+            numbered_subaccount: parse_numbered_subaccount(subaccount_text)?,
+            minimum_e8s,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -272,6 +302,86 @@ mod tests {
     fn accepts_hyphenated_principal_too() {
         let parsed = parse_subscription_memo(b"r5m5y-diaaa-aaaaa-qanaa-cai.0:1").unwrap();
         assert_eq!(parsed.subscriber().to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
+    }
+
+    #[test]
+    fn parses_inclusive_ranges_with_the_existing_threshold_grammar() {
+        let subscriber = Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        for (memo, start, end, minimum_e8s) in [
+            ("r5m5ydiaaaaaaaaqanaacai.7-18", 7, 18, 0),
+            ("r5m5ydiaaaaaaaaqanaacai.7-18:0.01", 7, 18, 1_000_000),
+            ("r5m5ydiaaaaaaaaqanaacai.0-255", 0, 255, 0),
+            ("r5m5ydiaaaaaaaaqanaacai.0-255:1", 0, 255, 100_000_000),
+        ] {
+            assert_eq!(
+                parse_subscription_memo(memo.as_bytes()).unwrap(),
+                SubscriptionDeclaration::Range {
+                    subscriber,
+                    start_subaccount: start,
+                    end_subaccount: end,
+                    minimum_e8s,
+                },
+                "{memo}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_ranges_without_normalizing_them() {
+        let principal = "r5m5ydiaaaaaaaaqanaacai";
+        for suffix in [
+            "10-9",
+            "-1-5",
+            "1-256",
+            "256-257",
+            "7-",
+            "-18",
+            "7--18",
+            "7-18-20",
+            "7-18:",
+            "7-18:0",
+            "7-18:0.001",
+            "007-18",
+            "7-018",
+        ] {
+            let memo = format!("{principal}.{suffix}");
+            assert!(parse_subscription_memo(memo.as_bytes()).is_err(), "{memo}");
+        }
+        assert_eq!(
+            parse_subscription_memo(format!("{principal}.10-9").as_bytes()).unwrap_err(),
+            MemoParseError::ReversedRange
+        );
+        assert_eq!(
+            parse_subscription_memo(format!("{principal}.7-7").as_bytes()).unwrap_err(),
+            MemoParseError::DegenerateRange
+        );
+    }
+
+    #[test]
+    fn principal_hyphens_and_decimal_points_are_unambiguous() {
+        let parsed = parse_subscription_memo(b"r5m5y-diaaa-aaaaa-qanaa-cai.7-18:10.25").unwrap();
+        assert!(matches!(
+            parsed,
+            SubscriptionDeclaration::Range {
+                start_subaccount: 7,
+                end_subaccount: 18,
+                minimum_e8s: 1_025_000_000,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn integer_subaccounts_are_canonical_decimal() {
+        for memo in [
+            b"r5m5ydiaaaaaaaaqanaacai.007".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai.+7".as_slice(),
+        ] {
+            assert_eq!(
+                parse_subscription_memo(memo).unwrap_err(),
+                MemoParseError::InvalidSubaccount
+            );
+        }
     }
 
     #[test]
