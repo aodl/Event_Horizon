@@ -14,6 +14,7 @@ use crate::{
     cadence::PollingMode,
     pricing::{Observation, PricingState},
     subscription::Subscription,
+    surplus::SurplusPolicyState,
 };
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -27,6 +28,8 @@ const DEBUG_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(3);
 const GLOBAL_SUBSCRIBERS_MEMORY_ID: MemoryId = MemoryId::new(4);
 const PRICE_OBSERVATIONS_MEMORY_ID: MemoryId = MemoryId::new(5);
 const PRICING_STATE_MEMORY_ID: MemoryId = MemoryId::new(6);
+const FUNDING_V2_MEMORY_ID: MemoryId = MemoryId::new(7);
+const SURPLUS_POLICY_MEMORY_ID: MemoryId = MemoryId::new(8);
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
@@ -56,6 +59,30 @@ pub enum CmcState {
     },
     NotifyPending {
         block_index: u64,
+    },
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Default)]
+pub enum FundingStateV2 {
+    #[default]
+    Uninitialized,
+    Idle,
+    CmcTransferPending {
+        amount_e8s: u64,
+        fee_e8s: u64,
+        created_at_time_nanos: u64,
+        planned_surplus_e8s: u64,
+        planned_surplus_fee_e8s: u64,
+    },
+    CmcNotifyPending {
+        block_index: u64,
+        planned_surplus_e8s: u64,
+        planned_surplus_fee_e8s: u64,
+    },
+    SurplusTransferPending {
+        amount_e8s: u64,
+        fee_e8s: u64,
+        created_at_time_nanos: u64,
     },
 }
 
@@ -138,6 +165,8 @@ candid_value!(MetadataValue, Metadata, 256);
 candid_value!(CmcStateValue, CmcState, 256);
 candid_value!(ObservationValue, Observation, 128);
 candid_value!(PricingStateValue, PricingState, 512);
+candid_value!(FundingStateV2Value, FundingStateV2, 512);
+candid_value!(SurplusPolicyStateValue, SurplusPolicyState, 256);
 #[cfg(feature = "debug_api")]
 candid_value!(DebugConfigValue, RuntimeConfig, 256);
 
@@ -150,6 +179,8 @@ thread_local! {
     static GLOBAL_SUBSCRIBERS: RefCell<Option<StableBTreeMap<PrincipalKey, u8, Memory>>> = const { RefCell::new(None) };
     static PRICE_OBSERVATIONS: RefCell<Option<StableBTreeMap<u64, ObservationValue, Memory>>> = const { RefCell::new(None) };
     static PRICING_STATE: RefCell<Option<StableCell<PricingStateValue, Memory>>> = const { RefCell::new(None) };
+    static FUNDING_V2_STATE: RefCell<Option<StableCell<FundingStateV2Value, Memory>>> = const { RefCell::new(None) };
+    static SURPLUS_POLICY_STATE: RefCell<Option<StableCell<SurplusPolicyStateValue, Memory>>> = const { RefCell::new(None) };
     #[cfg(feature = "debug_api")]
     static DEBUG_CONFIG: RefCell<Option<StableCell<DebugConfigValue, Memory>>> = const { RefCell::new(None) };
 }
@@ -225,6 +256,36 @@ fn with_pricing_state<R>(f: impl FnOnce(&mut StableCell<PricingStateValue, Memor
     })
 }
 
+fn with_funding_v2<R>(f: impl FnOnce(&mut StableCell<FundingStateV2Value, Memory>) -> R) -> R {
+    FUNDING_V2_STATE.with_borrow_mut(|slot| {
+        let cell = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(
+                    m.get(FUNDING_V2_MEMORY_ID),
+                    FundingStateV2Value(FundingStateV2::Uninitialized),
+                )
+            })
+        });
+        f(cell)
+    })
+}
+
+fn with_surplus_policy<R>(
+    f: impl FnOnce(&mut StableCell<SurplusPolicyStateValue, Memory>) -> R,
+) -> R {
+    SURPLUS_POLICY_STATE.with_borrow_mut(|slot| {
+        let cell = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(
+                    m.get(SURPLUS_POLICY_MEMORY_ID),
+                    SurplusPolicyStateValue(SurplusPolicyState::default()),
+                )
+            })
+        });
+        f(cell)
+    })
+}
+
 pub fn initialize_if_needed() {
     with_meta(|_| ());
     with_subscriptions(|_| ());
@@ -232,6 +293,8 @@ pub fn initialize_if_needed() {
     with_global_subscribers(|_| ());
     with_price_observations(|_| ());
     with_pricing_state(|_| ());
+    with_funding_v2(|_| ());
+    with_surplus_policy(|_| ());
     #[cfg(feature = "debug_api")]
     with_debug_config(|_| ());
 }
@@ -272,9 +335,47 @@ pub fn subscription_count() -> u64 {
 pub fn read_cmc_state() -> CmcState {
     with_cmc(|cell| cell.get().0.clone())
 }
-pub fn write_cmc_state(value: CmcState) {
-    with_cmc(|cell| {
-        cell.set(CmcStateValue(value));
+pub fn read_funding_state() -> FundingStateV2 {
+    let current = with_funding_v2(|cell| cell.get().0.clone());
+    if current != FundingStateV2::Uninitialized {
+        return current;
+    }
+    let migrated = match read_cmc_state() {
+        CmcState::Idle => FundingStateV2::Idle,
+        CmcState::TransferPending {
+            amount_e8s,
+            fee_e8s,
+            created_at_time_nanos,
+        } => FundingStateV2::CmcTransferPending {
+            amount_e8s,
+            fee_e8s,
+            created_at_time_nanos,
+            planned_surplus_e8s: 0,
+            planned_surplus_fee_e8s: 0,
+        },
+        CmcState::NotifyPending { block_index } => FundingStateV2::CmcNotifyPending {
+            block_index,
+            planned_surplus_e8s: 0,
+            planned_surplus_fee_e8s: 0,
+        },
+    };
+    write_funding_state(migrated.clone());
+    migrated
+}
+
+pub fn write_funding_state(value: FundingStateV2) {
+    with_funding_v2(|cell| {
+        cell.set(FundingStateV2Value(value));
+    });
+}
+
+pub fn read_surplus_policy() -> SurplusPolicyState {
+    with_surplus_policy(|cell| cell.get().0.clone())
+}
+
+pub fn write_surplus_policy(value: SurplusPolicyState) {
+    with_surplus_policy(|cell| {
+        cell.set(SurplusPolicyStateValue(value));
     });
 }
 

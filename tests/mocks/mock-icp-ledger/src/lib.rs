@@ -108,7 +108,7 @@ pub struct DebugSetBalance {
     pub account: Account,
     pub e8s: u64,
 }
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum DebugLegacyBehavior {
     Normal,
     DropResponseAfterAccept,
@@ -117,6 +117,9 @@ pub enum DebugLegacyBehavior {
     TooOld,
     CreatedInFuture,
 }
+
+// Big-endian ASCII `SURPLUS1`, matching Event Horizon's protocol memo.
+const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
 
 #[derive(Clone)]
 struct Balance {
@@ -137,6 +140,7 @@ struct State {
     balances: Vec<Balance>,
     legacy_dedup: Vec<LegacyDedup>,
     legacy_behavior: DebugLegacyBehavior,
+    surplus_legacy_behavior: DebugLegacyBehavior,
     accepted_legacy_transfers: u64,
 }
 impl Default for State {
@@ -149,6 +153,7 @@ impl Default for State {
             balances: vec![],
             legacy_dedup: vec![],
             legacy_behavior: DebugLegacyBehavior::Normal,
+            surplus_legacy_behavior: DebugLegacyBehavior::Normal,
             accepted_legacy_transfers: 0,
         }
     }
@@ -281,7 +286,12 @@ async fn transfer(arg: LegacyTransferArg) -> LegacyTransferResult {
                 duplicate_of: found.block,
             });
         }
-        match s.legacy_behavior {
+        let behavior = if arg.memo == SURPLUS_TRANSFER_MEMO {
+            s.surplus_legacy_behavior
+        } else {
+            s.legacy_behavior
+        };
+        match behavior {
             DebugLegacyBehavior::BadFee => {
                 return Err(LegacyTransferError::BadFee {
                     expected_fee: Tokens { e8s: s.fee_e8s },
@@ -342,7 +352,7 @@ async fn transfer(arg: LegacyTransferArg) -> LegacyTransferResult {
         s.accepted_legacy_transfers += 1;
         Ok((
             block,
-            s.legacy_behavior == DebugLegacyBehavior::DropResponseAfterAccept,
+            behavior == DebugLegacyBehavior::DropResponseAfterAccept,
         ))
     });
     let (block, lose_response) = accepted?;
@@ -393,6 +403,10 @@ fn debug_set_balance(arg: DebugSetBalance) {
 fn debug_set_legacy_behavior(value: DebugLegacyBehavior) {
     STATE.with(|s| s.borrow_mut().legacy_behavior = value);
 }
+#[ic_cdk::update]
+fn debug_set_surplus_legacy_behavior(value: DebugLegacyBehavior) {
+    STATE.with(|s| s.borrow_mut().surplus_legacy_behavior = value);
+}
 #[ic_cdk::query]
 fn debug_chain_length() -> u64 {
     STATE.with(|s| s.borrow().blocks.len() as u64)
@@ -400,6 +414,17 @@ fn debug_chain_length() -> u64 {
 #[ic_cdk::query]
 fn debug_accepted_legacy_transfers() -> u64 {
     STATE.with(|s| s.borrow().accepted_legacy_transfers)
+}
+
+#[ic_cdk::query]
+fn debug_accepted_legacy_transfers_with_memo(memo: u64) -> u64 {
+    STATE.with(|s| {
+        s.borrow()
+            .legacy_dedup
+            .iter()
+            .filter(|entry| entry.arg.memo == memo)
+            .count() as u64
+    })
 }
 
 ic_cdk::export_candid!();

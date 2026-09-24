@@ -10,10 +10,12 @@ type Pricing = record {
 type DebugInitArgs = record {
   ledger_canister : principal; cmc_canister : principal;
   historian_canister : principal; faucet_canister : principal;
+  surplus_canister : opt principal;
 };
 type DebugState = record {
   bootstrapped : bool; next_block : nat64; polling_mode : PollingMode;
   subscriptions : nat64; global_subscriptions : nat64; cmc_state : text;
+  surplus_policy : text; surplus_destination : opt principal;
   pricing : Pricing;
 };
 type Subscription = record {
@@ -25,6 +27,9 @@ service : (DebugInitArgs) -> {
   debug_poll_once : () -> ();
   debug_funding_once : () -> ();
   debug_pricing_once : () -> ();
+  debug_set_surplus_level : (nat8) -> ();
+  debug_set_liquid_cycles_override : (opt nat) -> ();
+  debug_set_ledger_canister : (principal) -> ();
   debug_start_schedulers : () -> ();
   debug_timer_count : () -> (nat8) query;
   debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;

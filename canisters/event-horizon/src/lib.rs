@@ -16,6 +16,7 @@ mod pricing;
 mod scheduler;
 mod state;
 mod subscription;
+mod surplus;
 
 #[cfg(feature = "debug_api")]
 use candid::Principal;
@@ -60,6 +61,7 @@ mod debug {
         pub cmc_canister: Principal,
         pub historian_canister: Principal,
         pub faucet_canister: Principal,
+        pub surplus_canister: Option<Principal>,
     }
 
     impl From<DebugInitArgs> for config::RuntimeConfig {
@@ -69,6 +71,7 @@ mod debug {
                 cmc_canister: value.cmc_canister,
                 historian_canister: value.historian_canister,
                 faucet_canister: value.faucet_canister,
+                surplus_canister: value.surplus_canister,
             }
         }
     }
@@ -93,6 +96,8 @@ mod debug {
         pub subscriptions: u64,
         pub global_subscriptions: u64,
         pub cmc_state: String,
+        pub surplus_policy: String,
+        pub surplus_destination: Option<Principal>,
         pub pricing: Pricing,
     }
 
@@ -105,7 +110,9 @@ mod debug {
             polling_mode: meta.polling_mode,
             subscriptions: state::subscription_count(),
             global_subscriptions: state::global_subscription_count(),
-            cmc_state: format!("{:?}", state::read_cmc_state()),
+            cmc_state: format!("{:?}", state::read_funding_state()),
+            surplus_policy: format!("{:?}", state::read_surplus_policy()),
+            surplus_destination: config::runtime().surplus_canister,
             pricing: pricing::get_pricing(),
         }
     }
@@ -123,6 +130,29 @@ mod debug {
     #[ic_cdk::update]
     async fn debug_pricing_once() {
         scheduler::debug_pricing_once().await;
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_surplus_level(level: u8) {
+        assert!(level <= config::SURPLUS_MAX_LEVEL, "invalid surplus level");
+        state::write_surplus_policy(surplus::SurplusPolicyState {
+            initialized: true,
+            epoch_started_at_seconds: ic_cdk::api::time() / 1_000_000_000,
+            epoch_min_liquid_cycles: ic_cdk::api::canister_liquid_cycle_balance(),
+            diversion_level: level,
+        });
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_liquid_cycles_override(value: Option<u128>) {
+        funding::debug_set_liquid_cycles_override(value);
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_ledger_canister(ledger_canister: Principal) {
+        let mut runtime = config::runtime();
+        runtime.ledger_canister = ledger_canister;
+        state::write_debug_config(runtime);
     }
 
     #[ic_cdk::update]

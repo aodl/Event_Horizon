@@ -62,6 +62,8 @@ Controller removal is a separate operational decision. During the controlled obs
 11. global and range subscription poke volume is sustainable at the observed registry size, including a validated 256-account maximum range.
 12. the frontend export audit reports only `http_request` and direct browser pricing reads succeed using the injected backend canister ID;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
+14. FundingStateV2 upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
+15. if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
 
 Only after that evidence is satisfactory should `docs/controller-removal.md` be followed.
 
@@ -73,5 +75,8 @@ Production constants are compiled into the backend Wasm:
 - CMC: `rkp4c-7iaaa-aaaaa-aaaca-cai`
 - Jupiter Historian: `j5gs6-uiaaa-aaaar-qb5cq-cai`
 - Jupiter Faucet: `acjuz-liaaa-aaaar-qb4qq-cai`
+- Surplus receiver: currently `None` (diversion disabled)
+
+The surplus receiver is a compile-time trust anchor, not deployment input. Before a production build intended to enable diversion, replace `SURPLUS_CANISTER = None` with exactly one reviewed `Some("<principal>")`, rebuild the canonical Wasm, rerun every validation and export audit, and record the new hash. Never add a runtime setter. Once controllers are removed, the destination cannot change.
 
 The Jupiter Faucet `X` alias must resolve to the actual deployed Event Horizon backend before subscription endowments are created.

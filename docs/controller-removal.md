@@ -17,6 +17,8 @@ Do not continue unless all of the following are true:
 - `log_memory_limit` is at least 4096 bytes (the intended value is exactly 4096);
 - the canister has a healthy cycles reserve;
 - the configured Ledger, CMC, Historian and Faucet constants are correct;
+- `SURPLUS_CANISTER` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;
+- if surplus is enabled, retained-first ordering, epoch policy, immediate gates, duplicate recovery, and pending-state upgrades have passed against the canonical Wasm;
 - the Jupiter Faucet `X` alias points to this backend canister;
 - pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
 - the Wasm export audit permits exactly `canister_query get_pricing` and no other application method;

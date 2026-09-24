@@ -69,3 +69,11 @@ pub fn cmc_terminal(reason: &str) {
 pub fn cmc_transfer_identity_expired() {
     ic_cdk::println!("CMC_TRANSFER_IDENTITY_EXPIRED");
 }
+
+pub fn surplus_transfer_identity_expired() {
+    ic_cdk::println!("SURPLUS_TRANSFER_IDENTITY_EXPIRED");
+}
+
+pub fn surplus_financial_invariant(reason: &str) {
+    ic_cdk::println!("SURPLUS_FINANCIAL_INVARIANT {}", reason);
+}

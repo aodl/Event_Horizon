@@ -6,7 +6,7 @@
 cargo run -p xtask -- unit
 ```
 
-Covers all five subscription forms, canonical range validation, account derivation, permanent minimum-threshold merging, independent range-price derivation and polling hysteresis, plus frontend parser/byte-limit parity.
+Covers all five subscription forms, canonical range validation, account derivation, permanent minimum-threshold merging, independent range-price derivation, polling hysteresis, exact 19-epoch surplus evolution, weakness/emergency behavior, immediate gating, long-downtime handling, and overflow-safe 0/5/50/95% split arithmetic, plus frontend parser/byte-limit parity.
 
 ## PocketIC
 
@@ -30,6 +30,13 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 - accepted transfer with lost response and duplicate-safe recovery;
 - CMC `Processing` persistence across upgrade and later completion;
 - explicit CMC refund and terminal-error autonomous clearing;
+- retained-first ordering and CMC Processing/refund/terminal cancellation of planned surplus;
+- second-gate cancellation when liquid cycles fall after planning;
+- new ICP exclusion from an in-flight plan and later classification;
+- surplus success, lost response/duplicate recovery, clean reject, insufficient funds, bad fee, future timestamp, `TxTooOld`, and pending-transfer upgrade;
+- subscription admission after the original Faucet ICP has flowed through funding/surplus transfers;
+- destination-disabled equivalence and zero policy;
+- exact `304b26e…` Idle/TransferPending/NotifyPending migration plus current-Wasm upgrades of every pending V2 phase;
 - subscription/cursor persistence across upgrade;
 - absence of debug application methods in the production Wasm.
 

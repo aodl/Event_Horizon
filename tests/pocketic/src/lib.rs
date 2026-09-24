@@ -19,6 +19,7 @@ mod tests {
     static EVENT_HORIZON_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static FRONTEND_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
 
     fn workspace_root() -> Result<PathBuf> {
         for dir in Path::new(env!("CARGO_MANIFEST_DIR")).ancestors() {
@@ -109,6 +110,7 @@ mod tests {
         cmc_canister: Principal,
         historian_canister: Principal,
         faucet_canister: Principal,
+        surplus_canister: Option<Principal>,
     }
     #[derive(CandidType, Deserialize)]
     struct SetRoute {
@@ -131,6 +133,8 @@ mod tests {
         subscriptions: u64,
         global_subscriptions: u64,
         cmc_state: String,
+        surplus_policy: String,
+        surplus_destination: Option<Principal>,
         pricing: Pricing,
     }
     #[derive(CandidType, Deserialize, Debug)]
@@ -268,6 +272,13 @@ mod tests {
                 event_horizon_cycles,
             )
         }
+        fn new_disabled() -> Result<Self> {
+            Self::with_event_horizon_wasm_and_surplus(
+                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                200_000_000_000_000,
+                false,
+            )
+        }
         fn validated_baseline() -> Result<Self> {
             Self::with_event_horizon_wasm(
                 include_bytes!("../../fixtures/event_horizon_core_validated_c48778d_debug.wasm")
@@ -282,9 +293,27 @@ mod tests {
                 200_000_000_000_000,
             )
         }
+        fn range_validated_baseline() -> Result<Self> {
+            Self::with_event_horizon_wasm(
+                include_bytes!("../../fixtures/event_horizon_range_validated_304b26e_debug.wasm")
+                    .to_vec(),
+                200_000_000_000_000,
+            )
+        }
         fn with_event_horizon_wasm(
             event_horizon_wasm: Vec<u8>,
             event_horizon_cycles: u128,
+        ) -> Result<Self> {
+            Self::with_event_horizon_wasm_and_surplus(
+                event_horizon_wasm,
+                event_horizon_cycles,
+                true,
+            )
+        }
+        fn with_event_horizon_wasm_and_surplus(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+            surplus_enabled: bool,
         ) -> Result<Self> {
             let pic = PocketIcBuilder::new().with_application_subnet().build();
             let ledger = pic.create_canister();
@@ -332,6 +361,7 @@ mod tests {
                     cmc_canister: cmc,
                     historian_canister: historian,
                     faucet_canister: faucet,
+                    surplus_canister: surplus_enabled.then_some(subscriber),
                 })?,
                 None,
             );
@@ -378,6 +408,56 @@ mod tests {
         }
         fn state(&self) -> Result<DebugState> {
             query(&self.pic, self.event_horizon, "debug_state", ())
+        }
+        fn set_balance(&self, e8s: u64) -> Result<()> {
+            update(
+                &self.pic,
+                self.ledger,
+                "debug_set_balance",
+                SetBalance {
+                    account: Account {
+                        owner: self.event_horizon,
+                        subaccount: None,
+                    },
+                    e8s,
+                },
+            )
+        }
+        fn raw_balance(&self) -> Result<u64> {
+            let value: candid::Nat = query(
+                &self.pic,
+                self.ledger,
+                "icrc1_balance_of",
+                Account {
+                    owner: self.event_horizon,
+                    subaccount: None,
+                },
+            )?;
+            u64::try_from(value.0).map_err(|_| anyhow!("raw ICP balance does not fit u64"))
+        }
+        fn set_surplus_level(&self, level: u8) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_set_surplus_level",
+                level,
+            )
+        }
+        fn set_liquid_cycles_override(&self, value: Option<u128>) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_set_liquid_cycles_override",
+                value,
+            )
+        }
+        fn accepted_with_memo(&self, memo: u64) -> Result<u64> {
+            query(
+                &self.pic,
+                self.ledger,
+                "debug_accepted_legacy_transfers_with_memo",
+                memo,
+            )
         }
         fn set_route(&self, memo: Vec<u8>, total: u64) -> Result<()> {
             update(
@@ -463,6 +543,10 @@ mod tests {
             Ok(memo)
         }
         fn upgrade_same_debug_wasm(&self) -> Result<()> {
+            // Install-code rate limiting is part of replica behavior; advance beyond the
+            // short initial-install window before exercising the upgrade path.
+            self.pic.advance_time(std::time::Duration::from_secs(300));
+            self.pic.tick();
             let controller = self
                 .pic
                 .get_controllers(self.event_horizon)
@@ -1211,8 +1295,235 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn disabled_destination_preserves_single_leg_funding_and_resets_policy() -> Result<()> {
+        let env = Env::new_disabled()?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.ledger, "debug_accepted_legacy_transfers", ())?,
+            1
+        );
+        let state = env.state()?;
+        assert_eq!(state.surplus_destination, None);
+        assert!(state.surplus_policy.contains("initialized: false"));
+        assert!(state.surplus_policy.contains("diversion_level: 0"));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn retained_top_up_completes_before_surplus_can_leave() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("CmcNotifyPending"));
+        assert!(env
+            .state()?
+            .cmc_state
+            .contains("planned_surplus_e8s: 94981000"));
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(env.raw_balance()?, 0);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn cycles_falling_after_planning_cancel_surplus_and_reclassify_later() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("CmcNotifyPending"));
+
+        env.set_liquid_cycles_override(Some(149_000_000_000_000))?;
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(env.raw_balance()?, 94_991_000);
+
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        assert_eq!(env.raw_balance()?, 0);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn new_icp_arriving_during_plan_is_not_incorporated() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        assert_eq!(env.raw_balance()?, 94_991_000);
+        env.set_balance(144_991_000)?;
+
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert_eq!(env.raw_balance()?, 50_000_000);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+
+        env.fund()?;
+        assert_eq!(env.raw_balance()?, 0);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 2);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn surplus_lost_response_recovers_duplicate_across_upgrade() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::DropResponseAfterAccept,
+        )?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert!(env.state()?.cmc_state.contains("SurplusTransferPending"));
+
+        env.upgrade_same_debug_wasm()?;
+        assert!(env.state()?.cmc_state.contains("SurplusTransferPending"));
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn surplus_definite_failures_clear_for_conservative_replan() -> Result<()> {
+        for behavior in [LegacyBehavior::InsufficientFunds, LegacyBehavior::BadFee] {
+            let env = Env::new()?;
+            env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+            env.set_surplus_level(19)?;
+            env.set_balance(100_000_000)?;
+            update::<_, ()>(
+                &env.pic,
+                env.ledger,
+                "debug_set_surplus_legacy_behavior",
+                behavior,
+            )?;
+            env.fund()?;
+            assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+            assert!(env.state()?.cmc_state.contains("Idle"));
+            assert_eq!(env.raw_balance()?, 94_991_000);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn missing_ledger_clean_reject_cancels_surplus_for_replan() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("CmcNotifyPending"));
+
+        update::<_, ()>(
+            &env.pic,
+            env.event_horizon,
+            "debug_set_ledger_canister",
+            Principal::from_slice(&[99]),
+        )?;
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        update::<_, ()>(
+            &env.pic,
+            env.event_horizon,
+            "debug_set_ledger_canister",
+            env.ledger,
+        )?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        assert_eq!(env.raw_balance()?, 94_991_000);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn surplus_future_timestamp_retries_and_too_old_expires() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        let pending = env.state()?.cmc_state;
+        assert!(pending.contains("SurplusTransferPending"));
+
+        env.fund()?;
+        assert_eq!(env.state()?.cmc_state, pending);
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::TooOld,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn lost_legacy_transfer_response_reuses_identity_without_second_spend() -> Result<()> {
         let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
         update::<_, ()>(
             &env.pic,
             env.ledger,
@@ -1237,6 +1548,10 @@ mod tests {
             1
         );
         assert!(env.state()?.cmc_state.contains("TransferPending"));
+        assert!(env
+            .state()?
+            .cmc_state
+            .contains("planned_surplus_e8s: 94981000"));
         update::<_, ()>(
             &env.pic,
             env.ledger,
@@ -1245,12 +1560,13 @@ mod tests {
         )?;
         env.fund()?;
         assert_eq!(
-            query::<_, u64>(&env.pic, env.ledger, "debug_accepted_legacy_transfers", ())?,
+            env.accepted_with_memo(1_347_768_404)?,
             1,
             "duplicate recovery must not spend twice"
         );
         assert_eq!(query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?, 1);
         assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
         Ok(())
     }
 
@@ -1258,6 +1574,8 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn expired_transfer_identity_clears_and_later_replans() -> Result<()> {
         let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
         update::<_, ()>(
             &env.pic,
             env.ledger,
@@ -1290,6 +1608,7 @@ mod tests {
             env.state()?.cmc_state.contains("Idle"),
             "expired identity must restore autonomous funding liveness"
         );
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
 
         update::<_, ()>(
             &env.pic,
@@ -1298,11 +1617,9 @@ mod tests {
             LegacyBehavior::Normal,
         )?;
         env.fund()?;
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.ledger, "debug_accepted_legacy_transfers", ())?,
-            1
-        );
+        assert_eq!(env.accepted_with_memo(1_347_768_404)?, 1);
         assert_eq!(query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?, 1);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
         Ok(())
     }
 
@@ -1346,6 +1663,8 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn cmc_processing_survives_upgrade_and_resumes_same_notification() -> Result<()> {
         let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
         update::<_, ()>(
             &env.pic,
             env.ledger,
@@ -1366,6 +1685,10 @@ mod tests {
         )?;
         env.fund()?;
         assert!(env.state()?.cmc_state.contains("NotifyPending"));
+        assert!(env
+            .state()?
+            .cmc_state
+            .contains("planned_surplus_e8s: 94981000"));
         env.upgrade_same_debug_wasm()?;
         assert!(
             env.state()?.cmc_state.contains("NotifyPending"),
@@ -1375,6 +1698,41 @@ mod tests {
         env.fund()?;
         assert!(env.state()?.cmc_state.contains("Idle"));
         assert_eq!(query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?, 2);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn retained_transfer_plan_with_surplus_survives_upgrade() -> Result<()> {
+        let env = Env::new()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        let before = env.state()?.cmc_state;
+        let policy_before = env.state()?.surplus_policy;
+        assert!(before.contains("CmcTransferPending"));
+        assert!(before.contains("planned_surplus_e8s: 94981000"));
+        env.upgrade_same_debug_wasm()?;
+        assert_eq!(env.state()?.cmc_state, before);
+        assert_eq!(env.state()?.surplus_policy, policy_before);
+
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert!(env.state()?.cmc_state.contains("Idle"));
         Ok(())
     }
 
@@ -1382,6 +1740,8 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn cmc_refund_and_terminal_results_clear_without_operator_state() -> Result<()> {
         let refunded = Env::new()?;
+        refunded.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        refunded.set_surplus_level(19)?;
         update::<_, ()>(
             &refunded.pic,
             refunded.ledger,
@@ -1405,8 +1765,11 @@ mod tests {
             refunded.state()?.cmc_state.contains("Idle"),
             "explicit refund is terminal and autonomous"
         );
+        assert_eq!(refunded.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
 
         let terminal = Env::new()?;
+        terminal.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        terminal.set_surplus_level(19)?;
         update::<_, ()>(
             &terminal.pic,
             terminal.ledger,
@@ -1430,6 +1793,7 @@ mod tests {
             terminal.state()?.cmc_state.contains("Idle"),
             "terminal CMC result does not create admin recovery state"
         );
+        assert_eq!(terminal.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
         Ok(())
     }
 
@@ -1450,6 +1814,122 @@ mod tests {
                 .minimum_e8s,
             1_000_000
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn diversion_does_not_affect_later_subscription_admission() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.17:0.01").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            100_000_000,
+            Some(memo),
+        )?;
+        env.set_balance(100_000_000)?;
+        env.fund()?;
+        assert_eq!(env.raw_balance()?, 0);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+
+        env.poll()?;
+        assert_eq!(env.subscription(17)?.unwrap().minimum_e8s, 1_000_000);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn exact_range_baseline_upgrade_preserves_state_and_migrates_transfer_once() -> Result<()> {
+        let env = Env::range_validated_baseline()?;
+        env.price_once()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit_range(8, 9, None, 10_000_000_000)?;
+        env.admit_global(10_000_000_000)?;
+
+        let pricing = env.pricing()?;
+        let now = env.pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+        if pricing.next_freeze_at > now {
+            env.pic
+                .advance_time(std::time::Duration::from_secs(pricing.next_freeze_at - now));
+            env.price_once()?;
+        }
+        let frozen = env.pricing()?;
+        assert!(frozen.next.is_some());
+
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_legacy_behavior",
+            LegacyBehavior::CreatedInFuture,
+        )?;
+        env.fund()?;
+        let before: ValidatedCoreDebugState =
+            query(&env.pic, env.event_horizon, "debug_state", ())?;
+        assert!(before.cmc_state.contains("TransferPending"));
+
+        env.upgrade_same_debug_wasm()?;
+        let after = env.state()?;
+        assert_eq!(after.next_block, before.next_block);
+        assert_eq!(after.polling_mode, before.polling_mode);
+        assert_eq!(after.subscriptions, before.subscriptions);
+        assert_eq!(after.global_subscriptions, 1);
+        assert!(after.cmc_state.contains("CmcTransferPending"));
+        assert!(after.cmc_state.contains("planned_surplus_e8s: 0"));
+        assert_eq!(after.surplus_destination, None);
+        assert!(after.surplus_policy.contains("diversion_level: 0"));
+        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 1_000_000);
+        assert!(env.subscription(8)?.is_some());
+        assert!(env.subscription(9)?.is_some());
+        assert!(env.global_subscription()?);
+        assert_eq!(env.pricing()?, frozen);
+
+        let migrated_once = env.state()?.cmc_state;
+        assert_eq!(env.state()?.cmc_state, migrated_once);
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn exact_range_baseline_notify_and_idle_states_migrate_without_surplus() -> Result<()> {
+        let idle = Env::range_validated_baseline()?;
+        idle.upgrade_same_debug_wasm()?;
+        assert!(idle.state()?.cmc_state.contains("Idle"));
+        assert_eq!(idle.state()?.surplus_destination, None);
+
+        let notify = Env::range_validated_baseline()?;
+        notify.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &notify.pic,
+            notify.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        notify.fund()?;
+        let before: ValidatedCoreDebugState =
+            query(&notify.pic, notify.event_horizon, "debug_state", ())?;
+        assert!(before.cmc_state.contains("NotifyPending"));
+        notify.upgrade_same_debug_wasm()?;
+        assert!(notify.state()?.cmc_state.contains("CmcNotifyPending"));
+        assert!(notify.state()?.cmc_state.contains("planned_surplus_e8s: 0"));
+        update::<_, ()>(
+            &notify.pic,
+            notify.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Ok,
+        )?;
+        notify.fund()?;
+        assert!(notify.state()?.cmc_state.contains("Idle"));
+        assert_eq!(notify.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 0);
         Ok(())
     }
 
@@ -1575,7 +2055,9 @@ mod tests {
         assert_eq!(after.polling_mode, before.polling_mode);
         assert_eq!(after.subscriptions, before.subscriptions);
         assert_eq!(after.global_subscriptions, 1);
-        assert_eq!(after.cmc_state, before.cmc_state);
+        assert!(after.cmc_state.contains("CmcTransferPending"));
+        assert!(after.cmc_state.contains("amount_e8s: 99990000"));
+        assert!(after.cmc_state.contains("planned_surplus_e8s: 0"));
         assert_eq!(
             after_pricing.current.account_icp,
             before_pricing.current.account_icp
