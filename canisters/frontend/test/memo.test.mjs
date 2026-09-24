@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMemo, isValidAmount } from '../public/memo.js';
+import { buildGlobalMemo, buildMemo, isValidAmount } from '../public/memo.js';
+
+test('global declaration contains only the compact subscriber principal', () => {
+  const got = buildGlobalMemo('r5m5y-diaaa-aaaaa-qanaa-cai');
+  assert.equal(got.memo, 'X.r5m5ydiaaaaaaaaqanaacai');
+  assert.equal(got.bytes, 25);
+  assert.equal(got.global, true);
+});
 
 test('thresholded canonical example is exactly 32 bytes', () => {
   const got = buildMemo('r5m5y-diaaa-aaaaa-qanaa-cai', '7', '0.01');

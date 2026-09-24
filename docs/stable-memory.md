@@ -1,31 +1,19 @@
 # Stable-memory contract
 
-Stable-memory IDs are protocol storage identifiers and must never be reused for another meaning.
+Stable-memory IDs are permanent protocol identifiers and are never reused.
 
-| Memory ID | Meaning |
+| ID | Meaning |
 |---:|---|
-| `0` | Metadata cell: prospective-bootstrap flag, durable next Ledger block, current polling mode |
-| `1` | Watched-account → effective subscription map |
-| `2` | CMC conversion state cell |
-| `3` | Debug-only runtime configuration; absent from the canonical production behaviour |
+| 0 | Existing metadata: bootstrap, Ledger cursor, polling mode |
+| 1 | Existing watched-account subscription map |
+| 2 | Existing CMC conversion state |
+| 3 | Debug-only runtime configuration |
+| 4 | Global subscriber set keyed directly by principal |
+| 5 | Pricing observations keyed by UTC day |
+| 6 | Pricing initialization, current/frozen epochs, timestamps, attempt day, and measured call cost |
 
-An admitted subscription stores a `minimum_e8s` value. `0` is reserved internally to mean the declaration omitted a threshold and every incoming transfer is relevant; explicit thresholds can never be below `0.01 ICP`, so this sentinel is unambiguous.
+The validated encodings at IDs 0–2 are unchanged. Upgrading from `c48778d1744f3b645d0165cfdccec2ee704db71c` initializes only the new structures. It neither fabricates pricing history nor materializes global subscriptions from old account records.
 
-## Durable versus transient state
+Account `minimum_e8s = 0` remains the unambiguous omitted-threshold sentinel. Global declarations have no synthetic account or subaccount record.
 
-Durable state exists only where losing it would change future correctness or risk real funds:
-
-- Ledger cursor;
-- permanent admitted subscriptions;
-- cadence hysteresis mode;
-- deterministic CMC transfer/notify identity.
-
-The following is intentionally transient:
-
-- current poll's subscriber → matched-subaccounts map;
-- timer IDs;
-- in-flight poll/funding leases;
-- decoded Ledger pages;
-- logging suppression flags.
-
-A pre-blackhole upgrade can therefore lose best-effort pokes from an incomplete poll without inventing delivery recovery machinery. Subscribers' own reconciliation remains authoritative.
+Durable state includes the Ledger cursor, permanent admissions, cadence mode, deterministic CMC identity, bounded pricing history, and epoch decisions. Poll match accumulators, timer IDs, single-flight leases, decoded pages, and logging suppression remain transient.

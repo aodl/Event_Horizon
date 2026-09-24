@@ -1,35 +1,25 @@
 # Subscriber guide
 
-Implement this endpoint:
+Implement and authenticate this endpoint:
 
 ```candid
 service : { poke : (vec nat8) -> (); }
 ```
 
-The vector contains the unique numbered subaccounts on your canister that Event Horizon saw relevant activity for during one completed poll. Event Horizon coalesces all matches for your canister into a single call and sends the subaccount numbers in deterministic ascending order.
-
-Authenticate the Event Horizon caller, validate/recognise the supplied subaccount numbers, coalesce the wake-up with your existing reconciliation worker, and return promptly. Do not treat a poke or its subaccount list as proof of a payment or as authoritative transaction data.
-
-Your own periodic reconciliation remains mandatory. It is the correctness path.
-
-## Optional threshold
-
-A subscription memo may omit the amount entirely:
+## Declaration forms
 
 ```text
-X.<subscriber>.<subaccount>
+X.<subscriber>                         global Ledger trigger
+X.<subscriber>.<subaccount>            all incoming transfers to account 0..255
+X.<subscriber>.<subaccount>:<amount>   incoming amount >= positive threshold
 ```
 
-That means every incoming transfer to that watched account is relevant.
+An explicit threshold has at most two decimal places and a minimum of `0.01 ICP`. Omission means every incoming transfer to that numbered account. A global declaration means any transaction anywhere on the Ledger; it does not subscribe all of the canister's subaccounts.
 
-If an amount is supplied:
+## Poke interpretation
 
-```text
-X.<subscriber>.<subaccount>:<amount>
-```
+A subscriber with a global declaration treats every poke as a reason to advance its global authoritative cursor. `poke([])` means the poll processed Ledger activity but no account declaration for that subscriber matched. A non-empty sorted vector identifies account declarations that matched and takes precedence over the empty global hint.
 
-matching is inclusive (`>=`) and the smallest explicit threshold is `0.01 ICP`.
+A subscriber without a global declaration receives only non-empty account hints. Any vector is a wake-up hint, not proof of payment or proof that no other Ledger activity occurred. Coalesce concurrent wake-ups and route them through the same reconciliation worker as an independent periodic timer.
 
-## Event Horizon may beat the Index
-
-Event Horizon reads the ICP Ledger directly. You may therefore receive a poke before the ICP Index exposes the triggering transaction. This is a useful latency property, not an error. If your reconciliation uses the Index and sees nothing new, choose the recheck/backoff behaviour appropriate to your application.
+Event Horizon reads the Ledger directly, so a poke can precede ICP Index visibility. The subscriber owns Index retry and backoff behavior. Event Horizon sends no transaction payload, retries, acknowledgements, or delivery guarantees.

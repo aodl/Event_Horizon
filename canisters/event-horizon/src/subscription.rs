@@ -17,10 +17,19 @@ pub struct Subscription {
 
 impl From<SubscriptionDeclaration> for Subscription {
     fn from(value: SubscriptionDeclaration) -> Self {
-        Self {
-            subscriber: value.subscriber,
-            numbered_subaccount: value.numbered_subaccount,
-            minimum_e8s: value.minimum_e8s,
+        match value {
+            SubscriptionDeclaration::Account {
+                subscriber,
+                numbered_subaccount,
+                minimum_e8s,
+            } => Self {
+                subscriber,
+                numbered_subaccount,
+                minimum_e8s,
+            },
+            SubscriptionDeclaration::Global { .. } => {
+                panic!("global declaration cannot become an account subscription")
+            }
         }
     }
 }

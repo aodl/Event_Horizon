@@ -1,51 +1,35 @@
 # Architecture
 
-Event Horizon consists of an autonomous backend and a separately controlled certified informational frontend.
+Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
-## Backend data flow
+## Poll lane
 
-```text
-ICP Ledger
-   |
-   | query_blocks (live history only)
-   v
-fixed-boundary poll
-   |
-   +-- Faucet-origin transfer to Event Horizon + valid memo
-   |       |
-   |       +--> Jupiter Historian exact-route admission check
-   |                |
-   |                +--> permanent watched-account subscription
-   |
-   +-- relevant transfer to admitted watched account
-           |
-           +--> transient BTreeMap<subscriber, BTreeSet<subaccount>>
+Each poll captures the first Ledger response's exclusive `chain_length` and never processes beyond it. Account transfers accumulate sorted subaccount hints per subscriber. The backend records whether any transaction was processed and, only after the boundary completes, incorporates the stable global-subscriber set once. Each subscriber receives at most one poke: a non-empty account hint wins over a global empty hint.
 
-poll reaches pinned boundary
-   |
-   +--> at most one bounded-response one-way poke(vec nat8) per subscriber
-        containing sorted unique matched subaccounts
-```
+The reader uses no Index or archive traversal. A proven archived prefix is logged and skipped. Subscribers own authoritative reconciliation.
 
-A watched account is relevant for every incoming transfer when its declaration omitted a threshold. When a threshold is present, relevance means `amount >= threshold`.
+## Admission and storage
 
-The subscriber's Ledger/Index reconciliation is always the correctness path.
+A Faucet-origin payout memo is parsed as either a global declaration or an account declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. Stable memory remains additive:
 
-## Autonomous scheduling
+| ID | Contents |
+|---:|---|
+| 0 | existing metadata and Ledger cursor |
+| 1 | existing account subscriptions |
+| 2 | existing CMC conversion state |
+| 3 | debug configuration in debug Wasm only |
+| 4 | global subscriber set |
+| 5 | daily pricing observations keyed by UTC day |
+| 6 | current/frozen pricing state |
 
-Production installs one one-shot event-poll timer and one one-shot funding-maintenance timer. Timers are reinstalled after upgrades. Polls cannot overlap; funding runs through a separate single-flight lease.
+IDs 0–2 retain their validated encodings.
 
-After each completed poll, the canister chooses the next shared cadence from its liquid cycles balance using the fixed hysteresis table in `SPEC.md`.
+## Independent timer lanes
 
-## Funding
+Production installs three one-shot timers: Ledger polling, hourly funding maintenance, and pricing maintenance. Each has a single-flight guard and replaces its prior timer when rescheduled. Pricing wakes at the next UTC day, freeze, or effective boundary. Funding and pricing use separate CMC calls and state.
 
-Event Horizon's own default ICP balance is periodically swept to the CMC. The CMC payment transfer uses the established canister-top-up memo and principal-derived CMC subaccount. A single stable state slot preserves the transfer identity or accepted Ledger block across asynchronous failures.
+## Frontend
 
-## Failure boundaries
+Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
 
-- **Poke failure:** discard; subscriber reconciliation recovers completeness.
-- **Historian unavailable/incomplete:** do not admit from that payout; later perpetual payout is a natural later opportunity.
-- **Ledger archive gap:** log, skip to live history, continue.
-- **CMC transport/Processing:** retain the same notify/transfer identity and try again on the next funding maintenance.
-- **CMC explicit refund:** clear; refunded ICP is naturally swept later.
-- **CMC terminal protocol failure:** log and clear; there is no administrative recovery endpoint.
+Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.

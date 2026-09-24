@@ -2,31 +2,18 @@
 
 ## Poll lifecycle
 
-1. A fresh backend calls `query_blocks` with a zero-length range and records the returned `chain_length`. Historical blocks are not replayed.
-2. Each later poll uses the first response's `chain_length` as a fixed exclusive boundary.
-3. Pages are processed in ascending block order. The durable cursor advances after each successfully handled page.
-4. Relevant destinations add their numbered subaccount to a transient `BTreeMap<subscriber, BTreeSet<subaccount>>`.
-5. After the fixed boundary is reached, each subscriber receives at most one `poke(vec nat8)` attempt containing all distinct matched subaccounts for that poll.
-6. The next mode is chosen from the canister's liquid cycles balance using the fixed hysteresis table.
+A first successful zero-length Ledger read bootstraps prospectively. Each later poll pins the first response's exclusive `chain_length`, processes only that interval, and persists page progress. Proven archived prefixes are logged and skipped without archive calls.
 
-Blocks arriving during a poll are deliberately left for the next poll.
-
-A watched account without an explicit amount threshold matches every incoming transfer. A thresholded account matches inclusively at `amount >= threshold`, with `0.01 ICP` as the smallest explicit threshold.
+Account matches accumulate sorted subaccounts per subscriber. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one poke per subscriber: a non-empty account set wins; otherwise a global match sends an empty vector.
 
 ## Admission
 
-A transfer can propose a subscription only when its source is the configured Jupiter Faucet default ICP account and its destination is Event Horizon's default ICP account. Its ICRC-1 memo must parse as an Event Horizon subscription declaration.
+Only a payout from the configured Faucet default account to Event Horizon can propose admission. Historian must verify the exact memo route, a complete view, and a total at least equal to the current account/global requirement. Pricing must have initialized. Failed evaluation creates no retry queue; a later Faucet payout is another opportunity.
 
-Event Horizon then asks the configured Jupiter Historian for that exact `RawIcp` route. Admission requires a complete-from-genesis Historian view, no commitment-index fault, and at least 10 ICP cumulative qualifying endowment.
+## Pricing lane
 
-Historian read failure does not stop Ledger progress and does not create a retry queue.
+An independent one-shot timer handles daily CMC observations and exact freeze/effective timestamps. It prunes observations older than the 1,461 UTC-day window before epoch work, records no more than one success per UTC date, and persists one attempt per date to avoid same-day retry loops. Upgrade startup replaces timer slots and resumes this lane once.
 
-## History gaps
+## Funding lane
 
-Event Horizon never follows archive callbacks. If the required cursor is covered by an archived range, the backend logs the skipped interval, advances to the end of that archived range, and keeps crawling live history.
-
-## Funding
-
-Funding maintenance is independent from event polling. It periodically reads Event Horizon's default ICP balance and the current Ledger fee. When usable ICP exists it transfers `balance - fee` to the CMC account/subaccount for Event Horizon using the standard top-up memo, then calls `notify_top_up` with the resulting block index.
-
-Only the in-flight financial identity is durable. There is no operator recovery API.
+Hourly funding remains separate. The legacy ICP Ledger value transfer uses unbounded wait and a persisted deterministic identity, followed by bounded CMC notification. A successful mint immediately recalculates polling cadence from liquid cycles. Pricing queries do not alter funding state.

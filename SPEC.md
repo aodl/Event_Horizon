@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to incoming ICP without becoming part of their correctness path.
 
-Event Horizon reads the live ICP Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` on subscribed canisters when relevant transfers are observed. The poke contains only the distinct numbered subaccounts that matched during that poll; it contains no transaction identifiers, amounts, memos, senders, or other transaction data. Each subscriber owns its authoritative reconciliation cursor and must retain independent periodic reconciliation.
+Event Horizon reads the live ICP Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` on subscribed canisters when relevant transfers are observed. A non-empty poke contains the distinct numbered subaccounts that matched during that poll. An empty poke signals activity for a global Ledger subscription. Neither form contains transaction identifiers, amounts, memos, senders, or other transaction data. Each subscriber owns its authoritative reconciliation cursor and must retain independent periodic reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -16,7 +16,7 @@ Event Horizon is a standalone downstream product powered by Jupiter Faucet endow
 
 The Event Horizon backend:
 
-- has no production application API;
+- has exactly one production application query, `get_pricing`, containing no subscription or administrative data;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -25,9 +25,10 @@ Jupiter Historian is used for admission verification. Jupiter Faucet and Disburs
 
 ## 3. Subscription declaration
 
-A Jupiter Faucet endowment uses either of these full memo forms:
+A Jupiter Faucet endowment uses exactly one of these full memo forms:
 
 ```text
+X.<compact-subscriber-principal>
 X.<compact-subscriber-principal>.<numbered-subaccount>
 X.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-ICP>
 ```
@@ -35,6 +36,7 @@ X.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-ICP>
 Examples:
 
 ```text
+X.r5m5ydiaaaaaaaaqanaacai
 X.r5m5ydiaaaaaaaaqanaacai.7
 X.r5m5ydiaaaaaaaaqanaacai.7:0.01
 ```
@@ -42,6 +44,7 @@ X.r5m5ydiaaaaaaaaqanaacai.7:0.01
 `X` is a Jupiter Faucet runtime alias whose mapping is owned by Jupiter Historian. Event Horizon itself receives only the outgoing suffix, for example:
 
 ```text
+r5m5ydiaaaaaaaaqanaacai
 r5m5ydiaaaaaaaaqanaacai.7
 r5m5ydiaaaaaaaaqanaacai.7:0.01
 ```
@@ -49,12 +52,15 @@ r5m5ydiaaaaaaaaqanaacai.7:0.01
 The suffix grammar is:
 
 ```text
+<principal>
 <principal> "." <subaccount> [ ":" <amount> ]
 ```
 
 Rules:
 
 - principals may be the canonical hyphenated representation or the compact representation with group separators removed;
+- a principal alone declares a global Ledger subscription: any transaction processed in a completed poll is relevant;
+- a global declaration does not represent all 256 subaccounts of the subscriber;
 - anonymous and management principals are invalid;
 - subaccount is a decimal integer `0..255`;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
@@ -81,11 +87,13 @@ At most one effective subscription is required for a watched account. If another
 A declaration is eligible for permanent admission only after both are true:
 
 1. Event Horizon observes an authorised Jupiter Faucet raw-ICP payout to Event Horizon carrying that declaration in its ICRC-1 memo.
-2. Jupiter Historian reports at least **10 ICP** cumulative qualifying Jupiter Faucet endowment for that exact raw-ICP route and reports the result as complete/trustworthy.
+2. Jupiter Historian reports a cumulative qualifying Jupiter Faucet endowment for that exact raw-ICP route at least equal to the current account or global admission price, and reports the result as complete/trustworthy.
 
 The approved mainnet Faucet payout source is fixed in the production Wasm.
 
 Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
+
+Global and account declarations are distinct identities and have independently calculated prices. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
 If Historian is unavailable/incomplete for one payout, Event Horizon does not persist an admission-retry queue. A later perpetual Faucet payout carrying the same declaration provides a natural later admission opportunity.
 
@@ -97,7 +105,9 @@ A fresh installation is prospective. On first successful Ledger observation it r
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. After the fixed boundary has been completely processed, Event Horizon attempts at most one poke to each accumulated subscriber, carrying the sorted unique subaccount numbers that matched during that poll.
+For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. It separately records whether the poll processed any transaction. After the fixed boundary has been completely processed, it incorporates admitted global subscribers once when that flag is true. It does not enumerate global subscribers per transaction.
+
+Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty sorted unique account set takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
 
 ## 7. Archives and history gaps
 
@@ -123,9 +133,9 @@ service : {
 }
 ```
 
-The vector contains the distinct numbered subaccounts on that subscriber canister that saw relevant activity in the completed poll. Event Horizon sends at most one poke per subscriber per completed poll, and the vector is deterministically sorted and deduplicated.
+The vector contains the distinct numbered subaccounts on that subscriber canister that saw relevant activity in the completed poll. Event Horizon sends at most one poke per subscriber per completed poll, and a non-empty vector is deterministically sorted and deduplicated. For an admitted global subscriber, `poke([])` means that the poll processed Ledger activity without a more-specific account match. Any poke tells a global subscriber to advance its global authoritative cursor. A non-empty vector additionally identifies account declarations that matched.
 
-The subaccount list is a wake-up hint only. It is not proof that a payment exists and it does not contain authoritative transaction data. The subscriber remains responsible for reading its own Ledger/Index history for each indicated subaccount and for retaining independent periodic reconciliation.
+The subaccount list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
 
 There is:
 
@@ -144,7 +154,7 @@ Because Event Horizon reads the Ledger directly, a poke may arrive before the IC
 
 All Event Horizon cycles are a common operating pool. There is no attribution of cycles expenditure to individual subscriptions.
 
-The working subscription requirement is **10 ICP** qualifying Jupiter Faucet endowment per exact declaration. A separate developer baseline endowment (planned at approximately 100 ICP) supplies common infrastructure funding.
+Account and global endowments enter the same pool. Their different admission prices do not create subscriber-specific cycle allowances.
 
 Larger endowments do not buy priority or lower latency.
 
@@ -152,7 +162,26 @@ Raw ICP accumulated in Event Horizon is periodically converted to cycles. The co
 
 Only the minimum durable financial state necessary to avoid duplicate/stranded value is retained: an idle state, a deterministic legacy-transfer identity awaiting a definitive Ledger block, or an accepted block awaiting CMC notification. Transport ambiguity reuses the same transfer identity; explicit CMC refunds clear naturally; there is no administrative recovery API or financial journal.
 
-## 10. Global polling cadence
+## 10. Dynamic admission pricing
+
+The CMC's integer `xdr_permyriad_per_icp` is the sole pricing input. Event Horizon stores at most one successful observation per UTC day and makes roughly one ordinary observation attempt per day. Before issuing the nonessential CMC query it requires the current liquid cycles balance to cover both `RESERVE_PROTECTION_CYCLES` and the query's current `Call::get_cost()`. A day skipped to protect the reserve is consumed as that day's attempt. Failed, skipped, or missed days cause no retry loop, alternate oracle, or backfill.
+
+The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration and 100 ICP for a global declaration.
+
+For retained floor `F` and selected latest rate `C`, prices are calculated independently with overflow-safe integer arithmetic:
+
+```text
+account_icp = ceil(10 × F / C)
+global_icp  = ceil(100 × F / C)
+```
+
+Prices are whole ICP. The global result is not derived by multiplying the rounded account result.
+
+Prices may become effective only at 00:00:00 UTC on the first day of a month. The next price is frozen exactly seven 24-hour days before that timestamp. Only observations recorded strictly before the freeze timestamp participate in that calculation; later observations can affect a subsequent epoch. A frozen price is immutable. If the latest participating CMC rate timestamp is more than seven 24-hour days old at freeze, the current prices are carried forward and marked stale rather than recalculated. At the effective timestamp the frozen price becomes current.
+
+`get_pricing : () -> (Pricing) query` is read-only and tightly bounded. It returns initialization state, current and optional frozen prices, effective and freeze timestamps, retained floor and latest observations with timestamps, and the stale carry-forward flag. It returns no subscriptions, status, logs, or administration controls.
+
+## 11. Global polling cadence
 
 `T = 10^12 cycles`.
 
@@ -169,9 +198,9 @@ Hysteresis is stateful. A balance increase may jump directly to the fastest mode
 
 Continuous means no deliberately inserted delay after one complete poll; polls never overlap and execution must yield between bounded asynchronous operations.
 
-## 11. Production observability and immutability
+## 12. Production observability and immutability
 
-The production backend exposes no callable application methods. Its Candid service is empty.
+The production backend exposes only the `get_pricing` application query. The release audit rejects every other application query, composite query, or update.
 
 Before controller removal:
 
@@ -183,8 +212,8 @@ Before controller removal:
 
 Immutability means an empty controller list, not transfer to a blackhole canister.
 
-## 12. Frontend
+## 13. Frontend
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The frontend is informational. It has no Event Horizon backend application API to call. It may use Jupiter Historian to explain/verify the corresponding endowment route.
+The mutable frontend's certified embedded JavaScript discovers the backend canister through the deployment environment and directly issues the read-only `get_pricing` query. No frontend update call is involved. It displays authoritative current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.

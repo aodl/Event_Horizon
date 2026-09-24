@@ -3,7 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "build:frontend": "esbuild canisters/frontend/public/app.js --bundle --minify --format=iife --platform=browser --target=es2022 --legal-comments=none --outfile=canisters/frontend/public/app.bundle.js",
     "test": "node --test canisters/frontend/test/*.test.mjs"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@icp-sdk/core": "6.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
 }

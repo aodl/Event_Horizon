@@ -18,6 +18,10 @@ Do not continue unless all of the following are true:
 - the canister has a healthy cycles reserve;
 - the configured Ledger, CMC, Historian and Faucet constants are correct;
 - the Jupiter Faucet `X` alias points to this backend canister;
+- pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
+- the Wasm export audit permits exactly `canister_query get_pricing` and no other application method;
+- the frontend Wasm export audit permits exactly `canister_query http_request` and rejects `http_request_update`;
+- account and global Historian admission totals have been tested against the current prices;
 - no remaining operational task requires controller access.
 
 ## Inspect

@@ -29,6 +29,19 @@ enum NotifyError {
     },
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+pub struct IcpXdrConversionRate {
+    pub timestamp_seconds: u64,
+    pub xdr_permyriad_per_icp: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct IcpXdrConversionRateResponse {
+    data: IcpXdrConversionRate,
+    hash_tree: Vec<u8>,
+    certificate: Vec<u8>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NotifyOutcome {
     Success,
@@ -68,4 +81,23 @@ pub async fn notify_top_up(
             NotifyOutcome::Terminal(format!("invalid_transaction {message}"))
         }
     }
+}
+
+pub async fn get_icp_xdr_conversion_rate(
+    call: Call<'static, 'static>,
+) -> Result<(IcpXdrConversionRate, u128), String> {
+    let cost = call.get_cost();
+    let response = call
+        .await
+        .map_err(|e| format!("pricing transport: {e:?}"))?
+        .candid::<IcpXdrConversionRateResponse>()
+        .map_err(|e| format!("pricing decode: {e:?}"))?;
+    if response.data.xdr_permyriad_per_icp == 0 {
+        return Err("pricing rate is zero".to_string());
+    }
+    Ok((response.data, cost))
+}
+
+pub fn icp_xdr_conversion_rate_call(cmc: Principal) -> Call<'static, 'static> {
+    Call::bounded_wait(cmc, "get_icp_xdr_conversion_rate")
 }

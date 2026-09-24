@@ -5,15 +5,32 @@ use thiserror::Error;
 /// `minimum_e8s == 0` is the internal sentinel for an unfiltered subscription:
 /// every incoming transfer to the watched account is relevant.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubscriptionDeclaration {
-    pub subscriber: Principal,
-    pub numbered_subaccount: u8,
-    pub minimum_e8s: u64,
+pub enum SubscriptionDeclaration {
+    Global {
+        subscriber: Principal,
+    },
+    Account {
+        subscriber: Principal,
+        numbered_subaccount: u8,
+        minimum_e8s: u64,
+    },
 }
 
 impl SubscriptionDeclaration {
-    pub fn subaccount(&self) -> [u8; 32] {
-        numbered_subaccount(self.numbered_subaccount)
+    pub fn subscriber(&self) -> Principal {
+        match self {
+            Self::Global { subscriber } | Self::Account { subscriber, .. } => *subscriber,
+        }
+    }
+
+    pub fn subaccount(&self) -> Option<[u8; 32]> {
+        match self {
+            Self::Global { .. } => None,
+            Self::Account {
+                numbered_subaccount: number,
+                ..
+            } => Some(numbered_subaccount(*number)),
+        }
     }
 }
 
@@ -110,7 +127,11 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
 
     // Principal text never contains '.', while an amount may (for example 0.01),
     // so split at the first separator rather than the last.
-    let (principal_text, rest) = text.split_once('.').ok_or(MemoParseError::InvalidShape)?;
+    let Some((principal_text, rest)) = text.split_once('.') else {
+        return Ok(SubscriptionDeclaration::Global {
+            subscriber: parse_principal(text)?,
+        });
+    };
     let (subaccount_text, amount_text) = match rest.split_once(':') {
         Some((subaccount, amount)) if !amount.contains(':') && !amount.is_empty() => {
             (subaccount, Some(amount))
@@ -143,7 +164,7 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
         }
     };
 
-    Ok(SubscriptionDeclaration {
+    Ok(SubscriptionDeclaration::Account {
         subscriber,
         numbered_subaccount,
         minimum_e8s,
@@ -159,9 +180,14 @@ mod tests {
         let memo = b"r5m5ydiaaaaaaaaqanaacai.7:0.01";
         assert_eq!(memo.len(), 30);
         let parsed = parse_subscription_memo(memo).unwrap();
-        assert_eq!(parsed.subscriber.to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
-        assert_eq!(parsed.numbered_subaccount, 7);
-        assert_eq!(parsed.minimum_e8s, 1_000_000);
+        assert_eq!(
+            parsed,
+            SubscriptionDeclaration::Account {
+                subscriber: Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap(),
+                numbered_subaccount: 7,
+                minimum_e8s: 1_000_000,
+            }
+        );
         assert_eq!(
             format!("X.{}", std::str::from_utf8(memo).unwrap()).len(),
             32
@@ -171,9 +197,38 @@ mod tests {
     #[test]
     fn omitted_threshold_means_every_incoming_transfer() {
         let parsed = parse_subscription_memo(b"r5m5ydiaaaaaaaaqanaacai.7").unwrap();
-        assert_eq!(parsed.subscriber.to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
-        assert_eq!(parsed.numbered_subaccount, 7);
-        assert_eq!(parsed.minimum_e8s, 0);
+        assert!(matches!(
+            parsed,
+            SubscriptionDeclaration::Account {
+                numbered_subaccount: 7,
+                minimum_e8s: 0,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn principal_only_is_global() {
+        let parsed = parse_subscription_memo(b"r5m5ydiaaaaaaaaqanaacai").unwrap();
+        assert_eq!(
+            parsed,
+            SubscriptionDeclaration::Global {
+                subscriber: Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap(),
+            }
+        );
+        assert_eq!(format!("X.{}", "r5m5ydiaaaaaaaaqanaacai").len(), 25);
+    }
+
+    #[test]
+    fn malformed_ambiguous_forms_reject() {
+        for memo in [
+            b"r5m5ydiaaaaaaaaqanaacai:".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai.".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai.7.extra".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai:0.01".as_slice(),
+        ] {
+            assert!(parse_subscription_memo(memo).is_err(), "{memo:?}");
+        }
     }
 
     #[test]
@@ -216,7 +271,7 @@ mod tests {
     #[test]
     fn accepts_hyphenated_principal_too() {
         let parsed = parse_subscription_memo(b"r5m5y-diaaa-aaaaa-qanaa-cai.0:1").unwrap();
-        assert_eq!(parsed.subscriber.to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
+        assert_eq!(parsed.subscriber().to_text(), "r5m5y-diaaa-aaaaa-qanaa-cai");
     }
 
     #[test]

@@ -16,4 +16,8 @@ Checkpoint 03 was the supplied release-hardening source package. Its original ha
 
 The root `MANIFEST.sha256` describes the current tracked source. Generate or verify it with `tools/scripts/source-manifest`. Canonical source handoff identity is the final Git commit SHA together with the exact SHA-256 of `git archive --format=zip`. The ZIP attached to the ChatGPT review was repackaged and therefore was not byte-identical to the previously reported Git archive.
 
-No mainnet deployment, Jupiter Faucet `X` alias publication, controller removal, or production interface expansion is part of this status.
+That post-validation hardening stage made no mainnet deployment, Jupiter Faucet `X` alias publication, controller removal, or production interface expansion.
+
+## Global subscriptions and dynamic pricing
+
+Development from the validated-core tag `event-horizon-core-validated` is recorded in [`docs/codex/global-pricing-validation.md`](docs/codex/global-pricing-validation.md). This stage adds a direct global subscriber registry, `poke([])` semantics with account-hint precedence, CMC-based rolling-floor pricing, monthly frozen epochs, additive stable memory IDs 4–6, and the sole production application query `get_pricing`. The prior validation reports and Checkpoint 03 manifest remain historical evidence.

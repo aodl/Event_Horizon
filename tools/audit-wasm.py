@@ -71,19 +71,22 @@ def main() -> None:
         and n != internal_timer
     ]
     if args.backend:
-        if app_methods:
-            raise SystemExit(f"production backend unexpectedly exports application methods: {app_methods}")
+        expected = ["canister_query get_pricing"]
+        if app_methods != expected:
+            raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")
         # The IC system import `debug_print` is used for exceptional logs.
-        forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_subscription", b"debug_state"]
+        forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_pricing_once",
+                     b"debug_start_schedulers", b"debug_timer_count",
+                     b"debug_subscription", b"debug_global_subscription", b"debug_state"]
         for needle in forbidden:
             if needle in data:
                 raise SystemExit(f"production backend contains debug marker {needle!r}")
     else:
-        if "canister_query http_request" not in names:
-            raise SystemExit("frontend does not export certified http_request query")
-        debug = [n for n in app_methods if "debug" in n.lower()]
-        if debug:
-            raise SystemExit(f"frontend unexpectedly exports debug methods: {debug}")
+        expected = ["canister_query http_request"]
+        if app_methods != expected:
+            raise SystemExit(f"frontend application surface is {app_methods}, expected {expected}")
+        if b"http_request_update" in data:
+            raise SystemExit("frontend contains removed HTTP update proxy marker")
     print(f"{args.wasm}: export audit passed ({len(names)} exports)")
 
 

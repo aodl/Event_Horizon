@@ -5,14 +5,45 @@ use std::{
 
 use crate::{
     cadence::{next_mode, PollingMode},
-    config, funding, logging, polling, state,
+    config, funding, logging, polling, pricing, state,
 };
 
 thread_local! {
     static POLL_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
     static FUNDING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
+    static PRICING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
     static POLL_RUNNING: Cell<bool> = const { Cell::new(false) };
     static FUNDING_RUNNING: Cell<bool> = const { Cell::new(false) };
+    static PRICING_RUNNING: Cell<bool> = const { Cell::new(false) };
+}
+
+fn schedule_pricing(delay: Duration) {
+    let timer_id = ic_cdk_timers::set_timer(delay, async {
+        PRICING_TIMER.with_borrow_mut(|slot| {
+            slot.take();
+        });
+        let acquired = PRICING_RUNNING.with(|flag| {
+            if flag.get() {
+                false
+            } else {
+                flag.set(true);
+                true
+            }
+        });
+        if !acquired {
+            schedule_pricing(Duration::from_secs(1));
+            return;
+        }
+        pricing::run_maintenance().await;
+        PRICING_RUNNING.with(|flag| flag.set(false));
+        let now = ic_cdk::api::time() / 1_000_000_000;
+        schedule_pricing(Duration::from_secs(pricing::seconds_until_next_event(now)));
+    });
+    PRICING_TIMER.with_borrow_mut(|slot| {
+        if let Some(previous) = slot.replace(timer_id) {
+            ic_cdk_timers::clear_timer(previous);
+        }
+    });
 }
 
 fn schedule_poll(delay: Duration) {
@@ -106,6 +137,7 @@ pub fn start() {
         schedule_poll(Duration::ZERO);
     }
     schedule_funding(Duration::ZERO);
+    schedule_pricing(Duration::ZERO);
 }
 
 #[cfg(feature = "debug_api")]
@@ -118,4 +150,21 @@ pub async fn debug_funding_once() {
     if funding::run_funding_maintenance().await {
         schedule_from_balance();
     }
+}
+
+#[cfg(feature = "debug_api")]
+pub async fn debug_pricing_once() {
+    pricing::run_maintenance().await;
+}
+
+#[cfg(feature = "debug_api")]
+pub fn debug_start() {
+    start();
+}
+
+#[cfg(feature = "debug_api")]
+pub fn debug_timer_count() -> u8 {
+    u8::from(POLL_TIMER.with_borrow(|slot| slot.is_some()))
+        + u8::from(FUNDING_TIMER.with_borrow(|slot| slot.is_some()))
+        + u8::from(PRICING_TIMER.with_borrow(|slot| slot.is_some()))
 }

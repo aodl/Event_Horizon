@@ -1,84 +1,49 @@
 # Event Horizon
 
-Event Horizon is a low-latency, best-effort ICP event trigger funded by perpetual Jupiter Faucet endowments.
+Event Horizon is a low-latency, best-effort ICP Ledger wake-up service funded by perpetual Jupiter Faucet endowments. It reads the live ICP Ledger directly and calls a subscriber's `poke(vec nat8)` endpoint. Subscribers keep authoritative Ledger or Index cursors and an independent reconciliation timer; a missed poke affects latency rather than correctness.
 
-It deliberately does **not** deliver transaction data. It watches the live ICP Ledger and calls a subscriber's
-`poke(vec nat8)` endpoint when watched accounts see relevant transfers. The vector contains only the distinct numbered
-subaccounts that matched during that poll. Subscribers remain responsible for their own authoritative Ledger/Index
-reconciliation and retain an independent fallback polling cadence. A missed poke therefore affects responsiveness, not correctness.
-
-A subscription may omit its amount threshold to make every incoming transfer relevant, or provide an inclusive minimum
-of at least `0.01 ICP`.
-
-The backend exposes no callable production application API and is designed, after a controlled mainnet observation period,
-to become immutable by removing all controllers. The separately controlled certified frontend remains informational and upgradeable.
-
-## Checkpoint 03
-
-Checkpoint 03 is the release-hardening checkpoint. In addition to the Checkpoint 02a protocol implementation it now includes:
-
-- corrected CMC funding through the ICP Ledger's **legacy `transfer`** endpoint and standard CMC account/subaccount + top-up memo convention;
-- duplicate-safe legacy transfer recovery, including an accepted-transfer/lost-response regression mock;
-- expanded PocketIC scenarios for Historian completeness/fault/source admission gates, subscriber traps, CMC processing across upgrades, and stable cursor/subscription restoration;
-- a pinned `Cargo.lock` and `package-lock.json`;
-- `icp.yaml` with native public backend status/log settings;
-- canonical reproducible Docker builds and byte-for-byte double-build verification;
-- a Wasm export parser that fails the release if the production backend exposes any application query/update methods;
-- deployment, reproducible-build, testing and irreversible controller-removal runbooks;
-- basic dependency-security policy and CI scaffolding;
-- a one-command PocketIC local smoke workflow.
-
-The production Candid remains exactly:
-
-```candid
-service : () -> {}
-```
-
-## Subscription memo
-
-Full Jupiter Faucet forms:
+It supports three exact Jupiter Faucet memo forms:
 
 ```text
-X.<compact-subscriber-principal>.<subaccount>
-X.<compact-subscriber-principal>.<subaccount>:<minimum-ICP>
+X.<subscriber>                         # global Ledger activity
+X.<subscriber>.<subaccount>            # every incoming account transfer
+X.<subscriber>.<subaccount>:<amount>   # inclusive account threshold
 ```
 
-For example:
+Global and account declarations are stored separately. `poke([])` signals global activity without a more-specific account match. A sorted non-empty vector takes precedence when account declarations also match.
+
+## Dynamic admission pricing
+
+Event Horizon observes the CMC ICP/XDR conversion rate roughly daily and retains at most 1,461 UTC-day observations. With retained floor `F` and latest rate `C`:
 
 ```text
-X.r5m5ydiaaaaaaaaqanaacai.7
-X.r5m5ydiaaaaaaaaqanaacai.7:0.01
+account price = ceil(10 × F / C) ICP
+global price  = ceil(100 × F / C) ICP
 ```
 
-The thresholded example is exactly 32 bytes.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query; the certified frontend calls that query directly from its bundled browser client.
 
-## First local validation
-
-With Rust 1.94.1 and the `wasm32-unknown-unknown` target installed:
+## Validation
 
 ```bash
 npm ci
-python3 tools/static-check.py
 cargo run -p xtask -- check
+cargo run -p xtask -- pocketic
 cargo run -p xtask -- local-smoke
-```
-
-Release/reproducibility gates:
-
-```bash
+cargo run -p xtask -- security
 cargo run -p xtask -- release
 cargo run -p xtask -- repro
-cargo run -p xtask -- security
+icp build -e local
 ```
 
-`Dockerfile.repro` is the canonical production build environment.
+`Dockerfile.repro` is the canonical production build environment. See [`SPEC.md`](SPEC.md) for the normative protocol and [`CHECKPOINT.md`](CHECKPOINT.md) for provenance stages.
 
 ## Documentation
 
-- [`SPEC.md`](SPEC.md) — normative protocol contract.
-- [`docs/subscriber-guide.md`](docs/subscriber-guide.md) — subscriber integration and Index-lag behavior.
-- [`docs/operational-backend.md`](docs/operational-backend.md) — autonomous backend flow.
-- [`docs/deployment.md`](docs/deployment.md) — controlled mainnet deployment/observation.
-- [`docs/reproducible-builds.md`](docs/reproducible-builds.md) — source-to-Wasm verification.
-- [`docs/controller-removal.md`](docs/controller-removal.md) — final empty-controller procedure.
-- [`CHECKPOINT.md`](CHECKPOINT.md) — exact validation/handover status.
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/subscriber-guide.md`](docs/subscriber-guide.md)
+- [`docs/economics-pricing.md`](docs/economics-pricing.md)
+- [`docs/trust-model.md`](docs/trust-model.md)
+- [`docs/frontend.md`](docs/frontend.md)
+- [`docs/deployment.md`](docs/deployment.md)
+- [`docs/controller-removal.md`](docs/controller-removal.md)

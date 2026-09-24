@@ -17,24 +17,33 @@
     </header>
 
     <section class="card">
+      <h2>Authoritative pricing</h2>
+      <div id="pricing" class="pricing">Loading current Event Horizon pricing…</div>
+      <p>Jupiter Faucet endowments fund Event Horizon and are ultimately converted into cycles. A higher ICP/XDR rate creates more cycles per endowed ICP, so fewer ICP are needed. Event Horizon conservatively compares the latest successful daily CMC observation with the lowest daily observation it successfully recorded during the trailing 1,461 UTC-day window. It samples roughly daily, accepts missed samples, rounds upward to whole ICP, and changes prices only at monthly UTC boundaries.</p>
+    </section>
+
+    <section class="card builder">
       <h2>Subscription memo</h2>
-      <p>Endow at least <strong>10 ICP</strong> through Jupiter Faucet. Leave the trigger amount blank to react to every incoming transfer, or set an inclusive minimum.</p>
+      <p>Choose a global Ledger trigger or an account trigger. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
       <form id="memo-form">
         <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
-        <label>Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
-        <label>Minimum trigger amount (ICP, optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
+        <label>Trigger type <select id="scope"><option value="account">Account trigger</option><option value="global">Global Ledger trigger</option></select></label>
+        <span id="account-fields" class="account-fields">
+          <label>Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
+          <label>Minimum trigger amount (ICP, optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
+        </span>
       </form>
       <output id="memo-output" class="memo"></output>
       <p id="memo-help" class="help"></p>
     </section>
 
     <section class="grid">
-      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the ICP Ledger directly and calls <code>poke(subaccounts)</code> after a poll sees relevant activity.</p></article>
+      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the ICP Ledger directly. A global trigger attempts one <code>poke([])</code> when a poll processes any transaction.</p></article>
       <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative Ledger/Index cursor and a slower independent reconciliation timer.</p></article>
       <article class="card"><h2>It can beat the Index</h2><p>A poke may arrive before the ICP Index exposes the new transaction. Your application chooses its own retry/backoff policy.</p></article>
-      <article class="card"><h2>Best effort by design</h2><p>Only matched subaccount numbers are passed; there are no transaction payloads, acknowledgements, retry queue or delivery guarantee. Missed pokes affect responsiveness, not completeness.</p></article>
+      <article class="card"><h2>Specific hints win</h2><p>If account declarations also match, one sorted non-empty vector replaces the empty global hint. These subaccounts are hints, not proof that no other Ledger activity occurred. There are no transaction payloads, acknowledgements, retries or delivery guarantee.</p></article>
     </section>
   </main>
-  <script type="module" src="app.js"></script>
+  <script src="app.bundle.js"></script>
 </body>
 </html>

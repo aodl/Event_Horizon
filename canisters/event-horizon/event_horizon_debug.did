@@ -1,25 +1,32 @@
 type PollingMode = variant { ReserveProtection; Economy; Standard; Fast; VeryFast; Continuous };
+type Price = record { account_icp : nat64; global_icp : nat64 };
+type Pricing = record {
+  initialized : bool; current : Price; current_effective_at : nat64;
+  next : opt Price; next_effective_at : nat64; next_freeze_at : nat64;
+  observed_floor_xdr_permyriad : nat64; floor_observed_at : nat64;
+  latest_xdr_permyriad : nat64; latest_observed_at : nat64;
+  next_carried_forward_due_to_stale_rate : bool;
+};
 type DebugInitArgs = record {
-  ledger_canister : principal;
-  cmc_canister : principal;
-  historian_canister : principal;
-  faucet_canister : principal;
+  ledger_canister : principal; cmc_canister : principal;
+  historian_canister : principal; faucet_canister : principal;
 };
 type DebugState = record {
-  bootstrapped : bool;
-  next_block : nat64;
-  polling_mode : PollingMode;
-  subscriptions : nat64;
-  cmc_state : text;
+  bootstrapped : bool; next_block : nat64; polling_mode : PollingMode;
+  subscriptions : nat64; global_subscriptions : nat64; cmc_state : text;
+  pricing : Pricing;
 };
 type Subscription = record {
-  subscriber : principal;
-  numbered_subaccount : nat8;
-  minimum_e8s : nat64;
+  subscriber : principal; numbered_subaccount : nat8; minimum_e8s : nat64;
 };
 service : (DebugInitArgs) -> {
+  get_pricing : () -> (Pricing) query;
   debug_state : () -> (DebugState) query;
   debug_poll_once : () -> ();
   debug_funding_once : () -> ();
+  debug_pricing_once : () -> ();
+  debug_start_schedulers : () -> ();
+  debug_timer_count : () -> (nat8) query;
   debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
+  debug_global_subscription : (principal) -> (bool) query;
 }

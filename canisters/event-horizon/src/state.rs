@@ -10,7 +10,11 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "debug_api")]
 use crate::config::RuntimeConfig;
-use crate::{cadence::PollingMode, subscription::Subscription};
+use crate::{
+    cadence::PollingMode,
+    pricing::{Observation, PricingState},
+    subscription::Subscription,
+};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -20,6 +24,9 @@ const SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const CMC_MEMORY_ID: MemoryId = MemoryId::new(2);
 #[cfg(feature = "debug_api")]
 const DEBUG_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(3);
+const GLOBAL_SUBSCRIBERS_MEMORY_ID: MemoryId = MemoryId::new(4);
+const PRICE_OBSERVATIONS_MEMORY_ID: MemoryId = MemoryId::new(5);
+const PRICING_STATE_MEMORY_ID: MemoryId = MemoryId::new(6);
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
@@ -54,6 +61,31 @@ pub enum CmcState {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct AccountKey([u8; 32]);
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PrincipalKey(Vec<u8>);
+
+impl From<candid::Principal> for PrincipalKey {
+    fn from(value: candid::Principal) -> Self {
+        Self(value.as_slice().to_vec())
+    }
+}
+
+impl Storable for PrincipalKey {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.0)
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self(bytes.into_owned())
+    }
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 29,
+        is_fixed_size: false,
+    };
+}
 
 impl From<[u8; 32]> for AccountKey {
     fn from(value: [u8; 32]) -> Self {
@@ -104,6 +136,8 @@ macro_rules! candid_value {
 candid_value!(SubscriptionValue, Subscription, 128);
 candid_value!(MetadataValue, Metadata, 256);
 candid_value!(CmcStateValue, CmcState, 256);
+candid_value!(ObservationValue, Observation, 128);
+candid_value!(PricingStateValue, PricingState, 512);
 #[cfg(feature = "debug_api")]
 candid_value!(DebugConfigValue, RuntimeConfig, 256);
 
@@ -113,6 +147,9 @@ thread_local! {
     static META: RefCell<Option<StableCell<MetadataValue, Memory>>> = const { RefCell::new(None) };
     static SUBSCRIPTIONS: RefCell<Option<StableBTreeMap<AccountKey, SubscriptionValue, Memory>>> = const { RefCell::new(None) };
     static CMC_STATE: RefCell<Option<StableCell<CmcStateValue, Memory>>> = const { RefCell::new(None) };
+    static GLOBAL_SUBSCRIBERS: RefCell<Option<StableBTreeMap<PrincipalKey, u8, Memory>>> = const { RefCell::new(None) };
+    static PRICE_OBSERVATIONS: RefCell<Option<StableBTreeMap<u64, ObservationValue, Memory>>> = const { RefCell::new(None) };
+    static PRICING_STATE: RefCell<Option<StableCell<PricingStateValue, Memory>>> = const { RefCell::new(None) };
     #[cfg(feature = "debug_api")]
     static DEBUG_CONFIG: RefCell<Option<StableCell<DebugConfigValue, Memory>>> = const { RefCell::new(None) };
 }
@@ -150,10 +187,51 @@ fn with_cmc<R>(f: impl FnOnce(&mut StableCell<CmcStateValue, Memory>) -> R) -> R
     })
 }
 
+fn with_global_subscribers<R>(
+    f: impl FnOnce(&mut StableBTreeMap<PrincipalKey, u8, Memory>) -> R,
+) -> R {
+    GLOBAL_SUBSCRIBERS.with_borrow_mut(|slot| {
+        let map = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER
+                .with_borrow(|m| StableBTreeMap::init(m.get(GLOBAL_SUBSCRIBERS_MEMORY_ID)))
+        });
+        f(map)
+    })
+}
+
+fn with_price_observations<R>(
+    f: impl FnOnce(&mut StableBTreeMap<u64, ObservationValue, Memory>) -> R,
+) -> R {
+    PRICE_OBSERVATIONS.with_borrow_mut(|slot| {
+        let map = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER
+                .with_borrow(|m| StableBTreeMap::init(m.get(PRICE_OBSERVATIONS_MEMORY_ID)))
+        });
+        f(map)
+    })
+}
+
+fn with_pricing_state<R>(f: impl FnOnce(&mut StableCell<PricingStateValue, Memory>) -> R) -> R {
+    PRICING_STATE.with_borrow_mut(|slot| {
+        let cell = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(
+                    m.get(PRICING_STATE_MEMORY_ID),
+                    PricingStateValue(PricingState::default()),
+                )
+            })
+        });
+        f(cell)
+    })
+}
+
 pub fn initialize_if_needed() {
     with_meta(|_| ());
     with_subscriptions(|_| ());
     with_cmc(|_| ());
+    with_global_subscribers(|_| ());
+    with_price_observations(|_| ());
+    with_pricing_state(|_| ());
     #[cfg(feature = "debug_api")]
     with_debug_config(|_| ());
 }
@@ -198,6 +276,67 @@ pub fn write_cmc_state(value: CmcState) {
     with_cmc(|cell| {
         cell.set(CmcStateValue(value));
     });
+}
+
+pub fn put_global_subscriber(principal: candid::Principal) {
+    with_global_subscribers(|map| {
+        map.insert(PrincipalKey::from(principal), 1);
+    });
+}
+
+pub fn global_subscribers() -> Vec<candid::Principal> {
+    with_global_subscribers(|map| {
+        map.iter()
+            .map(|entry| candid::Principal::from_slice(&entry.key().0))
+            .collect()
+    })
+}
+
+#[cfg(feature = "debug_api")]
+pub fn has_global_subscriber(principal: candid::Principal) -> bool {
+    with_global_subscribers(|map| map.contains_key(&PrincipalKey::from(principal)))
+}
+
+#[cfg(feature = "debug_api")]
+pub fn global_subscription_count() -> u64 {
+    with_global_subscribers(|map| map.len())
+}
+
+pub fn read_pricing_state() -> PricingState {
+    with_pricing_state(|cell| cell.get().0.clone())
+}
+
+pub fn write_pricing_state(value: PricingState) {
+    with_pricing_state(|cell| {
+        cell.set(PricingStateValue(value));
+    });
+}
+
+pub fn price_observation(day: u64) -> Option<Observation> {
+    with_price_observations(|map| map.get(&day).map(|value| value.0))
+}
+
+pub fn put_price_observation(observation: Observation) {
+    with_price_observations(|map| {
+        map.insert(observation.utc_day, ObservationValue(observation));
+    });
+}
+
+pub fn prune_price_observations(oldest_day: u64) {
+    with_price_observations(|map| {
+        let expired: Vec<u64> = map
+            .iter()
+            .map(|entry| *entry.key())
+            .take_while(|day| *day < oldest_day)
+            .collect();
+        for day in expired {
+            map.remove(&day);
+        }
+    });
+}
+
+pub fn price_observations() -> Vec<Observation> {
+    with_price_observations(|map| map.iter().map(|entry| entry.value().0).collect())
 }
 
 #[cfg(feature = "debug_api")]
