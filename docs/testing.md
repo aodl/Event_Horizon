@@ -37,7 +37,7 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 - surplus success, lost response/duplicate recovery, clean reject, insufficient funds, bad fee, future timestamp, `TxTooOld`, and pending-transfer upgrade;
 - subscription admission after the original Faucet ICP has flowed through funding/surplus transfers;
 - destination-disabled equivalence and zero policy;
-- exact `304b26e…` Idle/TransferPending/NotifyPending migration plus current-Wasm upgrades of every pending V2 phase;
+- fresh-install `FundingState::Idle`, CMC-only `None`, split-plan `Some(PlannedSurplus)`, and current-Wasm upgrades of every pending funding phase;
 - subscription/cursor persistence across upgrade;
 - absence of debug application methods in the production Wasm.
 
