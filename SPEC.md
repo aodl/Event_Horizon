@@ -31,6 +31,8 @@ A Jupiter Faucet endowment uses exactly one of these full memo forms:
 X.<compact-subscriber-principal>
 X.<compact-subscriber-principal>.<numbered-subaccount>
 X.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-ICP>
+X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>
+X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>:<minimum-ICP>
 ```
 
 Examples:
@@ -47,13 +49,15 @@ X.r5m5ydiaaaaaaaaqanaacai.7:0.01
 r5m5ydiaaaaaaaaqanaacai
 r5m5ydiaaaaaaaaqanaacai.7
 r5m5ydiaaaaaaaaqanaacai.7:0.01
+r5m5ydiaaaaaaaaqanaacai.7-18
+r5m5ydiaaaaaaaaqanaacai.7-18:0.01
 ```
 
 The suffix grammar is:
 
 ```text
 <principal>
-<principal> "." <subaccount> [ ":" <amount> ]
+<principal> "." ( <subaccount> | <start> "-" <end> ) [ ":" <amount> ]
 ```
 
 Rules:
@@ -63,6 +67,9 @@ Rules:
 - a global declaration does not represent all 256 subaccounts of the subscriber;
 - anonymous and management principals are invalid;
 - subaccount is a decimal integer `0..255`;
+- integer spelling is canonical decimal: `0` or a nonzero digit followed by decimal digits; signs and leading zeroes are invalid;
+- range endpoints are inclusive and must satisfy `0 <= start < end <= 255`;
+- reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
 - when present, amount is decimal ICP with one or two fractional digits, or an integer amount;
 - fractional amounts require a leading zero (`0.1`, not `.1`);
@@ -82,18 +89,20 @@ The watched legacy ICP account identifier is derived from the subscriber princip
 
 At most one effective subscription is required for a watched account. If another admitted declaration for the same account has a less restrictive threshold, the stored threshold becomes the less restrictive value. An unfiltered declaration (no threshold) therefore subsumes every thresholded declaration for that same account.
 
+An admitted range is expanded once into the existing watched-account map, deriving one account identifier for every inclusive endpoint value. Expansion is bounded to 256 entries. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
+
 ## 5. Admission
 
 A declaration is eligible for permanent admission only after both are true:
 
 1. Event Horizon observes an authorised Jupiter Faucet raw-ICP payout to Event Horizon carrying that declaration in its ICRC-1 memo.
-2. Jupiter Historian reports a cumulative qualifying Jupiter Faucet endowment for that exact raw-ICP route at least equal to the current account or global admission price, and reports the result as complete/trustworthy.
+2. Jupiter Historian reports a cumulative qualifying Jupiter Faucet endowment for that exact raw-ICP route at least equal to the current account, range, or global admission price, and reports the result as complete/trustworthy.
 
 The approved mainnet Faucet payout source is fixed in the production Wasm.
 
 Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
 
-Global and account declarations are distinct identities and have independently calculated prices. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
+Global, range, and account declarations are distinct exact routes with class-specific prices. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
 If Historian is unavailable/incomplete for one payout, Event Horizon does not persist an admission-retry queue. A later perpetual Faucet payout carrying the same declaration provides a natural later admission opportunity.
 
@@ -154,7 +163,7 @@ Because Event Horizon reads the Ledger directly, a poke may arrive before the IC
 
 All Event Horizon cycles are a common operating pool. There is no attribution of cycles expenditure to individual subscriptions.
 
-Account and global endowments enter the same pool. Their different admission prices do not create subscriber-specific cycle allowances.
+Account, range, and global endowments enter the same pool. Their different admission prices do not create subscriber-specific cycle allowances.
 
 Larger endowments do not buy priority or lower latency.
 
@@ -166,20 +175,21 @@ Only the minimum durable financial state necessary to avoid duplicate/stranded v
 
 The CMC's integer `xdr_permyriad_per_icp` is the sole pricing input. Event Horizon stores at most one successful observation per UTC day and makes roughly one ordinary observation attempt per day. Before issuing the nonessential CMC query it requires the current liquid cycles balance to cover both `RESERVE_PROTECTION_CYCLES` and the query's current `Call::get_cost()`. A day skipped to protect the reserve is consumed as that day's attempt. Failed, skipped, or missed days cause no retry loop, alternate oracle, or backfill.
 
-The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration and 100 ICP for a global declaration.
+The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration, 20 ICP for a range declaration, and 100 ICP for a global declaration.
 
 For retained floor `F` and selected latest rate `C`, prices are calculated independently with overflow-safe integer arithmetic:
 
 ```text
 account_icp = ceil(10 × F / C)
+range_icp   = ceil(20 × F / C)
 global_icp  = ceil(100 × F / C)
 ```
 
-Prices are whole ICP. The global result is not derived by multiplying the rounded account result.
+Prices are whole ICP and each economic basis is rounded independently. The range result is not twice the rounded account result. Because `ceil(20F/C) = ceil(ceil(100F/C)/5)`, the public/current range value is derived with overflow-safe ceiling division from the durably stored global value. This leaves the stable internal account/global `Price` encoding unchanged.
 
 Prices may become effective only at 00:00:00 UTC on the first day of a month. The next price is frozen exactly seven 24-hour days before that timestamp. Only observations recorded strictly before the freeze timestamp participate in that calculation; later observations can affect a subsequent epoch. A frozen price is immutable. If the latest participating CMC rate timestamp is more than seven 24-hour days old at freeze, the current prices are carried forward and marked stale rather than recalculated. At the effective timestamp the frozen price becomes current.
 
-`get_pricing : () -> (Pricing) query` is read-only and tightly bounded. It returns initialization state, current and optional frozen prices, effective and freeze timestamps, retained floor and latest observations with timestamps, and the stale carry-forward flag. It returns no subscriptions, status, logs, or administration controls.
+`get_pricing : () -> (Pricing) query` is read-only and tightly bounded. It returns account, range, and global current and optional frozen prices, initialization state, effective and freeze timestamps, retained floor and latest observations with timestamps, and the stale carry-forward flag. It returns no subscriptions, status, logs, or administration controls.
 
 ## 11. Global polling cadence
 
@@ -216,4 +226,4 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The mutable frontend's certified embedded JavaScript discovers the backend canister through the deployment environment and directly issues the read-only `get_pricing` query. No frontend update call is involved. It displays authoritative current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
+The mutable frontend's certified embedded JavaScript discovers the backend canister through the deployment environment and directly issues the read-only `get_pricing` query. No frontend update call is involved. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, single-account, and inclusive-range modes, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.

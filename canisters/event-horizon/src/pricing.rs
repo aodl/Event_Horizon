@@ -104,7 +104,7 @@ pub struct Pricing {
 
 pub fn ceil_div(value: u64, divisor: u64) -> u64 {
     assert!(divisor != 0, "ceiling division requires a nonzero divisor");
-    value / divisor + u64::from(value % divisor != 0)
+    value / divisor + u64::from(!value.is_multiple_of(divisor))
 }
 
 pub fn utc_day(timestamp_seconds: u64) -> u64 {

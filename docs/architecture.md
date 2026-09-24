@@ -10,7 +10,7 @@ The reader uses no Index or archive traversal. A proven archived prefix is logge
 
 ## Admission and storage
 
-A Faucet-origin payout memo is parsed as either a global declaration or an account declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. Stable memory remains additive:
+A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted range expands to at most 256 ordinary entries in the existing watched-account map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
 
 | ID | Contents |
 |---:|---|
@@ -22,7 +22,7 @@ A Faucet-origin payout memo is parsed as either a global declaration or an accou
 | 5 | daily pricing observations keyed by UTC day |
 | 6 | current/frozen pricing state |
 
-IDs 0–2 retain their validated encodings.
+All IDs and durable encodings retain their validated pre-range form. In particular, pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
 
 ## Independent timer lanes
 

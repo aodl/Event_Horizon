@@ -1604,7 +1604,7 @@ mod tests {
         assert_eq!(
             after_pricing.current.range_icp,
             after_pricing.current.global_icp / 5
-                + u64::from(after_pricing.current.global_icp % 5 != 0)
+                + u64::from(!after_pricing.current.global_icp.is_multiple_of(5))
         );
         assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 1_000_000);
         assert!(

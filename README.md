@@ -2,15 +2,17 @@
 
 Event Horizon is a low-latency, best-effort ICP Ledger wake-up service funded by perpetual Jupiter Faucet endowments. It reads the live ICP Ledger directly and calls a subscriber's `poke(vec nat8)` endpoint. Subscribers keep authoritative Ledger or Index cursors and an independent reconciliation timer; a missed poke affects latency rather than correctness.
 
-It supports three exact Jupiter Faucet memo forms:
+It supports five exact Jupiter Faucet memo forms:
 
 ```text
 X.<subscriber>                         # global Ledger activity
 X.<subscriber>.<subaccount>            # every incoming account transfer
 X.<subscriber>.<subaccount>:<amount>   # inclusive account threshold
+X.<subscriber>.<start>-<end>           # every transfer in an inclusive range
+X.<subscriber>.<start>-<end>:<amount>  # inclusive threshold throughout a range
 ```
 
-Global and account declarations are stored separately. `poke([])` signals global activity without a more-specific account match. A sorted non-empty vector takes precedence when account declarations also match.
+Ranges satisfy `0 <= start < end <= 255` and expand at admission into the existing watched-account map. Overlaps retain the lowest permanent threshold. `poke([])` signals global activity without a more-specific match; one sorted unique non-empty vector of actual matched subaccounts takes precedence.
 
 ## Dynamic admission pricing
 
@@ -18,6 +20,7 @@ Event Horizon observes the CMC ICP/XDR conversion rate roughly daily and retains
 
 ```text
 account price = ceil(10 × F / C) ICP
+range price   = ceil(20 × F / C) ICP
 global price  = ceil(100 × F / C) ICP
 ```
 

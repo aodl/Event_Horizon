@@ -4,11 +4,11 @@
 
 A first successful zero-length Ledger read bootstraps prospectively. Each later poll pins the first response's exclusive `chain_length`, processes only that interval, and persists page progress. Proven archived prefixes are logged and skipped without archive calls.
 
-Account matches accumulate sorted subaccounts per subscriber. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one poke per subscriber: a non-empty account set wins; otherwise a global match sends an empty vector.
+Single-account and expanded-range matches accumulate actual sorted subaccounts per subscriber. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one poke per subscriber: a non-empty account set wins; otherwise a global match sends an empty vector.
 
 ## Admission
 
-Only a payout from the configured Faucet default account to Event Horizon can propose admission. Historian must verify the exact memo route, a complete view, and a total at least equal to the current account/global requirement. Pricing must have initialized. Failed evaluation creates no retry queue; a later Faucet payout is another opportunity.
+Only a payout from the configured Faucet default account to Event Horizon can propose admission. Historian must verify the exact memo route, a complete view, and a total at least equal to the current account/range/global requirement. Pricing must have initialized. A valid range expands inclusively into at most 256 watched-account merges. Failed evaluation creates no retry queue; a later Faucet payout is another opportunity.
 
 ## Pricing lane
 
