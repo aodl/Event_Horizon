@@ -73,13 +73,24 @@ pub enum FundingStateV2 {
         created_at_time_nanos: u64,
         planned_surplus_e8s: u64,
         planned_surplus_fee_e8s: u64,
+        planned_surplus_destination: Option<[u8; 32]>,
+        planned_surplus_memo: Option<u64>,
     },
     CmcNotifyPending {
         block_index: u64,
         planned_surplus_e8s: u64,
         planned_surplus_fee_e8s: u64,
+        planned_surplus_destination: Option<[u8; 32]>,
+        planned_surplus_memo: Option<u64>,
     },
     SurplusTransferPending {
+        amount_e8s: u64,
+        fee_e8s: u64,
+        created_at_time_nanos: u64,
+    },
+    SurplusTransferPendingV2 {
+        destination: [u8; 32],
+        memo: u64,
         amount_e8s: u64,
         fee_e8s: u64,
         created_at_time_nanos: u64,
@@ -352,11 +363,15 @@ pub fn read_funding_state() -> FundingStateV2 {
             created_at_time_nanos,
             planned_surplus_e8s: 0,
             planned_surplus_fee_e8s: 0,
+            planned_surplus_destination: None,
+            planned_surplus_memo: None,
         },
         CmcState::NotifyPending { block_index } => FundingStateV2::CmcNotifyPending {
             block_index,
             planned_surplus_e8s: 0,
             planned_surplus_fee_e8s: 0,
+            planned_surplus_destination: None,
+            planned_surplus_memo: None,
         },
     };
     write_funding_state(migrated.clone());

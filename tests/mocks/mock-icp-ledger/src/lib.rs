@@ -427,4 +427,16 @@ fn debug_accepted_legacy_transfers_with_memo(memo: u64) -> u64 {
     })
 }
 
+#[ic_cdk::query]
+fn debug_accepted_legacy_destinations_with_memo(memo: u64) -> Vec<Vec<u8>> {
+    STATE.with(|s| {
+        s.borrow()
+            .legacy_dedup
+            .iter()
+            .filter(|entry| entry.arg.memo == memo)
+            .map(|entry| entry.arg.to.clone())
+            .collect()
+    })
+}
+
 ic_cdk::export_candid!();

@@ -1,5 +1,3 @@
-use candid::Principal;
-
 #[cfg(feature = "debug_api")]
 use std::cell::Cell;
 
@@ -102,18 +100,89 @@ fn cmc_transfer_arg(
 }
 
 fn surplus_transfer_arg(
-    destination: Principal,
+    destination: [u8; 32],
+    memo: u64,
     amount_e8s: u64,
     fee_e8s: u64,
     created_at_time_nanos: u64,
 ) -> ledger::LegacyTransferArg {
     legacy_transfer_arg(
-        account_identifier_bytes(destination, [0; 32]),
-        config::SURPLUS_TRANSFER_MEMO,
+        destination,
+        memo,
         amount_e8s,
         fee_e8s,
         created_at_time_nanos,
     )
+}
+
+fn configured_surplus_identity() -> Option<([u8; 32], u64)> {
+    config::runtime().surplus_canister.map(|destination| {
+        (
+            account_identifier_bytes(destination, [0; 32]),
+            config::SURPLUS_TRANSFER_MEMO,
+        )
+    })
+}
+
+/// Upgrades the undeployed pre-hardening FundingStateV2 encoding while the old
+/// runtime configuration is still available. Newly created plans always contain
+/// these fields before their retained CMC transfer begins.
+pub fn harden_pending_identity() {
+    let current = state::read_funding_state();
+    let identity = configured_surplus_identity();
+    let hardened = match current {
+        FundingStateV2::CmcTransferPending {
+            amount_e8s,
+            fee_e8s,
+            created_at_time_nanos,
+            planned_surplus_e8s,
+            planned_surplus_fee_e8s,
+            planned_surplus_destination: None,
+            planned_surplus_memo: None,
+        } if planned_surplus_e8s > 0 => {
+            identity.map(|(destination, memo)| FundingStateV2::CmcTransferPending {
+                amount_e8s,
+                fee_e8s,
+                created_at_time_nanos,
+                planned_surplus_e8s,
+                planned_surplus_fee_e8s,
+                planned_surplus_destination: Some(destination),
+                planned_surplus_memo: Some(memo),
+            })
+        }
+        FundingStateV2::CmcNotifyPending {
+            block_index,
+            planned_surplus_e8s,
+            planned_surplus_fee_e8s,
+            planned_surplus_destination: None,
+            planned_surplus_memo: None,
+        } if planned_surplus_e8s > 0 => {
+            identity.map(|(destination, memo)| FundingStateV2::CmcNotifyPending {
+                block_index,
+                planned_surplus_e8s,
+                planned_surplus_fee_e8s,
+                planned_surplus_destination: Some(destination),
+                planned_surplus_memo: Some(memo),
+            })
+        }
+        FundingStateV2::SurplusTransferPending {
+            amount_e8s,
+            fee_e8s,
+            created_at_time_nanos,
+        } => identity.map(
+            |(destination, memo)| FundingStateV2::SurplusTransferPendingV2 {
+                destination,
+                memo,
+                amount_e8s,
+                fee_e8s,
+                created_at_time_nanos,
+            },
+        ),
+        _ => None,
+    };
+    if let Some(hardened) = hardened {
+        state::write_funding_state(hardened);
+    }
 }
 
 async fn resume_cmc_transfer(
@@ -122,6 +191,8 @@ async fn resume_cmc_transfer(
     created_at_time_nanos: u64,
     planned_surplus_e8s: u64,
     planned_surplus_fee_e8s: u64,
+    planned_surplus_destination: Option<[u8; 32]>,
+    planned_surplus_memo: Option<u64>,
 ) -> bool {
     let runtime = config::runtime();
     let arg = cmc_transfer_arg(amount_e8s, fee_e8s, created_at_time_nanos);
@@ -131,6 +202,8 @@ async fn resume_cmc_transfer(
                 block_index,
                 planned_surplus_e8s,
                 planned_surplus_fee_e8s,
+                planned_surplus_destination,
+                planned_surplus_memo,
             });
             true
         }
@@ -148,13 +221,21 @@ async fn resume_cmc_transfer(
     }
 }
 
-async fn resume_surplus_transfer(amount_e8s: u64, fee_e8s: u64, created_at_time_nanos: u64) {
+async fn resume_surplus_transfer(
+    destination: [u8; 32],
+    memo: u64,
+    amount_e8s: u64,
+    fee_e8s: u64,
+    created_at_time_nanos: u64,
+) {
     let runtime = config::runtime();
-    let Some(destination) = runtime.surplus_canister else {
-        state::write_funding_state(FundingStateV2::Idle);
-        return;
-    };
-    let arg = surplus_transfer_arg(destination, amount_e8s, fee_e8s, created_at_time_nanos);
+    let arg = surplus_transfer_arg(
+        destination,
+        memo,
+        amount_e8s,
+        fee_e8s,
+        created_at_time_nanos,
+    );
     match ledger::legacy_transfer(runtime.ledger_canister, &arg).await {
         ledger::LegacyTransferOutcome::Accepted(_) => {
             state::write_funding_state(FundingStateV2::Idle);
@@ -175,25 +256,37 @@ async fn resume_notify(
     block_index: u64,
     planned_surplus_e8s: u64,
     planned_surplus_fee_e8s: u64,
+    planned_surplus_destination: Option<[u8; 32]>,
+    planned_surplus_memo: Option<u64>,
 ) -> bool {
     let runtime = config::runtime();
     let self_id = ic_cdk::api::canister_self();
     match cmc::notify_top_up(runtime.cmc_canister, self_id, block_index).await {
         cmc::NotifyOutcome::Success => {
             let can_divert = planned_surplus_e8s > 0
-                && runtime.surplus_canister.is_some()
                 && liquid_cycles() >= config::SURPLUS_HEALTH_THRESHOLD_CYCLES;
             if !can_divert {
                 state::write_funding_state(FundingStateV2::Idle);
                 return true;
             }
             let created_at_time_nanos = ic_cdk::api::time();
-            state::write_funding_state(FundingStateV2::SurplusTransferPending {
+            let (Some(destination), Some(memo)) =
+                (planned_surplus_destination, planned_surplus_memo)
+            else {
+                logging::surplus_financial_invariant("planned surplus identity is absent");
+                state::write_funding_state(FundingStateV2::Idle);
+                return false;
+            };
+            state::write_funding_state(FundingStateV2::SurplusTransferPendingV2 {
+                destination,
+                memo,
                 amount_e8s: planned_surplus_e8s,
                 fee_e8s: planned_surplus_fee_e8s,
                 created_at_time_nanos,
             });
             resume_surplus_transfer(
+                destination,
+                memo,
                 planned_surplus_e8s,
                 planned_surplus_fee_e8s,
                 created_at_time_nanos,
@@ -220,13 +313,26 @@ async fn continue_funding_state(current: FundingStateV2) -> Option<bool> {
             block_index,
             planned_surplus_e8s,
             planned_surplus_fee_e8s,
-        } => Some(resume_notify(block_index, planned_surplus_e8s, planned_surplus_fee_e8s).await),
+            planned_surplus_destination,
+            planned_surplus_memo,
+        } => Some(
+            resume_notify(
+                block_index,
+                planned_surplus_e8s,
+                planned_surplus_fee_e8s,
+                planned_surplus_destination,
+                planned_surplus_memo,
+            )
+            .await,
+        ),
         FundingStateV2::CmcTransferPending {
             amount_e8s,
             fee_e8s,
             created_at_time_nanos,
             planned_surplus_e8s,
             planned_surplus_fee_e8s,
+            planned_surplus_destination,
+            planned_surplus_memo,
         } => {
             if resume_cmc_transfer(
                 amount_e8s,
@@ -234,6 +340,8 @@ async fn continue_funding_state(current: FundingStateV2) -> Option<bool> {
                 created_at_time_nanos,
                 planned_surplus_e8s,
                 planned_surplus_fee_e8s,
+                planned_surplus_destination,
+                planned_surplus_memo,
             )
             .await
             {
@@ -241,22 +349,47 @@ async fn continue_funding_state(current: FundingStateV2) -> Option<bool> {
                     block_index,
                     planned_surplus_e8s,
                     planned_surplus_fee_e8s,
+                    planned_surplus_destination,
+                    planned_surplus_memo,
                 } = state::read_funding_state()
                 {
                     return Some(
-                        resume_notify(block_index, planned_surplus_e8s, planned_surplus_fee_e8s)
-                            .await,
+                        resume_notify(
+                            block_index,
+                            planned_surplus_e8s,
+                            planned_surplus_fee_e8s,
+                            planned_surplus_destination,
+                            planned_surplus_memo,
+                        )
+                        .await,
                     );
                 }
             }
             Some(false)
         }
         FundingStateV2::SurplusTransferPending {
+            amount_e8s: _,
+            fee_e8s: _,
+            created_at_time_nanos: _,
+        } => {
+            logging::surplus_financial_invariant("legacy surplus identity was not hardened");
+            Some(false)
+        }
+        FundingStateV2::SurplusTransferPendingV2 {
+            destination,
+            memo,
             amount_e8s,
             fee_e8s,
             created_at_time_nanos,
         } => {
-            resume_surplus_transfer(amount_e8s, fee_e8s, created_at_time_nanos).await;
+            resume_surplus_transfer(
+                destination,
+                memo,
+                amount_e8s,
+                fee_e8s,
+                created_at_time_nanos,
+            )
+            .await;
             Some(false)
         }
         FundingStateV2::Idle => None,
@@ -269,6 +402,7 @@ async fn continue_funding_state(current: FundingStateV2) -> Option<bool> {
 }
 
 pub async fn run_funding_maintenance() -> bool {
+    harden_pending_identity();
     let runtime = config::runtime();
     let liquid_cycles = liquid_cycles();
     let policy = surplus::observe(
@@ -307,12 +441,25 @@ pub async fn run_funding_maintenance() -> bool {
     };
 
     let created_at_time_nanos = ic_cdk::api::time();
+    let (planned_surplus_destination, planned_surplus_memo) = if plan.surplus_e8s > 0 {
+        match configured_surplus_identity() {
+            Some((destination, memo)) => (Some(destination), Some(memo)),
+            None => {
+                logging::surplus_financial_invariant("split planned without surplus destination");
+                return false;
+            }
+        }
+    } else {
+        (None, None)
+    };
     let next = FundingStateV2::CmcTransferPending {
         amount_e8s: plan.retained_e8s,
         fee_e8s: plan.retained_fee_e8s,
         created_at_time_nanos,
         planned_surplus_e8s: plan.surplus_e8s,
         planned_surplus_fee_e8s: plan.surplus_fee_e8s,
+        planned_surplus_destination,
+        planned_surplus_memo,
     };
     state::write_funding_state(next.clone());
     continue_funding_state(next).await.unwrap_or(false)

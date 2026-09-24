@@ -300,6 +300,12 @@ mod tests {
                 200_000_000_000_000,
             )
         }
+        fn surplus_4d21_baseline() -> Result<Self> {
+            Self::with_event_horizon_wasm(
+                include_bytes!("../../fixtures/event_horizon_surplus_4d21a35_debug.wasm").to_vec(),
+                200_000_000_000_000,
+            )
+        }
         fn with_event_horizon_wasm(
             event_horizon_wasm: Vec<u8>,
             event_horizon_cycles: u128,
@@ -443,6 +449,14 @@ mod tests {
                 level,
             )
         }
+        fn set_surplus_canister(&self, destination: Option<Principal>) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_set_surplus_canister",
+                destination,
+            )
+        }
         fn set_liquid_cycles_override(&self, value: Option<u128>) -> Result<()> {
             update(
                 &self.pic,
@@ -456,6 +470,14 @@ mod tests {
                 &self.pic,
                 self.ledger,
                 "debug_accepted_legacy_transfers_with_memo",
+                memo,
+            )
+        }
+        fn accepted_destinations_with_memo(&self, memo: u64) -> Result<Vec<Vec<u8>>> {
+            query(
+                &self.pic,
+                self.ledger,
+                "debug_accepted_legacy_destinations_with_memo",
                 memo,
             )
         }
@@ -1425,6 +1447,154 @@ mod tests {
         )?;
         env.fund()?;
         assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn uncertain_surplus_transfer_stays_bound_to_original_destination() -> Result<()> {
+        let env = Env::new()?;
+        let destination_a = account_id(env.subscriber, [0; 32]);
+        let destination_b = account_id(env.historian, [0; 32]);
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::DropResponseAfterAccept,
+        )?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![destination_a.clone()]
+        );
+        let pending = env.state()?.cmc_state;
+        assert!(pending.contains("SurplusTransferPendingV2"));
+        assert!(pending.contains(&format!("memo: {SURPLUS_TRANSFER_MEMO}")));
+
+        env.upgrade_same_debug_wasm()?;
+        env.set_surplus_canister(Some(env.historian))?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![destination_a]
+        );
+
+        env.set_balance(100_000_000)?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![account_id(env.subscriber, [0; 32]), destination_b]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn retained_plan_carries_original_surplus_identity_across_config_change() -> Result<()> {
+        let env = Env::new()?;
+        let destination_a = account_id(env.subscriber, [0; 32]);
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        let pending = env.state()?.cmc_state;
+        assert!(pending.contains("CmcNotifyPending"));
+        assert!(pending.contains(&format!(
+            "planned_surplus_memo: Some({SURPLUS_TRANSFER_MEMO})"
+        )));
+
+        env.set_surplus_canister(Some(env.historian))?;
+        update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![destination_a]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn disabling_destination_does_not_cancel_pending_surplus_identity() -> Result<()> {
+        let env = Env::new()?;
+        let destination_a = account_id(env.subscriber, [0; 32]);
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::DropResponseAfterAccept,
+        )?;
+        env.fund()?;
+        env.set_surplus_canister(None)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![destination_a]
+        );
+        assert!(env.state()?.cmc_state.contains("Idle"));
+
+        env.set_balance(100_000_000)?;
+        env.fund()?;
+        assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn exact_4d21_pending_surplus_identity_is_hardened_before_config_changes() -> Result<()> {
+        let env = Env::surplus_4d21_baseline()?;
+        let destination_a = account_id(env.subscriber, [0; 32]);
+        env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
+        env.set_surplus_level(19)?;
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::DropResponseAfterAccept,
+        )?;
+        env.fund()?;
+        assert!(env.state()?.cmc_state.contains("SurplusTransferPending"));
+
+        env.upgrade_same_debug_wasm()?;
+        assert!(env.state()?.cmc_state.contains("SurplusTransferPendingV2"));
+        env.set_surplus_canister(Some(env.historian))?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_surplus_legacy_behavior",
+            LegacyBehavior::Normal,
+        )?;
+        env.fund()?;
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![destination_a]
+        );
         assert!(env.state()?.cmc_state.contains("Idle"));
         Ok(())
     }

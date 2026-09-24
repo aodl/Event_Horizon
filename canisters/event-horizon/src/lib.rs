@@ -34,6 +34,7 @@ pub use subscription::{merge_subscription, Subscription};
 #[ic_cdk::init]
 fn init() {
     state::initialize_if_needed();
+    funding::harden_pending_identity();
     scheduler::start();
 }
 
@@ -41,6 +42,7 @@ fn init() {
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     state::initialize_if_needed();
+    funding::harden_pending_identity();
     scheduler::start();
 }
 
@@ -80,12 +82,14 @@ mod debug {
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
         state::write_debug_config(args.into());
+        funding::harden_pending_identity();
         // Debug builds are manually driven to keep PocketIC tests deterministic.
     }
 
     #[ic_cdk::post_upgrade]
     fn post_upgrade() {
         state::initialize_if_needed();
+        funding::harden_pending_identity();
     }
 
     #[derive(CandidType, Deserialize)]
@@ -141,6 +145,13 @@ mod debug {
             epoch_min_liquid_cycles: ic_cdk::api::canister_liquid_cycle_balance(),
             diversion_level: level,
         });
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_surplus_canister(surplus_canister: Option<Principal>) {
+        let mut runtime = config::runtime();
+        runtime.surplus_canister = surplus_canister;
+        state::write_debug_config(runtime);
     }
 
     #[ic_cdk::update]

@@ -31,6 +31,7 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 - CMC `Processing` persistence across upgrade and later completion;
 - explicit CMC refund and terminal-error autonomous clearing;
 - retained-first ordering and CMC Processing/refund/terminal cancellation of planned surplus;
+- frozen surplus destination/memo across retained-leg progress, upgrades, ambiguous accepted-transfer recovery, destination replacement, and destination disablement;
 - second-gate cancellation when liquid cycles fall after planning;
 - new ICP exclusion from an in-flight plan and later classification;
 - surplus success, lost response/duplicate recovery, clean reject, insufficient funds, bad fee, future timestamp, `TxTooOld`, and pending-transfer upgrade;
