@@ -26,6 +26,12 @@ global price  = ceil(100 × F / C) ICP
 
 Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query; the certified frontend calls that query directly from its bundled browser client.
 
+## Adaptive surplus funding
+
+The production surplus destination is currently compiled as `None`, so funding behavior remains CMC-only. Once a fixed destination is selected and reviewed before controller removal, Event Horizon starts at 0% diversion. Each seven-day period whose hourly observed liquid-cycles minimum stays at least 150 T raises the fraction of future fee-net raw ICP eligible for diversion by 5 percentage points, up to 95%. A 100–150 T period lowers it by 5 points; a period below 100 T resets it to zero. No surplus leaves while the current balance is below 150 T.
+
+Every raw-ICP balance is classified once. Event Horizon converts its retained share to cycles and confirms the CMC mint before the associated surplus share can be transferred to the immutable receiver's default ICP account. Direct donations enter this same common flow, and subscriber priority never depends on who supplied ICP. There is no treasury, withdrawal, destination, or policy API.
+
 ## Validation
 
 ```bash

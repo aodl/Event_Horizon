@@ -1,33 +1,39 @@
-Event Horizon pre-mainnet hardening summary
+Event Horizon adaptive surplus-diversion summary
 
-Starting baseline: 774b2906fc752590292316aaf7704c690aa7d3fb
+Starting baseline: 304b26e9e6facc6f8812e61c56f98e712e05f803
+Branch: codex/surplus-diversion
 
 Implemented:
-- Daily CMC pricing observations now use the exact bounded call's current get_cost() and are skipped unless the liquid balance can retain RESERVE_PROTECTION_CYCLES after reserving that cost.
-- A reserve skip consumes that UTC day's ordinary observation opportunity, causes no retry, and leaves pricing, polling, funding recovery, and admissions unchanged.
-- Removed the frontend /pricing.json update proxy and the http_request_update production export.
-- Bundled the pinned ICP JavaScript agent into certified embedded assets. Browser code discovers PUBLIC_CANISTER_ID:event_horizon through the deployment environment and directly queries backend get_pricing, using the page origin locally and the CSP-allowed ICP API gateway on mainnet.
-- Frontend display renders recorded CMC permyriad values as exact four-decimal XDR/ICP, such as 23147 -> 2.3147 XDR/ICP.
-- Updated release/static audits, tests, protocol text, architecture, economics, trust, deployment, frontend, reproducibility, and controller-removal documentation.
+- Optional immutable production surplus destination, currently None; no runtime setter or public surplus API.
+- Seven-day observed-liquid-cycles controller with 5-point levels from 0% through 95%, 150 T health/gate threshold, 100 T emergency threshold, and conservative single-transition downtime handling.
+- Additive stable IDs 7 (FundingStateV2) and 8 (SurplusPolicyState), with exact one-time migration from old CMC Idle/TransferPending/NotifyPending state.
+- One serialized retained-first funding state machine: persist split, CMC transfer, successful notify/mint, second 150 T gate, then surplus transfer.
+- Overflow-safe two-fee split arithmetic whose floor/remainder favors Event Horizon and never creates a 100% diversion level.
+- Deterministic `SURPLUS1` legacy-Ledger identity with success/duplicate, uncertain retry, clean/no-debit replan, and TxTooOld recovery.
+- Exact 304b26e debug fixture plus controller, migration, ordering, failure, new-arrival, subscription-independence, and pending-upgrade regressions.
+- Updated normative, architecture, economics, operations, stable-memory, trust, deployment, controller-removal, testing, checkpoint, and validation documentation.
 
 Validation completed successfully:
 - npm ci
-- xtask check: 31 backend Rust unit tests and 8 frontend tests passed
-- xtask pocketic: 20/20 passed
-- xtask local-smoke: 20/20 passed
-- xtask security: no actionable vulnerabilities; four existing permitted unmaintained transitive warnings
-- xtask release
+- xtask check: 46 backend Rust unit tests and 12 frontend tests passed
+- xtask pocketic: 36/36 passed
+- xtask local-smoke: 36/36 passed
+- xtask security: 0 vulnerabilities; four existing permitted unmaintained transitive warnings
+- xtask release and backend/frontend production export audits
 - canonical Docker build
 - two-clean-build reproducibility comparison: all release artifacts matched byte-for-byte
-- icp build -e local under DFX_IDENTITY=codex_local
-- backend export audit: only get_pricing as an application method
-- frontend export audit: only http_request as an application method; no http_request_update
-- tracked-source manifest generation and verification: every entry passed
+- DFX_IDENTITY=codex_local icp build -e local
 
 Canonical Wasm SHA-256:
-- backend: 3ff42f18c38fc126909080c0ae06043e6a7a572a7b399e684ace7f835a5c1f07
-- frontend: eb68bd898aea5cd01989b9864ad16aef5448221edfc947b9599f63e649e37387
+- backend: 751b3a7a5734299a3e66c3b4d461a074db08ad4de6f7aa994e3e401dbab2e184
+- frontend: 51991f35fa07152ea9b65f90c562604b5c65a6b968e2a86d5d3e93e904d04857
 
-Initial clean-build attempts failed before compilation after repeated builds filled Docker's overlay filesystem. Reclaiming 12.52 GB of disposable build cache resolved the invalid-download symptom; the unchanged two-clean-build gate then passed.
+Production application surfaces remain backend `get_pricing` only and frontend `http_request` only. No mainnet deployment, Jupiter Faucet X publication, or controller change/removal was performed.
 
-No mainnet deployment, Jupiter Faucet X publication, or controller removal was performed.
+Financial identity hardening follow-up from 4d21a35822d0b9ce04fd097a5e99abb39ccb23d3:
+- Every new split freezes its 32-byte surplus account identifier and u64 `SURPLUS1` memo before retained ICP moves.
+- CMC transfer/notify states carry those exact values; pending surplus state also persists amount, fee, and creation time and never rereads the configured receiver or memo constant.
+- Destination changes or disablement apply only to later plans after Idle.
+- Exact 304b26e pre-surplus migration remains zero-surplus with no fabricated destination.
+- Exact tracked 4d21a35 debug-Wasm migration and ambiguous accepted-transfer duplicate recovery remain bound to destination A after configuration changes to B.
+- Full validation evidence and refreshed canonical hashes are in docs/codex/surplus-identity-hardening.md.

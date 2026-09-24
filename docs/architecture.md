@@ -21,12 +21,16 @@ A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-
 | 4 | global subscriber set |
 | 5 | daily pricing observations keyed by UTC day |
 | 6 | current/frozen pricing state |
+| 7 | authoritative funding state V2 for retained transfer, CMC notify, and surplus transfer |
+| 8 | adaptive surplus epoch, observed minimum, and diversion level |
 
-All IDs and durable encodings retain their validated pre-range form. In particular, pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
+IDs 0–6 and their durable encodings retain their validated pre-surplus form. ID 7 begins `Uninitialized` and migrates old ID 2 exactly once without rewriting it. ID 8 defaults to disabled/uninitialized level zero. Pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
 
 ## Independent timer lanes
 
 Production installs three one-shot timers: Ledger polling, hourly funding maintenance, and pricing maintenance. Each has a single-flight guard and replaces its prior timer when rescheduled. Pricing wakes at the next UTC day, freeze, or effective boundary. Funding and pricing use separate CMC calls and state.
+
+The hourly lane also takes one liquid-cycles observation for the surplus controller. It remains the only financial worker. A split plan is durably serialized as retained Ledger transfer, CMC notification, then—only after successful mint and a second 150 T check—surplus Ledger transfer. New ICP is never added to an in-flight plan.
 
 ## Frontend
 
