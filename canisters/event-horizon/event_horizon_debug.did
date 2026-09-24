@@ -1,5 +1,5 @@
 type PollingMode = variant { ReserveProtection; Economy; Standard; Fast; VeryFast; Continuous };
-type Price = record { account_icp : nat64; global_icp : nat64 };
+type Price = record { account_icp : nat64; range_icp : nat64; global_icp : nat64 };
 type Pricing = record {
   initialized : bool; current : Price; current_effective_at : nat64;
   next : opt Price; next_effective_at : nat64; next_freeze_at : nat64;

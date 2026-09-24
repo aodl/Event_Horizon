@@ -26,7 +26,7 @@ use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
 pub use account::{account_identifier_bytes, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
-pub use pricing::{Price, Pricing};
+pub use pricing::{Price, Pricing, PublicPrice};
 pub use subscription::{merge_subscription, Subscription};
 
 #[cfg(not(feature = "debug_api"))]

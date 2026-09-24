@@ -60,8 +60,12 @@ async fn process_transfer(
     if from_id == Some(faucet_account) && to_id == Some(self_account) {
         if let Some(memo) = icrc1_memo {
             if let Ok(declaration) = parse_subscription_memo(memo) {
-                let global = matches!(declaration, SubscriptionDeclaration::Global { .. });
-                let Some(required_e8s) = pricing::current_admission_e8s(global) else {
+                let pricing_class = match &declaration {
+                    SubscriptionDeclaration::Global { .. } => pricing::PricingClass::Global,
+                    SubscriptionDeclaration::Account { .. } => pricing::PricingClass::Account,
+                    SubscriptionDeclaration::Range { .. } => pricing::PricingClass::Range,
+                };
+                let Some(required_e8s) = pricing::current_admission_e8s(pricing_class) else {
                     return;
                 };
                 match historian::route_is_admitted(
