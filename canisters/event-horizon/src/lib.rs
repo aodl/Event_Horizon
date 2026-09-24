@@ -34,7 +34,6 @@ pub use subscription::{merge_subscription, Subscription};
 #[ic_cdk::init]
 fn init() {
     state::initialize_if_needed();
-    funding::harden_pending_identity();
     scheduler::start();
 }
 
@@ -42,7 +41,6 @@ fn init() {
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     state::initialize_if_needed();
-    funding::harden_pending_identity();
     scheduler::start();
 }
 
@@ -82,14 +80,12 @@ mod debug {
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
         state::write_debug_config(args.into());
-        funding::harden_pending_identity();
         // Debug builds are manually driven to keep PocketIC tests deterministic.
     }
 
     #[ic_cdk::post_upgrade]
     fn post_upgrade() {
         state::initialize_if_needed();
-        funding::harden_pending_identity();
     }
 
     #[derive(CandidType, Deserialize)]
