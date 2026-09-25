@@ -74,6 +74,28 @@ for needle in ['status_visibility: public','log_visibility: public','log_memory_
 for path in ['Dockerfile.repro','tools/audit-wasm.py','tools/scripts/build-release','tools/scripts/verify-reproducible-artifacts','docs/deployment.md','docs/reproducible-builds.md','docs/controller-removal.md']:
     assert (root/path).exists(), f'missing release-hardening file {path}'
 
+assert not (root/'tools/scripts/local-smoke').exists(), 'redundant local-smoke script still exists'
+live_docs = [root/'README.md']
+live_docs.extend(
+    path for path in (root/'docs').glob('*.md')
+)
+live_docs.append(root/'tools/xtask/README.md')
+live_text = '\n'.join(path.read_text() for path in live_docs)
+for forbidden in [
+    'tools/scripts/local-smoke',
+    'cargo run -p xtask -- local-smoke',
+    'service : () -> {}',
+    'no application methods',
+]:
+    assert forbidden not in live_text, f'live documentation contains stale marker {forbidden}'
+for required in [
+    'cargo run -p xtask -- test-all',
+    'cargo run -p xtask -- canonical',
+    'cargo run -p xtask -- validate',
+    'tools/xtask/README.md',
+]:
+    assert required in live_text, f'live documentation is missing developer command {required}'
+
 backend_src='\n'.join(p.read_text(errors='ignore') for p in (root/'canisters/event-horizon/src').rglob('*.rs'))
 for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
     assert forbidden not in backend_src, f'backend source unexpectedly contains management mutation path {forbidden}'

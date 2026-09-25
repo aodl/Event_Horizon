@@ -24,26 +24,56 @@ Both canisters are newly created and empty. Their first deployment must use expl
 only then install the frontend. The operator performs these mainnet actions manually; the repository does not
 provide an automatic deployment script.
 
-## Build and validate
+## Operator pre-deployment gate
 
-Before any mainnet install:
+Before any mainnet install, install the locked frontend dependencies and run the full, intentionally expensive gate:
 
 ```bash
 npm ci
-cargo run -p xtask -- check
-cargo run -p xtask -- pocketic
-cargo run -p xtask -- security
-cargo run -p xtask -- repro
+cargo run -p xtask -- validate
 ```
 
-The canonical build is produced by `Dockerfile.repro` and appears in `release-artifacts/`.
-Do not deploy a locally compiled replacement while claiming the canonical hash. To make `icp deploy`
-consume the already verified canonical artifacts, first run:
+Successful validation ends with the canonical Docker build, prints both uncompressed Wasm hashes, and leaves:
+
+```text
+release-artifacts/event_horizon.wasm
+release-artifacts/event_horizon_frontend.wasm
+```
+
+Review the hashes before continuing. Do not deploy a locally compiled replacement while claiming the canonical hash.
+
+## Deploy canonical artifacts
+
+Canonical-artifact mode verifies `release-artifacts/release-artifacts.sha256`, does not rebuild, prints the exact artifact hash being handed to `icp deploy`, and copies that Wasm to the CLI-requested output path.
+
+Install and verify the backend first:
 
 ```bash
-./tools/scripts/docker-build
-EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 icp deploy -e ic
+EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
+  icp deploy event_horizon -e ic --mode install
 ```
+
+After checking its live module hash and production application surface, install the frontend:
+
+```bash
+EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
+  icp deploy event_horizon_frontend -e ic --mode install
+```
+
+The recommended lifecycle is:
+
+```text
+validate
+→ review printed hashes
+→ inspect canister mapping/settings
+→ install backend
+→ compare live module hash
+→ verify backend
+→ install frontend
+→ compare live module hash
+```
+
+Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by `validate` and the deployment build helper is intended for direct comparison with the corresponding installed mainnet module hash. See [Reproducible builds](reproducible-builds.md) for independent manifest verification.
 
 ## Required backend settings
 
