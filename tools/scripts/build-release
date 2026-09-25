@@ -42,3 +42,14 @@ PY
   sha256sum build-info.json >> release-artifacts.sha256
   sha256sum -c release-artifacts.sha256
 )
+
+echo
+echo "Local-toolchain release artifacts built in release-artifacts/"
+echo "This is not canonical reproducibility evidence."
+echo 'Use `cargo run -p xtask -- canonical` for the Docker-built production artifacts.'
+echo
+echo "Module SHA-256:"
+(cd release-artifacts && sha256sum event_horizon.wasm event_horizon_frontend.wasm)
+echo
+echo "Manifest:"
+echo "release-artifacts/release-artifacts.sha256"

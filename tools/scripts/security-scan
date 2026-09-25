@@ -4,7 +4,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
 for tool in cargo cargo-audit cargo-deny npm osv-scanner; do
   command -v "$tool" >/dev/null || { echo "$tool is required for the security gate" >&2; exit 1; }
 done
+echo "==> cargo audit"
 cargo audit
+echo "==> cargo deny"
 cargo deny check advisories licenses bans sources
+echo "==> npm audit"
 npm audit --omit=dev
+echo "==> OSV scan"
 osv-scanner scan -L Cargo.lock -L package-lock.json
+echo "Security gate passed"

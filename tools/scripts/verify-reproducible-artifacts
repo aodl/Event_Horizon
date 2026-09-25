@@ -14,4 +14,12 @@ build_one "$work/a"; build_one "$work/b"
 (cd "$work/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/a.sum"
 (cd "$work/b" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/b.sum"
 diff -u "$work/a.sum" "$work/b.sum"
-echo "release artifacts match across two clean builds"
+echo
+echo "Reproducibility check passed."
+echo "Release artifacts match across two clean Docker builds."
+echo
+echo "Matching Wasm SHA-256:"
+(cd "$work/a" && sha256sum event_horizon.wasm event_horizon_frontend.wasm)
+echo
+echo "This command uses temporary build outputs."
+echo 'Run `cargo run -p xtask -- canonical` to populate release-artifacts/.'

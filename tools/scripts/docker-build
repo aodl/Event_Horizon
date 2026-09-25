@@ -7,3 +7,29 @@ id="$(docker create "$(docker build --quiet --file Dockerfile.repro --target art
 trap 'docker rm -f "$id" >/dev/null 2>&1 || true' EXIT
 docker cp "$id:/release-artifacts/." release-artifacts/
 (cd release-artifacts && sha256sum -c release-artifacts.sha256)
+
+revision="$(git rev-parse HEAD)"
+if [ -z "$(git status --porcelain)" ]; then
+  tree_status="clean"
+else
+  tree_status="WARNING: working tree has uncommitted changes"
+fi
+
+echo
+echo "Built canonical artifacts in release-artifacts/"
+echo
+echo "Source revision:"
+echo "$revision"
+echo
+echo "Working tree:"
+echo "$tree_status"
+echo
+echo "Mainnet module-hash comparison targets (*.wasm):"
+echo
+(cd release-artifacts && sha256sum event_horizon.wasm event_horizon_frontend.wasm)
+echo
+echo "Full artifact manifest:"
+echo "release-artifacts/release-artifacts.sha256"
+echo
+echo "Verify manifest:"
+echo "(cd release-artifacts && sha256sum -c release-artifacts.sha256)"

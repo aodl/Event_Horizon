@@ -15,6 +15,9 @@ if [ "${EVENT_HORIZON_USE_CANONICAL_ARTIFACTS:-0}" = "1" ]; then
   test -f release-artifacts/release-artifacts.sha256 || { echo "run ./tools/scripts/docker-build first" >&2; exit 1; }
   (cd release-artifacts && sha256sum --status -c release-artifacts.sha256) || { echo "canonical manifest verification failed" >&2; exit 1; }
   test -f "$artifact" || { echo "missing canonical artifact $artifact" >&2; exit 1; }
+  echo "Using canonical Event Horizon artifact:"
+  echo
+  sha256sum "$artifact"
 else
   ./tools/scripts/build-release
   test -f "$artifact"
