@@ -32,6 +32,27 @@ The production surplus destination is currently compiled as `None`, so funding b
 
 Every raw-ICP balance is classified once. Event Horizon converts its retained share to cycles and confirms the CMC mint before the associated surplus share can be transferred to the immutable receiver's default ICP account. Direct donations enter this same common flow, and subscriber priority never depends on who supplied ICP. There is no treasury, withdrawal, destination, or policy API.
 
+## Adaptive polling cadence
+
+`T = 10^12 cycles`. Cadence decisions use **liquid cycles**—the balance immediately available to spend—not the total balance including cycles reserved for outstanding calls.
+
+| Mode | Added delay after completed poll | Enter at | Exit below |
+| ------------------ | -------------------------------: | -------: | ---------: |
+| Reserve Protection | ordinary polling suspended | — | 1 T |
+| Economy | 1 hour | 2 T | 1 T |
+| Standard | 10 minutes | 5 T | 3 T |
+| Fast | 2 minutes | 10 T | 6 T |
+| Very Fast | 10 seconds | 25 T | 15 T |
+| Continuous | 0 | 100 T | 60 T |
+
+Event Horizon increases cadence immediately when a higher entry threshold is reached. When cycles fall, it remains in the current mode until that mode's lower exit threshold is crossed. For example, a canister at 5.27 T starting from a lower mode enters Standard mode. It remains Standard while its liquid balance is at least 3 T; below 3 T it falls back to an appropriate lower mode.
+
+The values are added delays after completed polls, not exact wall-clock poll intervals: Ledger and inter-canister work also takes time. Continuous means Event Horizon deliberately inserts no delay after a completed poll. Polls still never overlap, and asynchronous IC execution naturally yields between calls.
+
+Below 1 T liquid cycles, ordinary Ledger polling is suspended to protect protocol liveness. Funding and other recovery-oriented maintenance remain available. A canister already in Reserve Protection does not resume Economy until it reaches the 2 T Economy entry threshold.
+
+Polling thresholds and surplus thresholds are separate mechanisms. Continuous polling begins at 100 T; the 150 T surplus-health threshold is used only by the currently disabled adaptive surplus policy. See [Operational backend](docs/operational-backend.md) for timer and recovery details.
+
 ## Development and validation
 
 ```bash

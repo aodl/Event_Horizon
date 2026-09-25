@@ -107,6 +107,25 @@ for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
 assert 'canister_cycle_balance()' not in backend_src
 assert 'canister_liquid_cycle_balance()' in backend_src
 
+# Rust remains executable truth; this only prevents the primary operator document from
+# silently losing the reviewed cadence table and its hysteresis thresholds.
+operations_doc = (root/'docs/operational-backend.md').read_text()
+for marker in [
+    'Reserve Protection',
+    'Economy',
+    'Standard',
+    'Fast',
+    'Very Fast',
+    'Continuous',
+    '5 T',
+    '3 T',
+    '25 T',
+    '15 T',
+    '100 T',
+    '60 T',
+]:
+    assert marker in operations_doc, f'operational cadence documentation missing {marker}'
+
 for canister_lib in [
     root/'canisters/event-horizon/src/lib.rs',
     root/'canisters/frontend/src/lib.rs',
