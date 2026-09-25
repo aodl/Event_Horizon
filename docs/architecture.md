@@ -34,6 +34,6 @@ The hourly lane also takes one liquid-cycles observation for the surplus control
 
 ## Frontend
 
-Certified assets remain embedded in the Rust frontend Wasm. The frontend sets the ICP CLI deployment environment cookie on its document response; the bundled browser client reads `PUBLIC_CANISTER_ID:event_horizon` from that environment and directly invokes the backend's read-only `get_pricing` query. The client uses the page origin for local replicas and the ICP API gateway on mainnet; the certified content security policy permits only those connection targets. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
+Certified assets remain embedded in the Rust frontend Wasm. The bundled browser client contains the permanent backend principal `eo6ei-gaaaa-aaaar-qchra-cai` and directly invokes its read-only `get_pricing` query through the mainnet ICP API gateway. No runtime cookie or canister environment discovers the backend, and the certified document response adds no discovery configuration. The certified content security policy narrowly permits the gateway. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.
