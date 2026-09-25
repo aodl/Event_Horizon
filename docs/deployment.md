@@ -88,11 +88,83 @@ for current cycles balance, running state and module hash; `get_pricing` is not 
 
 ## Initial funding
 
-Provide an initial cycles balance large enough to keep the backend comfortably out of reserve protection during
-its observation period. Jupiter Faucet endowments are recurring funding and should not be confused with immediate
-spendable cycles.
+Initial funding is an operator choice, not a requirement to fund Continuous mode immediately. During controlled acceptance testing it is reasonable to deliberately operate at a lower tier to limit irreversible ICP-to-cycles conversion. Choose the initial cycles balance according to the latency tier you intend to observe.
+
+`T = 10^12 cycles`. Cadence uses **liquid cycles**, excluding balances reserved for outstanding calls.
+
+| Mode | Added delay after completed poll | Enter at | Exit below |
+| ------------------ | -------------------------------: | -------: | ---------: |
+| Reserve Protection | ordinary polling suspended | — | 1 T |
+| Economy | 1 hour | 2 T | 1 T |
+| Standard | 10 minutes | 5 T | 3 T |
+| Fast | 2 minutes | 10 T | 6 T |
+| Very Fast | 10 seconds | 25 T | 15 T |
+| Continuous | 0 | 100 T | 60 T |
+
+Typical entry targets are:
+
+```text
+~5 T   → Standard entry
+~10 T  → Fast entry
+~25 T  → Very Fast entry
+~100 T → Continuous entry
+```
+
+Event Horizon accelerates immediately when it reaches a higher entry threshold. On the way down it stays in its current mode until that mode's exit threshold is crossed. For example, a canister at 5.27 T starting from a lower mode enters Standard and remains there while its liquid balance is at least 3 T; below 3 T it falls back to an appropriate lower mode.
+
+Below 1 T, Reserve Protection suspends ordinary Ledger polling but leaves funding and other recovery-oriented maintenance available. A canister already in Reserve Protection must reach the 2 T Economy entry threshold before polling resumes. Continuous inserts no delay after a completed poll, but polls never overlap and asynchronous IC execution naturally yields between calls. These are added delays, not exact wall-clock poll intervals.
+
+Higher balances may be appropriate once sustained low-latency service is desired. The 150 T surplus-health threshold is not a polling tier: Continuous polling starts at 100 T, while 150 T applies only to the currently disabled adaptive surplus policy.
+
+Jupiter Faucet endowments are recurring funding and should not be confused with immediately spendable cycles.
 
 Account, range, and global admission requirements come from `get_pricing`; they begin at 10, 20, and 100 ICP after the first successful CMC observation. Those pooled endowments do not replace the initial cycle balance.
+
+## Observe cycles and infer cadence
+
+The production backend exposes public canister status. The simplest operational check is:
+
+```bash
+icp canister status eo6ei-gaaaa-aaaar-qchra-cai -n ic
+```
+
+The `Cycles:` field is the easiest public signal for estimating the active cadence tier. It is not an internal mode field, and `canister_status` does not expose Event Horizon's polling mode directly. Infer the likely tier from the current balance, the previous mode, and the hysteresis table above. Because the implementation decides from liquid cycles, outstanding-call reservations can make the immediately spendable input slightly lower than the reported balance.
+
+## Read current pricing
+
+With the project canister mapping configured, query readable pricing by name:
+
+```bash
+icp canister call event_horizon \
+  get_pricing '()' \
+  -e ic \
+  --candid canisters/event-horizon/event_horizon.did
+```
+
+The raw-principal equivalent is:
+
+```bash
+icp canister call eo6ei-gaaaa-aaaar-qchra-cai \
+  get_pricing '()' \
+  -n ic \
+  --candid canisters/event-horizon/event_horizon.did
+```
+
+When calling by raw principal without a local Candid interface, `icp-cli` may render record field hashes instead of field names. Supplying the checked-in DID gives readable named fields.
+
+The response fields are:
+
+- `initialized`: whether the first successful CMC rate observation has established pricing.
+- `current`: current account, range, and global admission prices.
+- `next`: an optional frozen price for the next effective month.
+- `current_effective_at`: when the current prices became effective.
+- `next_effective_at`: when `next` will become current.
+- `next_freeze_at`: the seven-day boundary at which the next prices freeze.
+- `observed_floor_xdr_permyriad`: the retained rolling-window floor CMC rate.
+- `latest_xdr_permyriad`: the latest successful CMC rate observation.
+- `next_carried_forward_due_to_stale_rate`: whether stale-rate protection carried current prices into the next period.
+
+`next_carried_forward_due_to_stale_rate = true` can legitimately occur on first deployment when the next month's seven-day freeze boundary already passed before Event Horizon had its first successful rate observation. It is not a fault. The response also includes timestamps for the floor and latest observations.
 
 ## Observation period
 

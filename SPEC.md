@@ -207,11 +207,11 @@ Prices may become effective only at 00:00:00 UTC on the first day of a month. Th
 
 | Mode | Added delay after completed poll | Enter at | Exit below |
 |---|---:|---:|---:|
-| Reserve protection | ordinary polls suspended | — | 1 T |
+| Reserve Protection | ordinary polls suspended | — | 1 T |
 | Economy | 1 hour | 2 T | 1 T |
 | Standard | 10 minutes | 5 T | 3 T |
 | Fast | 2 minutes | 10 T | 6 T |
-| Very fast | 10 seconds | 25 T | 15 T |
+| Very Fast | 10 seconds | 25 T | 15 T |
 | Continuous | 0 | 100 T | 60 T |
 
 Hysteresis is stateful. A balance increase may jump directly to the fastest mode whose entry threshold is met. A balance decrease retains the current mode until its exit threshold is crossed, then falls back as far as necessary.
@@ -236,4 +236,4 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The mutable frontend's certified embedded JavaScript discovers the backend canister through the deployment environment and directly issues the read-only `get_pricing` query. No frontend update call is involved. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, single-account, and inclusive-range modes, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
+The certified frontend embeds the permanent Event Horizon backend principal `eo6ei-gaaaa-aaaar-qchra-cai` in its JavaScript asset and therefore in the frontend Wasm. Browser pricing queries use that fixed principal directly. No frontend update call is involved. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, single-account, and inclusive-range modes, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
