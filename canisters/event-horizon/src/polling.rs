@@ -200,6 +200,12 @@ async fn process_page(
 
 pub async fn run_poll() {
     let runtime = config::runtime();
+    if let Err(error) = crate::instance::ensure_observed_profile().await {
+        if error != "reserve_protection" {
+            logging::ledger_failure(&format!("observed readiness: {error}"));
+        }
+        return;
+    }
     let mut meta = state::read_metadata();
 
     if !meta.bootstrapped {

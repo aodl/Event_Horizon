@@ -1,6 +1,7 @@
 use candid::{CandidType, Principal};
 use serde::{Deserialize, Serialize};
 
+use crate::clients::icrc3;
 use crate::{config, state};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]
@@ -55,4 +56,34 @@ pub fn get_instance() -> InstanceInfo {
         jupiter_historian: runtime.historian_canister,
         surplus_canister: runtime.surplus_canister,
     }
+}
+
+pub async fn ensure_observed_profile() -> Result<ObservedLedgerProfile, String> {
+    let instance = state::read_instance_config();
+    if let Some(profile) = instance.observed_profile {
+        return Ok(profile);
+    }
+    let ledger = instance.observed_ledger;
+    let standards = icrc3::supported_standards(ledger).await?;
+    for required in ["ICRC-1", "ICRC-3"] {
+        if !standards.iter().any(|standard| standard.name == required) {
+            return Err(format!("observed ledger does not advertise {required}"));
+        }
+    }
+    let symbol = icrc3::symbol(ledger).await?;
+    if symbol.is_empty() || symbol.len() > 32 {
+        return Err("observed ledger symbol must be 1..=32 UTF-8 bytes".into());
+    }
+    let decimals = icrc3::decimals(ledger).await?;
+    let block_types = icrc3::supported_block_types(ledger).await?;
+    if !block_types.iter().any(|kind| kind.block_type == "1xfer") {
+        return Err("observed ledger does not advertise 1xfer".into());
+    }
+    let profile = ObservedLedgerProfile {
+        symbol,
+        decimals,
+        supports_icrc2_transfer_from: block_types.iter().any(|kind| kind.block_type == "2xfer"),
+    };
+    state::write_observed_profile(profile.clone());
+    Ok(profile)
 }
