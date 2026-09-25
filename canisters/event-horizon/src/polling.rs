@@ -18,11 +18,16 @@ struct MatchState {
 enum Stream {
     Admission,
     Observed,
+    Shared,
 }
 fn pos(m: &state::Metadata, s: Stream) -> (bool, u64) {
     match s {
         Stream::Admission => (m.admission_bootstrapped, m.admission_next_block),
         Stream::Observed => (m.observed_bootstrapped, m.observed_next_block),
+        Stream::Shared => (
+            m.admission_bootstrapped && m.observed_bootstrapped,
+            m.admission_next_block.min(m.observed_next_block),
+        ),
     }
 }
 fn set(s: Stream, ready: bool, next: u64) {
@@ -35,6 +40,12 @@ fn set(s: Stream, ready: bool, next: u64) {
             m.observed_bootstrapped = ready;
             m.observed_next_block = next
         }
+        Stream::Shared => {
+            m.admission_bootstrapped = ready;
+            m.admission_next_block = next;
+            m.observed_bootstrapped = ready;
+            m.observed_next_block = next;
+        }
     })
 }
 fn u64nat(n: &Nat) -> Result<u64, String> {
@@ -43,7 +54,7 @@ fn u64nat(n: &Nat) -> Result<u64, String> {
 fn archived_prefix(r: &GetBlocksResult, start: u64, boundary: u64) -> Result<u64, String> {
     let mut ranges = Vec::new();
     for a in &r.archived_blocks {
-        if a.args.len() > 256 {
+        if ranges.len().saturating_add(a.args.len()) > config::LEDGER_PAGE_SIZE as usize {
             return Err("excessive archive ranges".into());
         }
         for q in &a.args {
@@ -155,6 +166,7 @@ async fn page(
             match s {
                 Stream::Admission => "admission",
                 Stream::Observed => "observed",
+                Stream::Shared => "shared",
             },
             at,
             archived,
@@ -163,6 +175,9 @@ async fn page(
         set(s, true, at)
     }
     let mut blocks = r.blocks;
+    if blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive live blocks".into());
+    }
     let mut processed_block = false;
     blocks.sort_by(|a, b| a.id.cmp(&b.id));
     for b in blocks {
@@ -187,10 +202,15 @@ async fn page(
             observe(&e, out)
         }
         at += 1;
-        set(s, true, at)
     }
     if at == original && at < boundary {
         return Err("no live progress or archive evidence".into());
+    }
+    if processed_block {
+        // Live progress is committed only after every expected block in this returned
+        // page has decoded and processed successfully. A later malformed block therefore
+        // leaves the page replayable, including any transient observed matches.
+        set(s, true, at)
     }
     Ok((at, processed_block))
 }
@@ -256,7 +276,7 @@ pub async fn run_poll() {
         set(Stream::Observed, true, start);
         match scan(
             r.icp_ledger,
-            Stream::Admission,
+            Stream::Shared,
             true,
             true,
             profile.decimals,
@@ -266,8 +286,6 @@ pub async fn run_poll() {
         {
             Ok(a) => {
                 active = a;
-                let end = state::read_metadata().admission_next_block;
-                set(Stream::Observed, true, end);
                 logging::ledger_recovered_all()
             }
             Err(e) => {
@@ -277,21 +295,11 @@ pub async fn run_poll() {
             }
         }
     } else {
-        if let Err(e) = scan(
-            r.icp_ledger,
-            Stream::Admission,
-            true,
-            false,
-            profile.decimals,
-            &mut out,
-        )
-        .await
-        {
-            logging::icp_admission_ledger_failure(&e)
-        } else {
-            logging::icp_admission_ledger_recovered()
-        }
-        match scan(
+        // There is no meaningful cross-ledger timestamp ordering. Snapshot the global
+        // subscribers and process observed history first, so admissions made below apply
+        // only to observed blocks that have not yet been processed.
+        let globals_at_observed_start = state::global_subscribers();
+        let observed_result = scan(
             r.observed_ledger,
             Stream::Observed,
             false,
@@ -299,19 +307,41 @@ pub async fn run_poll() {
             profile.decimals,
             &mut out,
         )
-        .await
-        {
+        .await;
+        let observed_succeeded = match observed_result {
             Ok(a) => {
                 active = a;
-                logging::observed_ledger_recovered()
+                logging::observed_ledger_recovered();
+                true
             }
             Err(e) => {
                 logging::observed_ledger_failure(&e);
-                return;
+                out.clear();
+                active = false;
+                false
+            }
+        };
+        if let Err(e) = scan(
+            r.icp_ledger,
+            Stream::Admission,
+            true,
+            false,
+            profile.decimals,
+            &mut BTreeMap::new(),
+        )
+        .await
+        {
+            logging::icp_admission_ledger_failure(&e)
+        } else {
+            logging::icp_admission_ledger_recovered()
+        }
+        if observed_succeeded && active {
+            for p in globals_at_observed_start {
+                out.entry(p).or_default().global = true
             }
         }
     }
-    if active {
+    if r.observed_ledger == r.icp_ledger && active {
         for p in state::global_subscribers() {
             out.entry(p).or_default().global = true
         }

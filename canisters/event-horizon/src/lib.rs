@@ -1,8 +1,9 @@
 //! Event Horizon backend.
 //!
-//! Production intentionally exposes no application methods. Autonomous timers drive the
-//! Ledger reader and ICP-to-cycles maintenance. The `debug_api` feature exists only for
-//! local/PocketIC validation and must not be present in the canonical production Wasm.
+//! Production exposes only the bounded `get_instance` and `get_pricing` queries.
+//! Autonomous timers drive the ledger readers and ICP-to-cycles maintenance. The
+//! `debug_api` feature exists only for local/PocketIC validation and must not be present
+//! in the canonical production Wasm.
 
 mod account;
 mod cadence;

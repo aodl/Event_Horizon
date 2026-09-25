@@ -849,6 +849,195 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn live_page_cursor_is_atomic_across_a_late_malformed_block() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[91]), [0; 32]);
+        env.append_observed(
+            source.clone(),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        let before = env.state()?.observed_next_block;
+        let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, before);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_repair_last_transfer",
+            Append {
+                from: source,
+                to: account_id(Principal::from_slice(&[92]), [0; 32]),
+                amount_e8s: 1,
+                icrc1_memo: None,
+            },
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes + 1
+        );
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn archive_only_progress_does_not_poke_a_global_subscriber() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit_global(10_000_000_000)?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_other",
+            "3approve".to_string(),
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            1u64,
+        )?;
+        let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes
+        );
+        assert_eq!(env.state()?.observed_next_block, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn distinct_ledger_admission_is_not_retroactive_within_a_poll() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        env.append_observed(
+            account_id(Principal::from_slice(&[93]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert!(env.subscription(7)?.is_some());
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            0
+        );
+
+        env.append_observed(
+            account_id(Principal::from_slice(&[94]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn distinct_stream_failures_do_not_suppress_the_other_stream() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        env.poll()?;
+        assert!(
+            env.subscription(7)?.is_some(),
+            "admission must survive observed failure"
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_repair_last_transfer",
+            Append {
+                from: account_id(Principal::from_slice(&[96]), [0; 32]),
+                to: account_id(Principal::from_slice(&[97]), [0; 32]),
+                amount_e8s: 1,
+                icrc1_memo: None,
+            },
+        )?;
+
+        update::<_, u64>(&env.pic, env.ledger, "debug_append_malformed_transfer", ())?;
+        env.append_observed(
+            account_id(Principal::from_slice(&[95]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn admission_requires_faucet_and_complete_ten_icp_historian_evidence() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;

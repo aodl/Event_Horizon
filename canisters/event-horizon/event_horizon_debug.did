@@ -35,6 +35,7 @@ service : (DebugInitArgs) -> {
   debug_funding_once : () -> ();
   debug_pricing_once : () -> ();
   debug_set_surplus_level : (nat8) -> ();
+  debug_set_surplus_canister : (opt principal) -> ();
   debug_set_liquid_cycles_override : (opt nat) -> ();
   debug_set_ledger_canister : (principal) -> ();
   debug_start_schedulers : () -> ();

@@ -256,6 +256,35 @@ fn append_transfer(
     idx
 }
 
+#[ic_cdk::update]
+fn debug_repair_last_transfer(arg: DebugAppendTransfer) {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let Some(last) = s.icrc_blocks.last_mut() else {
+            ic_cdk::trap("no block to repair")
+        };
+        let account_value = |account: IcrcAccount| {
+            ICRC3Value::Array(vec![
+                ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+            ])
+        };
+        let mut tx = std::collections::BTreeMap::from([
+            ("op".into(), ICRC3Value::Text("xfer".into())),
+            ("from".into(), account_value(arg.from)),
+            ("to".into(), account_value(arg.to)),
+            ("amt".into(), ICRC3Value::Nat(arg.amount_e8s.into())),
+        ]);
+        if let Some(memo) = arg.icrc1_memo {
+            tx.insert("memo".into(), ICRC3Value::Blob(memo.into()));
+        }
+        *last = ICRC3Value::Map(std::collections::BTreeMap::from([
+            ("btype".into(), ICRC3Value::Text("1xfer".into())),
+            ("tx".into(), ICRC3Value::Map(tx)),
+        ]));
+    })
+}
+
 #[ic_cdk::init]
 fn init() {
     STATE.with(|s| *s.borrow_mut() = State::default());
