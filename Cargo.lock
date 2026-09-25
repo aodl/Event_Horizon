@@ -1289,6 +1289,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "ic-cdk",
+ "icrc-ledger-types",
  "serde",
  "sha2",
 ]

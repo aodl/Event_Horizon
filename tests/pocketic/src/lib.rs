@@ -87,7 +87,7 @@ mod tests {
         Ok(decode_one(&bytes)?)
     }
 
-    fn account_id(owner: Principal, subaccount: [u8; 32]) -> Vec<u8> {
+    fn legacy_account_id(owner: Principal, subaccount: [u8; 32]) -> Vec<u8> {
         let mut h = Sha224::new();
         h.update(b"\x0Aaccount-id");
         h.update(owner.as_slice());
@@ -98,6 +98,12 @@ mod tests {
         out[4..].copy_from_slice(&hash);
         out.to_vec()
     }
+    fn account_id(owner: Principal, subaccount: [u8; 32]) -> Account {
+        Account {
+            owner,
+            subaccount: Some(subaccount.to_vec()),
+        }
+    }
     fn numbered(n: u8) -> [u8; 32] {
         let mut s = [0u8; 32];
         s[31] = n;
@@ -106,11 +112,16 @@ mod tests {
 
     #[derive(CandidType, Deserialize)]
     struct DebugInitArgs {
-        ledger_canister: Principal,
+        observed_ledger: Principal,
+        icp_ledger: Principal,
         cmc_canister: Principal,
         historian_canister: Principal,
         faucet_canister: Principal,
         surplus_canister: Option<Principal>,
+    }
+    #[derive(CandidType, Deserialize)]
+    struct InitArgs {
+        observed_ledger: Principal,
     }
     #[derive(CandidType, Deserialize)]
     struct SetRoute {
@@ -120,15 +131,17 @@ mod tests {
     }
     #[derive(CandidType, Deserialize)]
     struct Append {
-        from: Vec<u8>,
-        to: Vec<u8>,
+        from: Account,
+        to: Account,
         amount_e8s: u64,
         icrc1_memo: Option<Vec<u8>>,
     }
     #[derive(CandidType, Deserialize, Debug)]
     struct DebugState {
-        bootstrapped: bool,
-        next_block: u64,
+        admission_bootstrapped: bool,
+        admission_next_block: u64,
+        observed_bootstrapped: bool,
+        observed_next_block: u64,
         polling_mode: PollingMode,
         subscriptions: u64,
         global_subscriptions: u64,
@@ -170,7 +183,7 @@ mod tests {
     struct Subscription {
         subscriber: Principal,
         numbered_subaccount: u8,
-        minimum_e8s: u64,
+        minimum_units: candid::Nat,
     }
     #[derive(CandidType, Deserialize)]
     struct DebugSubscriptionArgs {
@@ -309,7 +322,8 @@ mod tests {
                 event_horizon,
                 event_horizon_wasm,
                 encode_one(DebugInitArgs {
-                    ledger_canister: ledger,
+                    observed_ledger: ledger,
+                    icp_ledger: ledger,
                     cmc_canister: cmc,
                     historian_canister: historian,
                     faucet_canister: faucet,
@@ -341,8 +355,8 @@ mod tests {
         }
         fn append(
             &self,
-            from: Vec<u8>,
-            to: Vec<u8>,
+            from: Account,
+            to: Account,
             amount: u64,
             memo: Option<Vec<u8>>,
         ) -> Result<u64> {
@@ -538,20 +552,20 @@ mod tests {
     fn admission_and_multi_subaccount_matches_coalesce_to_one_poke() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
-        assert!(env.state()?.bootstrapped);
+        assert!(env.state()?.observed_bootstrapped);
         env.admit(7, None, 1_000_000_000)?;
         env.admit(8, Some("0.01"), 1_000_000_000)?;
         assert_eq!(
             env.subscription(7)?
                 .expect("unfiltered admitted")
-                .minimum_e8s,
-            0
+                .minimum_units,
+            candid::Nat::from(0u8)
         );
         assert_eq!(
             env.subscription(8)?
                 .expect("thresholded admitted")
-                .minimum_e8s,
-            1_000_000
+                .minimum_units,
+            candid::Nat::from(1_000_000u64)
         );
 
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
@@ -744,7 +758,7 @@ mod tests {
                 .subscription(subaccount)?
                 .expect("expanded account exists");
             assert_eq!(subscription.numbered_subaccount, subaccount);
-            assert_eq!(subscription.minimum_e8s, 0);
+            assert_eq!(subscription.minimum_units, candid::Nat::from(0u8));
         }
         println!(
             "maximum_range_resource cycles_consumed={} stable_memory_before={} stable_memory_after={} total_memory_before={} total_memory_after={}",
@@ -833,9 +847,15 @@ mod tests {
         );
 
         env.admit(7, Some("1"), 1_000_000_000)?;
-        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 10_000_000);
+        assert_eq!(
+            env.subscription(7)?.unwrap().minimum_units,
+            candid::Nat::from(10_000_000u64)
+        );
         env.admit(7, None, 1_000_000_000)?;
-        assert_eq!(env.subscription(7)?.unwrap().minimum_e8s, 0);
+        assert_eq!(
+            env.subscription(7)?.unwrap().minimum_units,
+            candid::Nat::from(0u8)
+        );
         for subaccount in [18, 7, 11, 7] {
             env.append(
                 source.clone(),
@@ -863,7 +883,10 @@ mod tests {
         reverse.poll()?;
         reverse.admit_range(5, 10, Some("0.1"), 2_000_000_000)?;
         reverse.admit(7, Some("1"), 1_000_000_000)?;
-        assert_eq!(reverse.subscription(7)?.unwrap().minimum_e8s, 10_000_000);
+        assert_eq!(
+            reverse.subscription(7)?.unwrap().minimum_units,
+            candid::Nat::from(10_000_000u64)
+        );
         Ok(())
     }
 
@@ -1119,7 +1142,7 @@ mod tests {
         for _ in 0..5 {
             env.pic.tick();
         }
-        let after_failed = env.state()?.next_block;
+        let after_failed = env.state()?.observed_next_block;
         update::<_, ()>(&env.pic, env.subscriber, "debug_set_trap", false)?;
         env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
         env.poll()?;
@@ -1127,7 +1150,7 @@ mod tests {
             env.pic.tick();
         }
         assert!(
-            env.state()?.next_block > after_failed,
+            env.state()?.observed_next_block > after_failed,
             "reader continues after disposable poke failure"
         );
         assert_eq!(
@@ -1150,7 +1173,7 @@ mod tests {
         }
         update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 3u64)?;
         env.poll()?;
-        assert_eq!(env.state()?.next_block, 5);
+        assert_eq!(env.state()?.observed_next_block, 5);
         Ok(())
     }
 
@@ -1168,14 +1191,14 @@ mod tests {
         update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", true)?;
         env.poll()?;
         assert_eq!(
-            env.state()?.next_block,
+            env.state()?.observed_next_block,
             0,
             "unexplained hole must be retried"
         );
 
         update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", false)?;
         env.poll()?;
-        assert_eq!(env.state()?.next_block, 5);
+        assert_eq!(env.state()?.observed_next_block, 5);
         Ok(())
     }
 
@@ -1422,8 +1445,8 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn uncertain_surplus_transfer_stays_bound_to_original_destination() -> Result<()> {
         let env = Env::new()?;
-        let destination_a = account_id(env.subscriber, [0; 32]);
-        let destination_b = account_id(env.historian, [0; 32]);
+        let destination_a = legacy_account_id(env.subscriber, [0; 32]);
+        let destination_b = legacy_account_id(env.historian, [0; 32]);
         env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
         env.set_surplus_level(19)?;
         env.set_balance(100_000_000)?;
@@ -1460,7 +1483,7 @@ mod tests {
         env.fund()?;
         assert_eq!(
             env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
-            vec![account_id(env.subscriber, [0; 32]), destination_b]
+            vec![legacy_account_id(env.subscriber, [0; 32]), destination_b]
         );
         Ok(())
     }
@@ -1469,7 +1492,7 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn retained_plan_carries_original_surplus_identity_across_config_change() -> Result<()> {
         let env = Env::new()?;
-        let destination_a = account_id(env.subscriber, [0; 32]);
+        let destination_a = legacy_account_id(env.subscriber, [0; 32]);
         env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
         env.set_surplus_level(19)?;
         env.set_balance(100_000_000)?;
@@ -1499,7 +1522,7 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn disabling_destination_does_not_cancel_pending_surplus_identity() -> Result<()> {
         let env = Env::new()?;
-        let destination_a = account_id(env.subscriber, [0; 32]);
+        let destination_a = legacy_account_id(env.subscriber, [0; 32]);
         env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
         env.set_surplus_level(19)?;
         env.set_balance(100_000_000)?;
@@ -1908,7 +1931,7 @@ mod tests {
         let pricing_before = env.pricing()?;
         env.upgrade_same_debug_wasm()?;
         let after = env.state()?;
-        assert_eq!(after.next_block, before.next_block);
+        assert_eq!(after.observed_next_block, before.observed_next_block);
         assert_eq!(after.polling_mode, before.polling_mode);
         assert_eq!(after.subscriptions, before.subscriptions);
         assert_eq!(after.global_subscriptions, before.global_subscriptions);
@@ -1916,8 +1939,8 @@ mod tests {
         assert_eq!(
             env.subscription(7)?
                 .expect("subscription survives")
-                .minimum_e8s,
-            1_000_000
+                .minimum_units,
+            candid::Nat::from(1_000_000u64)
         );
         assert!(env.subscription(8)?.is_some());
         assert!(env.subscription(9)?.is_some());
@@ -1965,7 +1988,10 @@ mod tests {
         assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
 
         env.poll()?;
-        assert_eq!(env.subscription(17)?.unwrap().minimum_e8s, 1_000_000);
+        assert_eq!(
+            env.subscription(17)?.unwrap().minimum_units,
+            candid::Nat::from(1_000_000u64)
+        );
         Ok(())
     }
 
@@ -1978,11 +2004,15 @@ mod tests {
         pic.install_canister(
             id,
             wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?,
-            vec![],
+            encode_one(InitArgs {
+                observed_ledger: id,
+            })?,
             None,
         );
         let pricing: Pricing = query(&pic, id, "get_pricing", ())?;
         assert!(!pricing.initialized);
+        pic.query_call(id, Principal::anonymous(), "get_instance", encode_one(())?)
+            .map_err(|e| anyhow!("get_instance: {e:?}"))?;
         let result = pic.query_call(id, Principal::anonymous(), "debug_state", encode_one(())?);
         assert!(
             result.is_err(),

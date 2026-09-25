@@ -33,10 +33,6 @@ pub fn account_identifier_bytes(owner: Principal, subaccount: [u8; 32]) -> [u8; 
     bytes
 }
 
-pub fn default_account_identifier(owner: Principal) -> [u8; 32] {
-    account_identifier_bytes(owner, [0u8; 32])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

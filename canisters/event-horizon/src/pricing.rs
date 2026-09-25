@@ -304,6 +304,7 @@ pub fn observation_preserves_reserve(liquid_balance: u128, call_cost: u128) -> b
 }
 
 pub async fn run_maintenance() {
+    crate::logging::daily_health();
     let now = ic_cdk::api::time() / 1_000_000_000;
     state::prune_price_observations(oldest_retained_day(now));
     let mut pricing = state::read_pricing_state();

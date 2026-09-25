@@ -13,13 +13,14 @@ type DebugInitArgs = record {
   surplus_canister : opt principal;
 };
 type DebugState = record {
-  bootstrapped : bool; next_block : nat64; polling_mode : PollingMode;
+  admission_bootstrapped : bool; admission_next_block : nat64;
+  observed_bootstrapped : bool; observed_next_block : nat64; polling_mode : PollingMode;
   subscriptions : nat64; global_subscriptions : nat64; cmc_state : text;
   surplus_policy : text; surplus_destination : opt principal;
   pricing : Pricing;
 };
 type Subscription = record {
-  subscriber : principal; numbered_subaccount : nat8; minimum_e8s : nat64;
+  subscriber : principal; numbered_subaccount : nat8; minimum_units : nat;
 };
 service : (DebugInitArgs) -> {
   get_instance : () -> (record {

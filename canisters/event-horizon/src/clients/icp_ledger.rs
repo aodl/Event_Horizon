@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Int, Nat, Principal};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_cdk::call::{Call, CallErrorExt};
 
 use crate::config::RESERVE_PROTECTION_CYCLES;
@@ -11,72 +11,6 @@ pub struct Tokens {
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct TimeStamp {
     pub timestamp_nanos: u64,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct Transaction {
-    pub memo: u64,
-    pub icrc1_memo: Option<Vec<u8>>,
-    pub operation: Option<Operation>,
-    pub created_at_time: TimeStamp,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub enum Operation {
-    Mint {
-        to: Vec<u8>,
-        amount: Tokens,
-    },
-    Burn {
-        from: Vec<u8>,
-        spender: Option<Vec<u8>>,
-        amount: Tokens,
-    },
-    Transfer {
-        from: Vec<u8>,
-        to: Vec<u8>,
-        amount: Tokens,
-        fee: Tokens,
-        spender: Option<Vec<u8>>,
-    },
-    Approve {
-        from: Vec<u8>,
-        spender: Vec<u8>,
-        allowance_e8s: Int,
-        allowance: Tokens,
-        fee: Tokens,
-        expires_at: Option<TimeStamp>,
-        expected_allowance: Option<Tokens>,
-    },
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct Block {
-    pub parent_hash: Option<Vec<u8>>,
-    pub transaction: Transaction,
-    pub timestamp: TimeStamp,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct GetBlocksArgs {
-    pub start: u64,
-    pub length: u64,
-}
-
-/// Event Horizon intentionally does not decode or call archive callbacks. Candid record
-/// subtyping permits this narrow range representation containing only the location.
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct ArchivedBlocksRange {
-    pub start: u64,
-    pub length: u64,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub struct QueryBlocksResponse {
-    pub chain_length: u64,
-    pub blocks: Vec<Block>,
-    pub first_block_index: u64,
-    pub archived_blocks: Vec<ArchivedBlocksRange>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -110,24 +44,6 @@ pub type LegacyTransferResult = Result<u64, LegacyTransferError>;
 
 fn nat_to_u64(n: &Nat) -> Result<u64, String> {
     u64::try_from(n.0.clone()).map_err(|_| format!("Nat does not fit u64: {n}"))
-}
-
-pub async fn query_blocks(
-    ledger: Principal,
-    start: u64,
-    length: u64,
-) -> Result<QueryBlocksResponse, String> {
-    let args = GetBlocksArgs { start, length };
-    let call = Call::bounded_wait(ledger, "query_blocks").with_arg(&args);
-    if ic_cdk::api::canister_liquid_cycle_balance()
-        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
-    {
-        return Err("reserve_protection".to_string());
-    }
-    call.await
-        .map_err(|e| format!("query_blocks transport: {e:?}"))?
-        .candid::<QueryBlocksResponse>()
-        .map_err(|e| format!("query_blocks decode: {e:?}"))
 }
 
 pub async fn icrc1_balance_of(ledger: Principal, account: Account) -> Result<u64, String> {

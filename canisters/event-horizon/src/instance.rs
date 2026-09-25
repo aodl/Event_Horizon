@@ -44,6 +44,11 @@ pub fn validate_observed_ledger(principal: Principal) {
     );
 }
 
+pub fn log_config() {
+    let runtime = config::runtime();
+    ic_cdk::println!("CONFIG instance={} observed_ledger={} icp_ledger={} faucet={} historian={} cmc={} surplus={}", ic_cdk::api::canister_self(), runtime.observed_ledger, runtime.icp_ledger, runtime.faucet_canister, runtime.historian_canister, runtime.cmc_canister, runtime.surplus_canister.map_or_else(|| "none".to_string(), |p| p.to_text()));
+}
+
 pub fn get_instance() -> InstanceInfo {
     let instance = state::read_instance_config();
     let runtime = config::runtime();
@@ -85,5 +90,12 @@ pub async fn ensure_observed_profile() -> Result<ObservedLedgerProfile, String> 
         supports_icrc2_transfer_from: block_types.iter().any(|kind| kind.block_type == "2xfer"),
     };
     state::write_observed_profile(profile.clone());
+    ic_cdk::println!(
+        "CONFIG observed_ledger={} symbol={} decimals={} icrc2_transfer_from={}",
+        ledger,
+        profile.symbol,
+        profile.decimals,
+        profile.supports_icrc2_transfer_from
+    );
     Ok(profile)
 }

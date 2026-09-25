@@ -41,6 +41,7 @@ fn init(args: InitArgs) {
         observed_ledger: args.observed_ledger,
         observed_profile: None,
     });
+    instance::log_config();
     scheduler::start();
 }
 

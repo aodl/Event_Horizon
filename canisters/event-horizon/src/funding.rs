@@ -3,7 +3,7 @@ use std::cell::Cell;
 
 use crate::{
     account::{account_identifier_bytes, principal_to_subaccount},
-    clients::{cmc, ledger},
+    clients::{cmc, icp_ledger},
     config, logging,
     state::{self, FundingState, PlannedSurplus},
     surplus,
@@ -70,14 +70,14 @@ fn legacy_transfer_arg(
     amount_e8s: u64,
     fee_e8s: u64,
     created_at_time_nanos: u64,
-) -> ledger::LegacyTransferArg {
-    ledger::LegacyTransferArg {
+) -> icp_ledger::LegacyTransferArg {
+    icp_ledger::LegacyTransferArg {
         memo,
-        amount: ledger::Tokens { e8s: amount_e8s },
-        fee: ledger::Tokens { e8s: fee_e8s },
+        amount: icp_ledger::Tokens { e8s: amount_e8s },
+        fee: icp_ledger::Tokens { e8s: fee_e8s },
         from_subaccount: None,
         to: destination.to_vec(),
-        created_at_time: Some(ledger::TimeStamp {
+        created_at_time: Some(icp_ledger::TimeStamp {
             timestamp_nanos: created_at_time_nanos,
         }),
     }
@@ -87,7 +87,7 @@ fn cmc_transfer_arg(
     amount_e8s: u64,
     fee_e8s: u64,
     created_at_time_nanos: u64,
-) -> ledger::LegacyTransferArg {
+) -> icp_ledger::LegacyTransferArg {
     let runtime = config::runtime();
     let cmc_subaccount = principal_to_subaccount(ic_cdk::api::canister_self());
     legacy_transfer_arg(
@@ -105,7 +105,7 @@ fn surplus_transfer_arg(
     amount_e8s: u64,
     fee_e8s: u64,
     created_at_time_nanos: u64,
-) -> ledger::LegacyTransferArg {
+) -> icp_ledger::LegacyTransferArg {
     legacy_transfer_arg(
         destination,
         memo,
@@ -132,22 +132,22 @@ async fn resume_cmc_transfer(
 ) -> bool {
     let runtime = config::runtime();
     let arg = cmc_transfer_arg(amount_e8s, fee_e8s, created_at_time_nanos);
-    match ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
-        ledger::LegacyTransferOutcome::Accepted(block_index) => {
+    match icp_ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
+        icp_ledger::LegacyTransferOutcome::Accepted(block_index) => {
             state::write_funding_state(FundingState::CmcNotifyPending {
                 block_index,
                 planned_surplus,
             });
             true
         }
-        ledger::LegacyTransferOutcome::RetrySameIdentity
-        | ledger::LegacyTransferOutcome::Uncertain(_) => false,
-        ledger::LegacyTransferOutcome::IdentityExpired => {
+        icp_ledger::LegacyTransferOutcome::RetrySameIdentity
+        | icp_ledger::LegacyTransferOutcome::Uncertain(_) => false,
+        icp_ledger::LegacyTransferOutcome::IdentityExpired => {
             logging::cmc_transfer_identity_expired();
             state::write_funding_state(FundingState::Idle);
             false
         }
-        ledger::LegacyTransferOutcome::Replan => {
+        icp_ledger::LegacyTransferOutcome::Replan => {
             state::write_funding_state(FundingState::Idle);
             false
         }
@@ -169,17 +169,17 @@ async fn resume_surplus_transfer(
         fee_e8s,
         created_at_time_nanos,
     );
-    match ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
-        ledger::LegacyTransferOutcome::Accepted(_) => {
+    match icp_ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
+        icp_ledger::LegacyTransferOutcome::Accepted(_) => {
             state::write_funding_state(FundingState::Idle);
         }
-        ledger::LegacyTransferOutcome::RetrySameIdentity
-        | ledger::LegacyTransferOutcome::Uncertain(_) => {}
-        ledger::LegacyTransferOutcome::IdentityExpired => {
+        icp_ledger::LegacyTransferOutcome::RetrySameIdentity
+        | icp_ledger::LegacyTransferOutcome::Uncertain(_) => {}
+        icp_ledger::LegacyTransferOutcome::IdentityExpired => {
             logging::surplus_transfer_identity_expired();
             state::write_funding_state(FundingState::Idle);
         }
-        ledger::LegacyTransferOutcome::Replan => {
+        icp_ledger::LegacyTransferOutcome::Replan => {
             state::write_funding_state(FundingState::Idle);
         }
     }
@@ -291,9 +291,9 @@ pub async fn run_funding_maintenance() -> bool {
     }
 
     let self_id = ic_cdk::api::canister_self();
-    let balance = match ledger::icrc1_balance_of(
+    let balance = match icp_ledger::icrc1_balance_of(
         runtime.icp_ledger,
-        ledger::Account {
+        icp_ledger::Account {
             owner: self_id,
             subaccount: None,
         },
@@ -303,7 +303,7 @@ pub async fn run_funding_maintenance() -> bool {
         Ok(value) => value,
         Err(_) => return false,
     };
-    let fee = match ledger::icrc1_fee(runtime.icp_ledger).await {
+    let fee = match icp_ledger::icrc1_fee(runtime.icp_ledger).await {
         Ok(value) => value,
         Err(_) => return false,
     };

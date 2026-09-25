@@ -3,6 +3,16 @@ use std::cell::RefCell;
 
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
 use ic_cdk::call::Call;
+use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
+    icrc1::account::Account as IcrcAccount,
+    icrc3::{
+        archive::QueryArchiveFn,
+        blocks::{
+            ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResult, SupportedBlockType,
+        },
+    },
+};
 use sha2::{Digest, Sha224};
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -98,8 +108,8 @@ type LegacyTransferResult = Result<u64, LegacyTransferError>;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugAppendTransfer {
-    pub from: Vec<u8>,
-    pub to: Vec<u8>,
+    pub from: IcrcAccount,
+    pub to: IcrcAccount,
     pub amount_e8s: u64,
     pub icrc1_memo: Option<Vec<u8>>,
 }
@@ -134,6 +144,7 @@ struct LegacyDedup {
 }
 struct State {
     blocks: Vec<Block>,
+    icrc_blocks: Vec<ICRC3Value>,
     first_local: u64,
     suppress_archive_info: bool,
     fee_e8s: u64,
@@ -147,6 +158,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             blocks: vec![],
+            icrc_blocks: vec![],
             first_local: 0,
             suppress_archive_info: false,
             fee_e8s: 10_000,
@@ -191,8 +203,8 @@ fn set_balance(state: &mut State, account: Account, value: u64) {
 }
 fn append_transfer(
     state: &mut State,
-    from: Vec<u8>,
-    to: Vec<u8>,
+    from: IcrcAccount,
+    to: IcrcAccount,
     amount: u64,
     fee: u64,
     memo: Option<Vec<u8>>,
@@ -200,14 +212,35 @@ fn append_transfer(
 ) -> u64 {
     let idx = state.blocks.len() as u64;
     let now = ic_cdk::api::time();
+    let account_value = |account: IcrcAccount| {
+        ICRC3Value::Array(vec![
+            ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+            ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+        ])
+    };
+    let mut tx = std::collections::BTreeMap::from([
+        ("op".into(), ICRC3Value::Text("xfer".into())),
+        ("from".into(), account_value(from)),
+        ("to".into(), account_value(to)),
+        ("amt".into(), ICRC3Value::Nat(amount.into())),
+    ]);
+    if let Some(value) = memo.clone() {
+        tx.insert("memo".into(), ICRC3Value::Blob(value.into()));
+    }
+    state
+        .icrc_blocks
+        .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+            ("btype".into(), ICRC3Value::Text("1xfer".into())),
+            ("tx".into(), ICRC3Value::Map(tx)),
+        ])));
     state.blocks.push(Block {
         parent_hash: None,
         transaction: Transaction {
             memo: legacy_memo,
             icrc1_memo: memo,
             operation: Some(Operation::Transfer {
-                from,
-                to,
+                from: vec![],
+                to: vec![],
                 amount: Tokens { e8s: amount },
                 fee: Tokens { e8s: fee },
                 spender: None,
@@ -334,11 +367,13 @@ async fn transfer(arg: LegacyTransferArg) -> LegacyTransferResult {
             });
         }
         set_balance(&mut s, source, balance - need);
-        let from_id = account_identifier(caller, arg.from_subaccount.unwrap_or([0; 32])).to_vec();
         let block = append_transfer(
             &mut s,
-            from_id,
-            arg.to.clone(),
+            IcrcAccount {
+                owner: caller,
+                subaccount: arg.from_subaccount,
+            },
+            IcrcAccount::from(Principal::management_canister()),
             arg.amount.e8s,
             arg.fee.e8s,
             None,
@@ -383,6 +418,89 @@ fn debug_append_transfer(arg: DebugAppendTransfer) -> u64 {
             0,
         )
     })
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct SupportedStandard {
+    name: String,
+    url: String,
+}
+
+#[ic_cdk::query]
+fn icrc1_supported_standards() -> Vec<SupportedStandard> {
+    vec![
+        SupportedStandard {
+            name: "ICRC-1".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        },
+        SupportedStandard {
+            name: "ICRC-3".into(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".into(),
+        },
+    ]
+}
+#[ic_cdk::query]
+fn icrc1_symbol() -> String {
+    "ICP".into()
+}
+#[ic_cdk::query]
+fn icrc1_decimals() -> u8 {
+    8
+}
+#[ic_cdk::query]
+fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
+    vec![
+        SupportedBlockType {
+            block_type: "1xfer".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        },
+        SupportedBlockType {
+            block_type: "2xfer".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        },
+    ]
+}
+#[ic_cdk::query]
+fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    STATE.with(|state| {
+        let state = state.borrow();
+        let mut blocks = Vec::new();
+        let mut archived_blocks = Vec::new();
+        for request in args {
+            let (start, length) = request.as_start_and_length().unwrap();
+            let end = start
+                .saturating_add(length)
+                .min(state.icrc_blocks.len() as u64);
+            let archive_end = state.first_local.min(end);
+            if start < archive_end && !state.suppress_archive_info {
+                archived_blocks.push(ArchivedBlocks {
+                    args: vec![GetBlocksRequest {
+                        start: start.into(),
+                        length: (archive_end - start).into(),
+                    }],
+                    callback: QueryArchiveFn::new(
+                        ic_cdk::api::canister_self(),
+                        "forbidden_archive_callback",
+                    ),
+                });
+            }
+            for id in start.max(state.first_local)..end {
+                blocks.push(BlockWithId {
+                    id: id.into(),
+                    block: state.icrc_blocks[id as usize].clone(),
+                });
+            }
+        }
+        GetBlocksResult {
+            log_length: (state.icrc_blocks.len() as u64).into(),
+            blocks,
+            archived_blocks,
+        }
+    })
+}
+#[ic_cdk::query]
+fn forbidden_archive_callback(_: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    ic_cdk::trap("archive callback must not be called")
 }
 #[ic_cdk::update]
 fn debug_set_first_local_block(index: u64) {

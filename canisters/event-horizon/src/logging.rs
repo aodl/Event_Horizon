@@ -6,7 +6,6 @@ thread_local! {
     static OBSERVED_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static ICP_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static HISTORIAN_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
-    static IN_RESERVE_PROTECTION: Cell<bool> = const { Cell::new(false) };
     static OBSERVED_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
     static ADMISSION_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
 }
@@ -75,15 +74,28 @@ pub fn historian_recovered() {
     HISTORIAN_UNAVAILABLE.with(|flag| flag.set(false));
 }
 
-pub fn reserve_mode(active: bool, balance: u128) {
-    IN_RESERVE_PROTECTION.with(|flag| {
-        let previous = flag.replace(active);
-        if active && !previous {
-            ic_cdk::println!("ENTER_RESERVE_PROTECTION cycles={}", balance);
-        } else if !active && previous {
-            ic_cdk::println!("EXIT_RESERVE_PROTECTION cycles={}", balance);
-        }
-    });
+pub fn poll_mode_change(
+    from: crate::cadence::PollingMode,
+    to: crate::cadence::PollingMode,
+    balance: u128,
+) {
+    ic_cdk::println!("POLL_MODE_CHANGE from={from:?} to={to:?} liquid_cycles={balance}");
+}
+
+pub fn daily_health() {
+    let day = ic_cdk::api::time() / 1_000_000_000 / 86_400;
+    let mut meta = crate::state::read_metadata();
+    if meta.last_health_log_day == Some(day) {
+        return;
+    }
+    let instance = crate::state::read_instance_config();
+    let symbol = instance
+        .observed_profile
+        .as_ref()
+        .map_or("pending", |p| p.symbol.as_str());
+    ic_cdk::println!("HEALTH day={} observed_ledger={} symbol={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, symbol, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
+    meta.last_health_log_day = Some(day);
+    crate::state::write_metadata(meta);
 }
 
 pub fn cmc_terminal(reason: &str) {

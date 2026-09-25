@@ -13,7 +13,6 @@ pub const JUPITER_FAUCET_CANISTER: &str = "acjuz-liaaa-aaaar-qb4qq-cai";
 /// Immutable production surplus destination. `None` keeps diversion disabled.
 pub const SURPLUS_CANISTER: Option<&str> = None;
 
-pub const MIN_TRIGGER_E8S: u64 = 1_000_000; // 0.01 ICP
 pub const LEDGER_PAGE_SIZE: u64 = 256;
 pub const FUNDING_MAINTENANCE_SECONDS: u64 = 60 * 60;
 pub const RESERVE_RECHECK_SECONDS: u64 = 60 * 60;
