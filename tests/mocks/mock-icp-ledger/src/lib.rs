@@ -419,6 +419,82 @@ fn debug_append_transfer(arg: DebugAppendTransfer) -> u64 {
         )
     })
 }
+#[ic_cdk::update]
+fn debug_append_transfer_from(arg: DebugAppendTransfer) -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = append_transfer(
+            &mut s,
+            arg.from,
+            arg.to,
+            arg.amount_e8s,
+            10_000,
+            arg.icrc1_memo,
+            0,
+        );
+        if let ICRC3Value::Map(block) = &mut s.icrc_blocks[id as usize] {
+            block.insert("btype".into(), ICRC3Value::Text("2xfer".into()));
+        }
+        id
+    })
+}
+#[ic_cdk::update]
+fn debug_append_other(kind: String) -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = s.icrc_blocks.len() as u64;
+        s.icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([(
+                "btype".into(),
+                ICRC3Value::Text(kind),
+            )])));
+        s.blocks.push(Block {
+            parent_hash: None,
+            transaction: Transaction {
+                memo: 0,
+                icrc1_memo: None,
+                operation: None,
+                created_at_time: TimeStamp {
+                    timestamp_nanos: ic_cdk::api::time(),
+                },
+            },
+            timestamp: TimeStamp {
+                timestamp_nanos: ic_cdk::api::time(),
+            },
+        });
+        id
+    })
+}
+#[ic_cdk::update]
+fn debug_append_malformed_transfer() -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = s.icrc_blocks.len() as u64;
+        s.icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+                ("btype".into(), ICRC3Value::Text("1xfer".into())),
+                (
+                    "tx".into(),
+                    ICRC3Value::Map(std::collections::BTreeMap::new()),
+                ),
+            ])));
+        s.blocks.push(Block {
+            parent_hash: None,
+            transaction: Transaction {
+                memo: 0,
+                icrc1_memo: None,
+                operation: None,
+                created_at_time: TimeStamp {
+                    timestamp_nanos: ic_cdk::api::time(),
+                },
+            },
+            timestamp: TimeStamp {
+                timestamp_nanos: ic_cdk::api::time(),
+            },
+        });
+        id
+    })
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct SupportedStandard {

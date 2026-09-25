@@ -1,8 +1,6 @@
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_cdk::call::{Call, CallErrorExt};
 
-use crate::config::RESERVE_PROTECTION_CYCLES;
-
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct Tokens {
     pub e8s: u64,

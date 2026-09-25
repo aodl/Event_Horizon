@@ -196,6 +196,11 @@ mod debug {
         scheduler::debug_timer_count()
     }
 
+    #[ic_cdk::query]
+    fn debug_icrc3_get_blocks_calls() -> u64 {
+        clients::icrc3::debug_get_blocks_calls()
+    }
+
     #[derive(CandidType, Deserialize)]
     pub struct DebugSubscriptionArgs {
         subscriber: Principal,

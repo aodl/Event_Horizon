@@ -44,6 +44,7 @@ pub fn validate_observed_ledger(principal: Principal) {
     );
 }
 
+#[cfg(not(feature = "debug_api"))]
 pub fn log_config() {
     let runtime = config::runtime();
     ic_cdk::println!("CONFIG instance={} observed_ledger={} icp_ledger={} faucet={} historian={} cmc={} surplus={}", ic_cdk::api::canister_self(), runtime.observed_ledger, runtime.icp_ledger, runtime.faucet_canister, runtime.historian_canister, runtime.cmc_canister, runtime.surplus_canister.map_or_else(|| "none".to_string(), |p| p.to_text()));

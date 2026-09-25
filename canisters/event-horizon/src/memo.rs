@@ -276,15 +276,26 @@ mod tests {
     #[test]
     fn converts_generic_precisions_without_u64_limits() {
         for (text, decimals, units) in [
-            ("1", 0, "1"), ("1", 2, "100"), ("0.01", 2, "1"),
+            ("1", 0, "1"),
+            ("1", 2, "100"),
+            ("0.01", 2, "1"),
             ("0.00000001", 8, "1"),
             ("10.12345678", 8, "1012345678"),
             ("0.000000000000000001", 18, "1"),
         ] {
-            assert_eq!(parse_decimal(text).unwrap().to_units(decimals).unwrap().to_string(), units);
+            assert_eq!(
+                parse_decimal(text).unwrap().to_units(decimals).unwrap(),
+                Nat::from_str(units).unwrap()
+            );
         }
-        assert_eq!(parse_decimal("0.001").unwrap().to_units(2), Err(MemoParseError::TooManyFractionalDigits));
-        assert_eq!(parse_decimal("0").unwrap().to_units(0), Err(MemoParseError::ZeroAmount));
+        assert_eq!(
+            parse_decimal("0.001").unwrap().to_units(2),
+            Err(MemoParseError::TooManyFractionalDigits)
+        );
+        assert_eq!(
+            parse_decimal("0").unwrap().to_units(0),
+            Err(MemoParseError::ZeroAmount)
+        );
     }
 
     #[test]

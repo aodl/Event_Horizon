@@ -39,6 +39,7 @@ service : (DebugInitArgs) -> {
   debug_set_ledger_canister : (principal) -> ();
   debug_start_schedulers : () -> ();
   debug_timer_count : () -> (nat8) query;
+  debug_icrc3_get_blocks_calls : () -> (nat64) query;
   debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
   debug_global_subscription : (principal) -> (bool) query;
 }

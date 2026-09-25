@@ -7,6 +7,8 @@ use icrc_ledger_types::{
 };
 
 use crate::config::RESERVE_PROTECTION_CYCLES;
+#[cfg(feature = "debug_api")]
+thread_local! { static GET_BLOCKS_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct SupportedStandard {
@@ -126,6 +128,8 @@ pub async fn get_blocks(
     start: u64,
     length: u64,
 ) -> Result<GetBlocksResult, String> {
+    #[cfg(feature = "debug_api")]
+    GET_BLOCKS_CALLS.with(|calls| calls.set(calls.get() + 1));
     let request = vec![GetBlocksRequest {
         start: start.into(),
         length: length.into(),
@@ -138,6 +142,10 @@ pub async fn get_blocks(
     .await?
     .candid()
     .map_err(|e| format!("icrc3_get_blocks decode: {e:?}"))
+}
+#[cfg(feature = "debug_api")]
+pub fn debug_get_blocks_calls() -> u64 {
+    GET_BLOCKS_CALLS.with(std::cell::Cell::get)
 }
 
 pub async fn supported_standards(ledger: Principal) -> Result<Vec<SupportedStandard>, String> {

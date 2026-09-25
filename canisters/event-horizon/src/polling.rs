@@ -146,7 +146,7 @@ async fn page(
     observed: bool,
     decimals: u8,
     out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<u64, String> {
+) -> Result<(u64, bool), String> {
     let original = pos(&state::read_metadata(), s).1;
     let mut at = original;
     let archived = archived_prefix(&r, at, boundary)?;
@@ -163,6 +163,7 @@ async fn page(
         set(s, true, at)
     }
     let mut blocks = r.blocks;
+    let mut processed_block = false;
     blocks.sort_by(|a, b| a.id.cmp(&b.id));
     for b in blocks {
         let id = u64nat(&b.id)?;
@@ -176,6 +177,7 @@ async fn page(
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
         let e = icrc3::decode_block(&b.block)?;
+        processed_block = true;
         if admission {
             if let icrc3::LedgerEvent::Transfer { from, to, memo, .. } = &e {
                 admit(from, to, memo.as_deref(), decimals).await
@@ -190,7 +192,7 @@ async fn page(
     if at == original && at < boundary {
         return Err("no live progress or archive evidence".into());
     }
-    Ok(at)
+    Ok((at, processed_block))
 }
 async fn scan(
     ledger: Principal,
@@ -217,8 +219,8 @@ async fn scan(
                 icrc3::get_blocks(ledger, at, config::LEDGER_PAGE_SIZE.min(boundary - at)).await?
             }
         };
-        let n = page(r, s, boundary, admission, observed, decimals, out).await?;
-        activity |= n > at;
+        let (n, processed) = page(r, s, boundary, admission, observed, decimals, out).await?;
+        activity |= processed;
         at = n
     }
     Ok(activity)

@@ -150,6 +150,11 @@ mod tests {
         surplus_destination: Option<Principal>,
         pricing: Pricing,
     }
+    #[derive(CandidType, Deserialize, Debug)]
+    struct InstanceInfo {
+        observed_ledger: Principal,
+        icp_ledger: Principal,
+    }
     #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
     struct Price {
         account_icp: u64,
@@ -237,6 +242,7 @@ mod tests {
     struct Env {
         pic: PocketIc,
         ledger: Principal,
+        observed_ledger: Principal,
         historian: Principal,
         cmc: Principal,
         subscriber: Principal,
@@ -265,6 +271,16 @@ mod tests {
                 false,
             )
         }
+        fn new_two_ledgers() -> Result<Self> {
+            let env = Self::with_event_horizon_wasm_and_surplus_mode(
+                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                200_000_000_000_000,
+                true,
+                true,
+            )?;
+            env.price_once()?;
+            Ok(env)
+        }
         fn with_event_horizon_wasm(
             event_horizon_wasm: Vec<u8>,
             event_horizon_cycles: u128,
@@ -280,8 +296,26 @@ mod tests {
             event_horizon_cycles: u128,
             surplus_enabled: bool,
         ) -> Result<Self> {
+            Self::with_event_horizon_wasm_and_surplus_mode(
+                event_horizon_wasm,
+                event_horizon_cycles,
+                surplus_enabled,
+                false,
+            )
+        }
+        fn with_event_horizon_wasm_and_surplus_mode(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+            surplus_enabled: bool,
+            separate_observed: bool,
+        ) -> Result<Self> {
             let pic = PocketIcBuilder::new().with_application_subnet().build();
             let ledger = pic.create_canister();
+            let observed_ledger = if separate_observed {
+                pic.create_canister()
+            } else {
+                ledger
+            };
             let historian = pic.create_canister();
             let cmc = pic.create_canister();
             let subscriber = pic.create_canister();
@@ -295,7 +329,7 @@ mod tests {
                     },
                 )
                 .map_err(|error| anyhow!("create Event Horizon canister: {error}"))?;
-            for id in [ledger, historian, cmc, subscriber] {
+            for id in [ledger, observed_ledger, historian, cmc, subscriber] {
                 pic.add_cycles(id, 200_000_000_000_000);
             }
             pic.install_canister(
@@ -304,6 +338,14 @@ mod tests {
                 vec![],
                 None,
             );
+            if separate_observed {
+                pic.install_canister(
+                    observed_ledger,
+                    wasm(&LEDGER_WASM, "mock-icp-ledger", None)?,
+                    vec![],
+                    None,
+                );
+            }
             pic.install_canister(
                 historian,
                 wasm(&HISTORIAN_WASM, "mock-historian", None)?,
@@ -322,7 +364,7 @@ mod tests {
                 event_horizon,
                 event_horizon_wasm,
                 encode_one(DebugInitArgs {
-                    observed_ledger: ledger,
+                    observed_ledger,
                     icp_ledger: ledger,
                     cmc_canister: cmc,
                     historian_canister: historian,
@@ -334,6 +376,7 @@ mod tests {
             Ok(Self {
                 pic,
                 ledger,
+                observed_ledger,
                 historian,
                 cmc,
                 subscriber,
@@ -369,6 +412,43 @@ mod tests {
                     to,
                     amount_e8s: amount,
                     icrc1_memo: memo,
+                },
+            )
+        }
+        fn append_observed(
+            &self,
+            from: Account,
+            to: Account,
+            amount: u64,
+            memo: Option<Vec<u8>>,
+        ) -> Result<u64> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_append_transfer",
+                Append {
+                    from,
+                    to,
+                    amount_e8s: amount,
+                    icrc1_memo: memo,
+                },
+            )
+        }
+        fn append_observed_transfer_from(
+            &self,
+            from: Account,
+            to: Account,
+            amount: u64,
+        ) -> Result<u64> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_append_transfer_from",
+                Append {
+                    from,
+                    to,
+                    amount_e8s: amount,
+                    icrc1_memo: None,
                 },
             )
         }
@@ -599,6 +679,171 @@ mod tests {
             query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
             vec![7, 8]
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn same_wasm_supports_independent_observed_ledger_and_fixed_icp_funding() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?; // prospective bootstrap for both logs
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(info.observed_ledger, env.observed_ledger);
+        assert_eq!(info.icp_ledger, env.ledger);
+        env.admit(7, Some("0.00000001"), 1_000_000_000)?;
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before,
+            "unrelated ICP activity is not observed-token activity"
+        );
+        env.append_observed(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7]
+        );
+
+        env.set_balance(100_000_000)?;
+        env.fund()?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.ledger, "debug_accepted_legacy_transfers", ())?,
+            1,
+            "funding calls only the injected ICP ledger"
+        );
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.observed_ledger,
+                "debug_accepted_legacy_transfers",
+                ()
+            )?,
+            0
+        );
+
+        let second = env.pic.create_canister();
+        env.pic.add_cycles(second, 200_000_000_000_000);
+        let bytes = wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?;
+        let hash_a = sha2::Sha256::digest(&bytes);
+        let hash_b = sha2::Sha256::digest(&bytes);
+        assert_eq!(hash_a, hash_b);
+        env.pic.install_canister(
+            second,
+            bytes,
+            encode_one(DebugInitArgs {
+                observed_ledger: env.ledger,
+                icp_ledger: env.ledger,
+                cmc_canister: env.cmc,
+                historian_canister: env.historian,
+                faucet_canister: env.faucet,
+                surplus_canister: None,
+            })?,
+            None,
+        );
+        let second_info: InstanceInfo = query(&env.pic, second, "get_instance", ())?;
+        assert_eq!(second_info.observed_ledger, env.ledger);
+        assert_eq!(second_info.icp_ledger, env.ledger);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn icp_instance_uses_one_page_read_for_both_roles() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        let before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_icrc3_get_blocks_calls",
+            (),
+        )?;
+        env.poll()?;
+        let after = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_icrc3_get_blocks_calls",
+            (),
+        )?;
+        assert_eq!(
+            after - before,
+            1,
+            "one ICRC-3 page feeds admission and observed processing"
+        );
+        assert_eq!(
+            env.state()?.admission_next_block,
+            env.state()?.observed_next_block
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn transfer_from_global_other_and_malformed_retry_semantics() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        env.admit_global(10_000_000_000)?;
+        env.append_observed_transfer_from(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7]
+        );
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_other",
+            "3approve".to_string(),
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick()
+        }
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
+        );
+        let before = env.state()?.observed_next_block;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, before);
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, before);
         Ok(())
     }
 

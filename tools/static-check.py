@@ -102,6 +102,10 @@ for required in [
     assert required in live_text, f'live documentation is missing developer command {required}'
 
 backend_src='\n'.join(p.read_text(errors='ignore') for p in (root/'canisters/event-horizon/src').rglob('*.rs'))
+assert 'eo6ei-gaaaa-aaaar-qchra-cai' not in backend_src
+assert 'observed_ledger: Principal' in backend_src
+assert 'ryjl3-tyaaa-aaaaa-aaaba-cai' in backend_src, 'fixed protocol ICP ledger missing'
+assert 'SURPLUS_CANISTER: Option<&str> = None' in backend_src
 for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
     assert forbidden not in backend_src, f'backend source unexpectedly contains management mutation path {forbidden}'
 
