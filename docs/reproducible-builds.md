@@ -2,23 +2,35 @@
 
 The backend is intended to become controllerless, so source-to-Wasm reproducibility is part of Event Horizon's trust model.
 
-## Canonical build
+| Goal | Command |
+| --- | --- |
+| Fast logic tests | `cargo run -p xtask -- unit` |
+| Normal code check | `cargo run -p xtask -- check` |
+| Integration suite | `cargo run -p xtask -- pocketic` |
+| All behavior/source tests | `cargo run -p xtask -- test-all` |
+| Security dependencies | `cargo run -p xtask -- security` |
+| Local release Wasms | `cargo run -p xtask -- release` |
+| Canonical deployable Wasms | `cargo run -p xtask -- canonical` |
+| Deterministic rebuild proof | `cargo run -p xtask -- repro` |
+| Everything needed before deployment | `cargo run -p xtask -- validate` |
+
+## Local release build
 
 ```bash
-./tools/scripts/docker-build
+cargo run -p xtask -- release
 ```
 
-This uses `Dockerfile.repro`, which pins:
+This invokes `tools/scripts/build-release` with the host Rust, npm, and `ic-wasm` environment. It is useful for development and quick release inspection, but is not canonical source-to-Wasm verification.
 
-- Debian base-image digest;
-- Debian snapshot date;
-- Rust toolchain;
-- rustup installer digest;
-- `ic-wasm` version;
-- `Cargo.lock` and `package-lock.json`.
+## Canonical Docker build
 
-Source paths are remapped before compilation and release artifacts are passed through a pinned `ic-wasm shrink` step.
-The output is:
+```bash
+cargo run -p xtask -- canonical
+```
+
+This is equivalent to `./tools/scripts/docker-build`. `Dockerfile.repro` pins the Debian base-image digest and snapshot, Rust toolchain, rustup installer digest, `ic-wasm`, `Cargo.lock`, and `package-lock.json`. Source paths are remapped and both production modules pass through the pinned `ic-wasm shrink` step.
+
+The command verifies the artifact manifest, prints the source revision, working-tree state, and exact Wasm hashes, and produces:
 
 ```text
 release-artifacts/event_horizon.wasm
@@ -27,33 +39,51 @@ release-artifacts/release-artifacts.sha256
 release-artifacts/build-info.json
 ```
 
-The Wasm files are deliberately left uncompressed so the published SHA-256 can be compared directly with the installed
-module hash without gzip representation ambiguity.
+Event Horizon releases uncompressed `.wasm` files. Therefore `SHA-256(release-artifacts/event_horizon.wasm)` and `SHA-256(release-artifacts/event_horizon_frontend.wasm)` are intended for direct comparison with their installed mainnet module hashes; no `.wasm.gz` representation is involved.
 
-## Same-environment double build
+For independent inspection after the build:
 
 ```bash
-./tools/scripts/verify-reproducible-artifacts
+(
+  cd release-artifacts
+  sha256sum -c release-artifacts.sha256
+)
 ```
 
-This performs two clean Docker builds and compares every produced artifact byte-for-byte.
+The canonical build already performs this verification and fails on any mismatch.
+
+## Reproducibility proof
+
+```bash
+cargo run -p xtask -- repro
+```
+
+This performs two independent `docker build --no-cache` artifact builds and compares every emitted file hash.
+
+This proves same-environment determinism. It does not by itself populate `release-artifacts/` and does not compare against mainnet. Run `canonical` when deployable artifacts are required.
+
+## Full pre-deployment validation
+
+```bash
+cargo run -p xtask -- validate
+```
+
+This intentionally expensive gate runs all source/behavior tests, dependency-security policy, the two-build reproducibility proof, and finally the canonical build. It ends with exact deployable artifacts under `release-artifacts/`.
 
 ## Production-surface audit
 
-`tools/audit-wasm.py` parses the Wasm export section directly. The release build fails if the backend exports any
-`canister_update`, `canister_query`, or `canister_composite_query` application method, or if debug markers occur in the
-production module. The frontend build must expose exactly `canister_query http_request` as its application method and must not expose `http_request_update`, pricing proxies, or debug methods. The canonical build runs the pinned JavaScript bundle step before compiling the embedded frontend Wasm.
+`tools/audit-wasm.py` parses the Wasm export section directly. The release build fails unless the backend's sole production application query is `get_pricing`; it also fails if debug markers occur in the production module. The frontend must expose exactly `canister_query http_request` as its application method and must not expose `http_request_update`, pricing proxies, or debug methods. The canonical build runs the pinned JavaScript bundle step before compiling the embedded frontend Wasm.
 
-This supplements, rather than replaces, the checked-in production DID:
+This supplements, rather than replaces, the checked-in production DID, whose sole application method is:
 
 ```candid
-service : () -> {}
+service : {
+  get_pricing : () -> (Pricing) query;
+}
 ```
 
 ## Mainnet verification
 
-After deployment, compare the public module hash reported by ICP against the SHA-256 of
-`release-artifacts/event_horizon.wasm`. Retain the source revision, `build-info.json`, and artifact manifest used for the
-install. Repeat the comparison immediately before controller removal.
+After deployment, compare each public module hash reported by ICP with the SHA-256 printed by `canonical`. Retain the exact source revision, `build-info.json`, and artifact manifest used for installation. Repeat the backend comparison immediately before controller removal.
 
-Current ICP guidance: https://docs.internetcomputer.org/guides/canister-management/reproducible-builds/
+Current primary guidance: [ICP reproducible builds](https://docs.internetcomputer.org/guides/canister-management/reproducible-builds/).
