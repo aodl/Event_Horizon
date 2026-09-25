@@ -132,7 +132,7 @@ async fn resume_cmc_transfer(
 ) -> bool {
     let runtime = config::runtime();
     let arg = cmc_transfer_arg(amount_e8s, fee_e8s, created_at_time_nanos);
-    match ledger::legacy_transfer(runtime.ledger_canister, &arg).await {
+    match ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
         ledger::LegacyTransferOutcome::Accepted(block_index) => {
             state::write_funding_state(FundingState::CmcNotifyPending {
                 block_index,
@@ -169,7 +169,7 @@ async fn resume_surplus_transfer(
         fee_e8s,
         created_at_time_nanos,
     );
-    match ledger::legacy_transfer(runtime.ledger_canister, &arg).await {
+    match ledger::legacy_transfer(runtime.icp_ledger, &arg).await {
         ledger::LegacyTransferOutcome::Accepted(_) => {
             state::write_funding_state(FundingState::Idle);
         }
@@ -292,7 +292,7 @@ pub async fn run_funding_maintenance() -> bool {
 
     let self_id = ic_cdk::api::canister_self();
     let balance = match ledger::icrc1_balance_of(
-        runtime.ledger_canister,
+        runtime.icp_ledger,
         ledger::Account {
             owner: self_id,
             subaccount: None,
@@ -303,7 +303,7 @@ pub async fn run_funding_maintenance() -> bool {
         Ok(value) => value,
         Err(_) => return false,
     };
-    let fee = match ledger::icrc1_fee(runtime.ledger_canister).await {
+    let fee = match ledger::icrc1_fee(runtime.icp_ledger).await {
         Ok(value) => value,
         Err(_) => return false,
     };

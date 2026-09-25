@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "debug_api")]
 use crate::config::RuntimeConfig;
+use crate::instance::InstanceConfig;
 use crate::{
     cadence::PollingMode,
     pricing::{Observation, PricingState},
@@ -22,6 +23,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 // Stable-memory IDs are part of the long-lived storage contract. Never reuse them.
 const META_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(1);
+const INSTANCE_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(2);
 #[cfg(feature = "debug_api")]
 const DEBUG_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(3);
 const GLOBAL_SUBSCRIBERS_MEMORY_ID: MemoryId = MemoryId::new(4);
@@ -153,6 +155,7 @@ macro_rules! candid_value {
 }
 
 candid_value!(SubscriptionValue, Subscription, 128);
+candid_value!(InstanceConfigValue, Option<InstanceConfig>, 256);
 candid_value!(MetadataValue, Metadata, 256);
 candid_value!(ObservationValue, Observation, 128);
 candid_value!(PricingStateValue, PricingState, 512);
@@ -166,6 +169,7 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static META: RefCell<Option<StableCell<MetadataValue, Memory>>> = const { RefCell::new(None) };
     static SUBSCRIPTIONS: RefCell<Option<StableBTreeMap<AccountKey, SubscriptionValue, Memory>>> = const { RefCell::new(None) };
+    static INSTANCE_CONFIG: RefCell<Option<StableCell<InstanceConfigValue, Memory>>> = const { RefCell::new(None) };
     static GLOBAL_SUBSCRIBERS: RefCell<Option<StableBTreeMap<PrincipalKey, u8, Memory>>> = const { RefCell::new(None) };
     static PRICE_OBSERVATIONS: RefCell<Option<StableBTreeMap<u64, ObservationValue, Memory>>> = const { RefCell::new(None) };
     static PRICING_STATE: RefCell<Option<StableCell<PricingStateValue, Memory>>> = const { RefCell::new(None) };
@@ -173,6 +177,17 @@ thread_local! {
     static SURPLUS_POLICY_STATE: RefCell<Option<StableCell<SurplusPolicyStateValue, Memory>>> = const { RefCell::new(None) };
     #[cfg(feature = "debug_api")]
     static DEBUG_CONFIG: RefCell<Option<StableCell<DebugConfigValue, Memory>>> = const { RefCell::new(None) };
+}
+
+fn with_instance_config<R>(f: impl FnOnce(&mut StableCell<InstanceConfigValue, Memory>) -> R) -> R {
+    INSTANCE_CONFIG.with_borrow_mut(|slot| {
+        let cell = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(m.get(INSTANCE_CONFIG_MEMORY_ID), InstanceConfigValue(None))
+            })
+        });
+        f(cell)
+    })
 }
 
 fn with_meta<R>(f: impl FnOnce(&mut StableCell<MetadataValue, Memory>) -> R) -> R {
@@ -268,6 +283,7 @@ fn with_surplus_policy<R>(
 pub fn initialize_if_needed() {
     with_meta(|_| ());
     with_subscriptions(|_| ());
+    with_instance_config(|_| ());
     with_global_subscribers(|_| ());
     with_price_observations(|_| ());
     with_pricing_state(|_| ());
@@ -275,6 +291,29 @@ pub fn initialize_if_needed() {
     with_surplus_policy(|_| ());
     #[cfg(feature = "debug_api")]
     with_debug_config(|_| ());
+}
+
+pub fn initialize_instance_config(config: InstanceConfig) {
+    with_instance_config(|cell| {
+        assert!(
+            cell.get().0.is_none(),
+            "instance configuration already initialized"
+        );
+        cell.set(InstanceConfigValue(Some(config)));
+    });
+}
+
+pub fn read_instance_config() -> InstanceConfig {
+    with_instance_config(|cell| cell.get().0.clone())
+        .expect("instance configuration is not initialized")
+}
+
+pub fn write_observed_profile(profile: crate::instance::ObservedLedgerProfile) {
+    let mut config = read_instance_config();
+    if config.observed_profile.is_none() {
+        config.observed_profile = Some(profile);
+        with_instance_config(|cell| cell.set(InstanceConfigValue(Some(config))));
+    }
 }
 
 pub fn read_metadata() -> Metadata {
@@ -398,7 +437,10 @@ fn with_debug_config<R>(f: impl FnOnce(&mut StableCell<DebugConfigValue, Memory>
             MEMORY_MANAGER.with_borrow(|m| {
                 StableCell::init(
                     m.get(DEBUG_CONFIG_MEMORY_ID),
-                    DebugConfigValue(RuntimeConfig::production()),
+                    DebugConfigValue(RuntimeConfig::production(
+                        candid::Principal::from_text(crate::config::ICP_LEDGER_CANISTER)
+                            .expect("valid ICP Ledger principal"),
+                    )),
                 )
             })
         });

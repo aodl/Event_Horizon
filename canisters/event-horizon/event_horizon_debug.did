@@ -8,7 +8,7 @@ type Pricing = record {
   next_carried_forward_due_to_stale_rate : bool;
 };
 type DebugInitArgs = record {
-  ledger_canister : principal; cmc_canister : principal;
+  observed_ledger : principal; icp_ledger : principal; cmc_canister : principal;
   historian_canister : principal; faucet_canister : principal;
   surplus_canister : opt principal;
 };
@@ -22,6 +22,12 @@ type Subscription = record {
   subscriber : principal; numbered_subaccount : nat8; minimum_e8s : nat64;
 };
 service : (DebugInitArgs) -> {
+  get_instance : () -> (record {
+    observed_ledger : principal;
+    observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool };
+    icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
+    jupiter_historian : principal; surplus_canister : opt principal;
+  }) query;
   get_pricing : () -> (Pricing) query;
   debug_state : () -> (DebugState) query;
   debug_poll_once : () -> ();

@@ -6,4 +6,16 @@ type Pricing = record {
   latest_xdr_permyriad : nat64; latest_observed_at : nat64;
   next_carried_forward_due_to_stale_rate : bool;
 };
-service : () -> { get_pricing : () -> (Pricing) query; }
+type ObservedLedgerProfile = record {
+  symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool;
+};
+type InstanceInfo = record {
+  observed_ledger : principal; observed_profile : opt ObservedLedgerProfile;
+  icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
+  jupiter_historian : principal; surplus_canister : opt principal;
+};
+type InitArgs = record { observed_ledger : principal };
+service : (InitArgs) -> {
+  get_instance : () -> (InstanceInfo) query;
+  get_pricing : () -> (Pricing) query;
+}

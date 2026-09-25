@@ -203,7 +203,7 @@ pub async fn run_poll() {
     let mut meta = state::read_metadata();
 
     if !meta.bootstrapped {
-        match ledger::query_blocks(runtime.ledger_canister, 0, 0).await {
+        match ledger::query_blocks(runtime.icp_ledger, 0, 0).await {
             Ok(response) => {
                 meta.bootstrapped = true;
                 meta.next_block = response.chain_length;
@@ -218,8 +218,7 @@ pub async fn run_poll() {
 
     let mut cursor = meta.next_block;
     let first =
-        match ledger::query_blocks(runtime.ledger_canister, cursor, config::LEDGER_PAGE_SIZE).await
-        {
+        match ledger::query_blocks(runtime.icp_ledger, cursor, config::LEDGER_PAGE_SIZE).await {
             Ok(response) => {
                 logging::ledger_recovered();
                 response
@@ -243,7 +242,7 @@ pub async fn run_poll() {
             response
         } else {
             let length = config::LEDGER_PAGE_SIZE.min(boundary.saturating_sub(cursor));
-            match ledger::query_blocks(runtime.ledger_canister, cursor, length).await {
+            match ledger::query_blocks(runtime.icp_ledger, cursor, length).await {
                 Ok(response) => {
                     logging::ledger_recovered();
                     response

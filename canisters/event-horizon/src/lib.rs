@@ -9,6 +9,7 @@ mod cadence;
 mod clients;
 mod config;
 mod funding;
+mod instance;
 mod logging;
 mod memo;
 mod polling;
@@ -26,14 +27,20 @@ use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
 
 pub use account::{account_identifier_bytes, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
+pub use instance::{InitArgs, InstanceInfo, ObservedLedgerProfile};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
 pub use pricing::{Price, Pricing, PublicPrice};
 pub use subscription::{merge_subscription, Subscription};
 
 #[cfg(not(feature = "debug_api"))]
 #[ic_cdk::init]
-fn init() {
+fn init(args: InitArgs) {
+    instance::validate_observed_ledger(args.observed_ledger);
     state::initialize_if_needed();
+    state::initialize_instance_config(instance::InstanceConfig {
+        observed_ledger: args.observed_ledger,
+        observed_profile: None,
+    });
     scheduler::start();
 }
 
@@ -49,6 +56,11 @@ fn get_pricing() -> Pricing {
     pricing::get_pricing()
 }
 
+#[ic_cdk::query]
+fn get_instance() -> InstanceInfo {
+    instance::get_instance()
+}
+
 #[cfg(feature = "debug_api")]
 mod debug {
     use super::*;
@@ -57,7 +69,8 @@ mod debug {
 
     #[derive(CandidType, Deserialize)]
     pub struct DebugInitArgs {
-        pub ledger_canister: Principal,
+        pub observed_ledger: Principal,
+        pub icp_ledger: Principal,
         pub cmc_canister: Principal,
         pub historian_canister: Principal,
         pub faucet_canister: Principal,
@@ -67,7 +80,8 @@ mod debug {
     impl From<DebugInitArgs> for config::RuntimeConfig {
         fn from(value: DebugInitArgs) -> Self {
             Self {
-                ledger_canister: value.ledger_canister,
+                observed_ledger: value.observed_ledger,
+                icp_ledger: value.icp_ledger,
                 cmc_canister: value.cmc_canister,
                 historian_canister: value.historian_canister,
                 faucet_canister: value.faucet_canister,
@@ -79,6 +93,11 @@ mod debug {
     #[ic_cdk::init]
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
+        instance::validate_observed_ledger(args.observed_ledger);
+        state::initialize_instance_config(instance::InstanceConfig {
+            observed_ledger: args.observed_ledger,
+            observed_profile: None,
+        });
         state::write_debug_config(args.into());
         // Debug builds are manually driven to keep PocketIC tests deterministic.
     }
@@ -158,7 +177,7 @@ mod debug {
     #[ic_cdk::update]
     fn debug_set_ledger_canister(ledger_canister: Principal) {
         let mut runtime = config::runtime();
-        runtime.ledger_canister = ledger_canister;
+        runtime.icp_ledger = ledger_canister;
         state::write_debug_config(runtime);
     }
 

@@ -43,7 +43,8 @@ pub const SURPLUS_MAX_LEVEL: u8 = SURPLUS_MAX_PERCENT / SURPLUS_STEP_PERCENT;
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RuntimeConfig {
-    pub ledger_canister: Principal,
+    pub observed_ledger: Principal,
+    pub icp_ledger: Principal,
     pub cmc_canister: Principal,
     pub historian_canister: Principal,
     pub faucet_canister: Principal,
@@ -51,9 +52,10 @@ pub struct RuntimeConfig {
 }
 
 impl RuntimeConfig {
-    pub fn production() -> Self {
+    pub fn production(observed_ledger: Principal) -> Self {
         Self {
-            ledger_canister: Principal::from_text(ICP_LEDGER_CANISTER)
+            observed_ledger,
+            icp_ledger: Principal::from_text(ICP_LEDGER_CANISTER)
                 .expect("valid ICP Ledger principal"),
             cmc_canister: Principal::from_text(CMC_CANISTER).expect("valid CMC principal"),
             historian_canister: Principal::from_text(JUPITER_HISTORIAN_CANISTER)
@@ -69,7 +71,7 @@ impl RuntimeConfig {
 
 #[cfg(not(feature = "debug_api"))]
 pub fn runtime() -> RuntimeConfig {
-    RuntimeConfig::production()
+    RuntimeConfig::production(crate::state::read_instance_config().observed_ledger)
 }
 
 #[cfg(feature = "debug_api")]
