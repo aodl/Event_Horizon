@@ -43,6 +43,11 @@ assert 'http_request_update' not in frontend_did
 assert 'queryBackendPricing()' in frontend_app
 assert "get_pricing: IDL.Func([], [Pricing], ['query'])" in frontend_client
 assert "fetch('/pricing.json'" not in frontend_app
+assert "'eo6ei-gaaaa-aaaar-qchra-cai'" in frontend_client
+assert "'https://icp-api.io'" in frontend_client
+for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env', 'IC_ROOT_KEY']:
+    assert marker not in frontend_client, f'frontend client contains removed discovery marker {marker}'
+    assert marker not in frontend, f'frontend canister contains removed discovery marker {marker}'
 
 memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src

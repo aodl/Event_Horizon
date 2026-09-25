@@ -2,8 +2,27 @@
 
 Event Horizon has two independently controlled canisters:
 
-- `event_horizon`: autonomous trigger backend, intended eventually to have **no controllers**.
-- `event_horizon_frontend`: certified informational frontend, intentionally left governable/upgradeable.
+- `event_horizon`: `eo6ei-gaaaa-aaaar-qchra-cai`, the autonomous trigger backend, intended eventually to have **no controllers**.
+- `event_horizon_frontend`: `ej7c4-lyaaa-aaaar-qchrq-cai`, the certified informational frontend, intentionally left governable/upgradeable.
+
+These permanent mainnet canisters have already been created by the operator. Before any mainnet deployment,
+map the project names to the existing principals in the operator-local `.icp/data/mappings/ic.ids.json`:
+
+```json
+{
+  "event_horizon": "eo6ei-gaaaa-aaaar-qchra-cai",
+  "event_horizon_frontend": "ej7c4-lyaaa-aaaar-qchrq-cai"
+}
+```
+
+This mapping is local deployment state and must not be committed as application source.
+
+> **Do not run a mainnet deploy until the mapping has been checked. Otherwise a deployment tool may create new canisters rather than use the permanent Event Horizon canisters.**
+
+Both canisters are newly created and empty. Their first deployment must use explicit install mode,
+`--mode install`, never reinstall. Install the backend first, verify its module and application surface, and
+only then install the frontend. The operator performs these mainnet actions manually; the repository does not
+provide an automatic deployment script.
 
 ## Build and validate
 
@@ -60,7 +79,7 @@ Controller removal is a separate operational decision. During the controlled obs
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
 10. the production export audit reports only `get_pricing` as an application method;
 11. global and range subscription poke volume is sustainable at the observed registry size, including a validated 256-account maximum range.
-12. the frontend export audit reports only `http_request` and direct browser pricing reads succeed using the injected backend canister ID;
+12. the frontend export audit reports only `http_request` and direct browser pricing reads reach the permanent backend principal compiled into the certified frontend artifact;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
 15. if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
@@ -80,3 +99,11 @@ Production constants are compiled into the backend Wasm:
 The surplus receiver is a compile-time trust anchor, not deployment input. Before a production build intended to enable diversion, replace `SURPLUS_CANISTER = None` with exactly one reviewed `Some("<principal>")`, rebuild the canonical Wasm, rerun every validation and export audit, and record the new hash. Never add a runtime setter. Once controllers are removed, the destination cannot change.
 
 The Jupiter Faucet `X` alias must resolve to the actual deployed Event Horizon backend before subscription endowments are created.
+
+## Frontend backend binding
+
+The certified frontend embeds `eo6ei-gaaaa-aaaar-qchra-cai` directly in its JavaScript asset and therefore in
+the frontend Wasm. Its no-argument production pricing path uses `https://icp-api.io` and the mainnet root key
+embedded by the JavaScript agent. It does not discover the backend from cookies, canister environment values,
+URL parameters, local storage, HTTP configuration, init arguments, or mutable canister state. The frontend's
+own principal is deployment identity only and is not compiled into executable code.

@@ -104,51 +104,12 @@ fn serve_asset(req: &HttpRequest) -> HttpResponse<'static> {
         return plain_error_response(StatusCode::INTERNAL_SERVER_ERROR, "certificate unavailable");
     };
 
-    let mut response = ASSET_ROUTER.with_borrow(|asset_router| {
-        match asset_router.serve_asset(&certificate, req) {
+    ASSET_ROUTER.with_borrow(
+        |asset_router| match asset_router.serve_asset(&certificate, req) {
             Ok(response) => response,
             Err(err) => asset_error_response(&err),
-        }
-    });
-    if matches!(
-        req.get_path().ok().as_deref(),
-        Some("/") | Some("/index.html")
-    ) {
-        if let Some(cookie) = canister_discovery_cookie() {
-            response.add_header(("set-cookie".to_string(), cookie));
-        }
-    }
-    response
-}
-
-fn canister_discovery_cookie() -> Option<String> {
-    let backend = ic_cdk::api::env_var_value("PUBLIC_CANISTER_ID:event_horizon");
-    if backend.is_empty() {
-        return None;
-    }
-    let mut value = format!("PUBLIC_CANISTER_ID:event_horizon={backend}");
-    let root_key = ic_cdk::api::env_var_value("IC_ROOT_KEY");
-    if !root_key.is_empty() {
-        value.push_str("&IC_ROOT_KEY=");
-        value.push_str(&root_key);
-    }
-    Some(format!(
-        "ic_env={}; Path=/; SameSite=Lax",
-        percent_encode_cookie_value(&value)
-    ))
-}
-
-fn percent_encode_cookie_value(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            use std::fmt::Write;
-            write!(&mut encoded, "%{byte:02X}").expect("write to String");
-        }
-    }
-    encoded
+        },
+    )
 }
 
 fn asset_error_response(err: &AssetCertificationError) -> HttpResponse<'static> {
