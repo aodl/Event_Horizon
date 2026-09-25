@@ -1,5 +1,7 @@
 # Subscriber guide
 
+`poke : (vec nat8) -> ()` is unchanged. Values identify numbered subaccounts on the selected observed token ledger. Thresholds use that token's verified decimals; the Jupiter endowment and displayed subscription price remain ICP. A poke may precede an optional Index, and subscriber reconciliation remains authoritative.
+
 Implement and authenticate this endpoint:
 
 ```candid
@@ -18,7 +20,7 @@ X.<subscriber>.<start>-<end>:<amount>  incoming amount >= threshold in that rang
 
 For range declarations the endpoints are inclusive and must satisfy `0 <= start < end <= 255`. Use the single-account form when both endpoints would be equal; invalid ranges are not reversed, clamped, or repaired. Integers use canonical decimal spelling without signs or leading zeroes.
 
-An explicit threshold has at most two decimal places and a minimum of `0.01 ICP`. Omission means every incoming transfer to the numbered account or every account in the range. A global declaration means any transaction anywhere on the Ledger; it does not subscribe all of the canister's subaccounts. Range pokes contain only accounts that actually matched during the poll, never the entire declared range.
+An explicit threshold uses at most the observed ledger's verified decimals and may be one raw token unit. Omission means every incoming transfer to the numbered account or every account in the range. A global declaration means any block anywhere on the observed Ledger; it does not subscribe all of the canister's subaccounts.
 
 ## Poke interpretation
 

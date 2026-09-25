@@ -14,7 +14,7 @@ Do not continue unless all of the following are true:
 - the production Wasm export audit passes;
 - `status_visibility` is `public`;
 - `log_visibility` is `public`;
-- `log_memory_limit` is at least 4096 bytes (the intended value is exactly 4096);
+- `log_memory_limit` is exactly 16384 bytes;
 - the canister has a healthy cycles reserve;
 - the configured Ledger, CMC, Historian and Faucet constants are correct;
 - `SURPLUS_CANISTER` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;

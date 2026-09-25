@@ -22,7 +22,7 @@ Every new split freezes one `PlannedSurplus { destination, memo, amount_e8s, fee
 
 ID 8 defaults to an uninitialized level-zero policy. This is live protocol state, not schema migration: destination-disabled operation accrues no entitlement, and enabling begins a fresh epoch. Levels above 19 or backwards-time state fail closed to a new level-zero epoch. Current-Wasm upgrades cover every pending funding phase and policy persistence.
 
-Account `minimum_e8s = 0` remains the unambiguous omitted-threshold sentinel. Each admitted range is expanded into the existing ID 1 map; no range registry or new memory ID exists. Overlapping declarations merge to the lowest threshold, which is safe because admissions are permanent and thresholds never become more restrictive. Global declarations have no synthetic account or subaccount record.
+Account `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands into the ID 1 map. Stable ID 2 contains immutable instance configuration and its once-discovered profile.
 
 The stable pricing `Price` is `{ account_icp, global_icp }`. Public `get_pricing` values derive `range_icp = ceil(global_icp / 5)` with quotient/remainder arithmetic, exactly equal to `ceil(20F/C)`.
 

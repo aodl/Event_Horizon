@@ -4,9 +4,9 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 ## 1. Purpose
 
-Event Horizon improves the responsiveness of canisters that react to incoming ICP without becoming part of their correctness path.
+Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads the live ICP Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` on subscribed canisters when relevant transfers are observed. A non-empty poke contains the distinct numbered subaccounts that matched during that poll. An empty poke signals activity for a global Ledger subscription. Neither form contains transaction identifiers, amounts, memos, senders, or other transaction data. Each subscriber owns its authoritative reconciliation cursor and must retain independent periodic reconciliation.
+Event Horizon reads an immutable configured ICRC-1/ICRC-3 Observed Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` when relevant activity is observed. A non-empty poke contains distinct matching numbered subaccounts; an empty poke signals global observed-ledger activity. Neither contains transaction data. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -16,7 +16,7 @@ Event Horizon is a standalone downstream product powered by Jupiter Faucet endow
 
 The Event Horizon backend:
 
-- has exactly one production application query, `get_pricing`, containing no subscription or administrative data;
+- has exactly two production application queries, `get_instance` and `get_pricing`, containing no subscription or administrative data;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -71,21 +71,21 @@ Rules:
 - range endpoints are inclusive and must satisfy `0 <= start < end <= 255`;
 - reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
-- when present, amount is decimal ICP with one or two fractional digits, or an integer amount;
+- when present, amount is decimal observed-token value with at most its verified `icrc1_decimals`, or an integer;
 - fractional amounts require a leading zero (`0.1`, not `.1`);
 - no sign, exponent or comparison operator is accepted;
 - explicit threshold matching semantics are always `transfer amount >= declared amount`;
-- the smallest valid explicit amount is `0.01 ICP`;
+- the smallest valid explicit amount is one raw observed-token unit;
 - a colon with no amount is invalid; omission means omitting the colon and amount together;
 - the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit.
 
-Internally all values are integer e8s. Floating-point arithmetic is forbidden. The implementation may use `0 e8s` as an internal sentinel for an omitted threshold because an explicitly declared threshold can never be below `0.01 ICP`.
+Observed amounts are arbitrary-precision integer raw token units. Floating-point arithmetic is forbidden. Zero is the omitted-threshold sentinel; explicit thresholds must exceed zero.
 
 ## 4. Watched account
 
 The numbered subaccount convention is 32 zero bytes with the integer stored in the last byte. Subaccount `0` is therefore the default all-zero subaccount.
 
-The watched legacy ICP account identifier is derived from the subscriber principal and that 32-byte subaccount using the standard `\x0Aaccount-id` SHA-224 + CRC-32 construction.
+The watched ICRC Account contains the subscriber principal and numbered subaccount. Absent and explicit all-zero subaccounts normalize to the same effective account.
 
 At most one effective subscription is required for a watched account. If another admitted declaration for the same account has a less restrictive threshold, the stored threshold becomes the less restrictive value. An unfiltered declaration (no threshold) therefore subsumes every thresholded declaration for that same account.
 
@@ -108,7 +108,7 @@ If Historian is unavailable/incomplete for one payout, Event Horizon does not pe
 
 ## 6. Ledger reader
 
-Event Horizon reads the ICP Ledger directly; it does not depend on the ICP Index.
+Event Horizon reads the configured Observed Ledger through `icrc3_get_blocks`; it does not depend on an Index. The fixed Protocol ICP Ledger is separately scanned for Faucet admission and remains the only funding asset.
 
 A fresh installation is prospective. On first successful Ledger observation it records the current chain tip and processes future activity only.
 
@@ -220,7 +220,13 @@ Continuous means no deliberately inserted delay after one complete poll; polls n
 
 ## 12. Production observability and immutability
 
-The production backend exposes only the `get_pricing` application query. The release audit rejects every other application query, composite query, or update.
+The Observed Ledger is the sole production install configuration. It must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Its symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
+
+Admission and observed activity have separate prospective durable cursors. Fresh streams bootstrap to `log_length` without replay. When both roles use ICP, one ICRC-3 page stream feeds both roles. Otherwise failures are independent. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
+
+Global subscriptions match every processed block. Specific accounts match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers. Thresholds are observed-token units; subscription prices and endowments are ICP.
+
+The production backend exposes only `get_instance` and `get_pricing`. The release audit rejects every other application query, composite query, or update.
 
 Before controller removal:
 

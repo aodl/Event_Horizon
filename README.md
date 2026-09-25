@@ -1,6 +1,8 @@
 # Event Horizon
 
-Event Horizon is a low-latency, best-effort ICP Ledger wake-up service funded by perpetual Jupiter Faucet endowments. It reads the live ICP Ledger directly and calls a subscriber's `poke(vec nat8)` endpoint. Subscribers keep authoritative Ledger or Index cursors and an independent reconciliation timer; a missed poke affects latency rather than correctness.
+Event Horizon is a ledger-generic low-latency wake-up service for compatible ICRC token ledgers, funded through Jupiter Faucet in ICP. It reads the selected ledger's ICRC-3 log and calls a subscriber's unchanged `poke(vec nat8)` endpoint. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
+
+Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; its only instance-specific production setting is immutable `observed_ledger`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
 
 It supports five exact Jupiter Faucet memo forms:
 
@@ -24,7 +26,9 @@ range price   = ceil(20 × F / C) ICP
 global price  = ceil(100 × F / C) ICP
 ```
 
-Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query; the certified frontend calls that query directly from its bundled browser client.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes exactly the read-only `get_instance` and `get_pricing` queries; the certified frontend verifies the first against its reviewed static registry.
+
+See [deploying an instance](docs/deploying-an-instance.md), [acceptance observation](docs/acceptance-observation.md), and the [subscriber guide](docs/subscriber-guide.md).
 
 ## Adaptive surplus funding
 

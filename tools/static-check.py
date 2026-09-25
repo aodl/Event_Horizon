@@ -13,8 +13,9 @@ print('svg_sha256', expected_svg)
 
 backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
 assert 'get_pricing : () -> (Pricing) query;' in backend_did
+assert 'get_instance : () -> (InstanceInfo) query;' in backend_did
 assert 'account_icp : nat64; range_icp : nat64; global_icp : nat64' in backend_did
-assert backend_did.count(' query;') == 1
+assert backend_did.count(' query;') == 2
 assert ' -> ();' not in backend_did
 assert (root/'candid/subscriber.did').read_text().strip() == 'service : {\n  poke : (vec nat8) -> ();\n}'
 thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
@@ -40,10 +41,13 @@ frontend_app=(root/'canisters/frontend/public/app.js').read_text()
 frontend_client=(root/'canisters/frontend/public/pricing-client.js').read_text()
 assert 'http_request_update' not in frontend
 assert 'http_request_update' not in frontend_did
-assert 'queryBackendPricing()' in frontend_app
+assert 'queryBackendPricing({canisterId:selected.backendCanisterId})' in frontend_app
 assert "get_pricing: IDL.Func([], [Pricing], ['query'])" in frontend_client
 assert "fetch('/pricing.json'" not in frontend_app
-assert "'eo6ei-gaaaa-aaaar-qchra-cai'" in frontend_client
+registry=(root/'canisters/frontend/public/instances.js').read_text()
+assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
+assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
+assert "alias:'X'" in registry and "alias:'I'" in registry
 assert "'https://icp-api.io'" in frontend_client
 for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env', 'IC_ROOT_KEY']:
     assert marker not in frontend_client, f'frontend client contains removed discovery marker {marker}'
@@ -55,13 +59,14 @@ assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
 assert 'SubscriptionDeclaration::Range' in polling
 assert 'BTreeMap<Principal, MatchState>' in polling
-assert 'for principal in state::global_subscribers()' in polling
-assert 'matched.matched_subaccounts.into_iter().collect()' in polling
+assert 'for p in state::global_subscribers()' in polling
+assert 'm.subs.into_iter().collect()' in polling
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
-ledger=(root/'canisters/event-horizon/src/clients/ledger.rs').read_text()
+ledger=(root/'canisters/event-horizon/src/clients/icp_ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
 assert 'Call::unbounded_wait(ledger, "transfer")' in ledger
-assert 'Call::bounded_wait(ledger, "query_blocks")' in ledger
+assert 'query_blocks' not in polling
+assert 'icrc3_get_blocks' in (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
 assert 'Call::bounded_wait(ledger, "icrc1_balance_of")' in ledger
 assert 'Call::bounded_wait(ledger, "icrc1_fee")' in ledger
 assert 'CallErrorExt' in ledger
@@ -69,7 +74,7 @@ assert 'icrc1_transfer' not in funding, 'CMC top-up must use legacy ICP transfer
 assert 'TOP_UP_CANISTER_MEMO' in funding
 
 icp= (root/'icp.yaml').read_text()
-for needle in ['status_visibility: public','log_visibility: public','log_memory_limit: 4096']:
+for needle in ['status_visibility: public','log_visibility: public','log_memory_limit: 16384']:
     assert needle in icp, f'missing production setting {needle}'
 for path in ['Dockerfile.repro','tools/audit-wasm.py','tools/scripts/build-release','tools/scripts/verify-reproducible-artifacts','docs/deployment.md','docs/reproducible-builds.md','docs/controller-removal.md']:
     assert (root/path).exists(), f'missing release-hardening file {path}'

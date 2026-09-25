@@ -1,12 +1,14 @@
 # Trust model
 
+For a finalized instance, verify the canister principal, empty controller list, public module hash, reproduced generic backend hash, `get_instance.observed_ledger`, recent public CONFIG/HEALTH logs, the Ledger principal independently, the Jupiter alias mapping, and fixed ICP/CMC/Faucet/Historian anchors in source/module. The complete tuple—not module hash alone—identifies the instance.
+
 Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 
 - The ICP Ledger defines processed activity and fixed poll boundaries.
 - Jupiter Faucet origin plus a complete Jupiter Historian exact-route total define admission.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - Liquid cycles observed hourly are the only adaptive-surplus health signal.
-- `get_pricing` is the backend's only production application method and exposes no subscription data.
+- `get_instance` and `get_pricing` are the backend's only production application methods; neither exposes subscription data.
 - Range declarations are protocol-bounded to 256 admission-time watched-account merges; they add no per-transfer scan, per-range scheduler, or additional poke allowance.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets are certified; backend admission remains authoritative.

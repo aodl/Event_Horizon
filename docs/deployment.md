@@ -81,7 +81,7 @@ Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by `v
 
 - `status_visibility: public`
 - `log_visibility: public`
-- `log_memory_limit: 4096`
+- `log_memory_limit: 16384`
 
 These settings must be verified on mainnet before controller removal. Public status is the intended source
 for current cycles balance, running state and module hash; `get_pricing` is not a status API.
@@ -179,7 +179,7 @@ Controller removal is a separate operational decision. During the controlled obs
 7. actual cycle burn is compatible with the starting threshold table;
 8. the installed backend module hash matches the canonical reproducible artifact.
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
-10. the production export audit reports only `get_pricing` as an application method;
+10. the production export audit reports exactly `get_instance` and `get_pricing` as application methods;
 11. global and range subscription poke volume is sustainable at the observed registry size, including a validated 256-account maximum range.
 12. the frontend export audit reports only `http_request` and direct browser pricing reads reach the permanent backend principal compiled into the certified frontend artifact;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
