@@ -1,10 +1,8 @@
 import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 
-export const EVENT_HORIZON_BACKEND_CANISTER_ID =
-  'eo6ei-gaaaa-aaaar-qchra-cai';
 export const ICP_API_HOST = 'https://icp-api.io';
 
-export const pricingIdlFactory = ({ IDL }) => {
+export const backendIdlFactory = ({ IDL }) => {
   const Price = IDL.Record({ account_icp: IDL.Nat64, range_icp: IDL.Nat64, global_icp: IDL.Nat64 });
   const Pricing = IDL.Record({
     initialized: IDL.Bool,
@@ -19,7 +17,9 @@ export const pricingIdlFactory = ({ IDL }) => {
     latest_observed_at: IDL.Nat64,
     next_carried_forward_due_to_stale_rate: IDL.Bool,
   });
-  return IDL.Service({ get_pricing: IDL.Func([], [Pricing], ['query']) });
+  const Profile=IDL.Record({symbol:IDL.Text,decimals:IDL.Nat8,supports_icrc2_transfer_from:IDL.Bool});
+  const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal)});
+  return IDL.Service({ get_instance:IDL.Func([], [Instance], ['query']), get_pricing: IDL.Func([], [Pricing], ['query']) });
 };
 
 const safeNumber = value => {
@@ -46,12 +46,14 @@ export function normalizePricing(value) {
 }
 
 export async function queryBackendPricing({
-  canisterId = EVENT_HORIZON_BACKEND_CANISTER_ID,
+  canisterId,
   host = ICP_API_HOST,
   createAgent = options => HttpAgent.create(options),
   createActor = (factory, options) => Actor.createActor(factory, options),
 } = {}) {
   const agent = await createAgent({ host });
-  const actor = createActor(pricingIdlFactory, { agent, canisterId });
-  return normalizePricing(await actor.get_pricing());
+  if (!canisterId) throw new Error('A registry backend principal is required.');
+  const actor = createActor(backendIdlFactory, { agent, canisterId });
+  const [instance, pricing] = await Promise.all([actor.get_instance(), actor.get_pricing()]);
+  return { instance, pricing: normalizePricing(pricing) };
 }

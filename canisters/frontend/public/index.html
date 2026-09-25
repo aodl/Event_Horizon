@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Event Horizon</title>
-  <meta name="description" content="Low-latency ICP event triggers powered by Jupiter Faucet endowments.">
+  <meta name="description" content="Ledger-generic ICRC event triggers funded through Jupiter Faucet in ICP.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,8 +13,14 @@
     <header class="hero">
       <p class="eyebrow">Powered by Jupiter Faucet</p>
       <h1>Event Horizon</h1>
-      <p class="lead">Best-effort wake-ups for ICP-aware canisters, without making notification delivery part of their correctness path.</p>
+      <p class="lead">Best-effort wake-ups for compatible ICRC token ledgers, funded through Jupiter Faucet in ICP.</p>
     </header>
+
+    <section class="card">
+      <h2>Event Horizon instance</h2>
+      <label>Selected instance <select id="instance"></select></label>
+      <p id="instance-info"></p>
+    </section>
 
     <section class="card">
       <h2>Authoritative pricing</h2>
@@ -34,7 +40,7 @@
             <label>Start subaccount <input id="range-start" inputmode="numeric" value="0"></label>
             <label>End subaccount <input id="range-end" inputmode="numeric" value="1"></label>
           </span>
-          <label>Minimum ICP amount (optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
+          <label id="amount-label">Minimum ICP amount (optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
         </span>
       </form>
       <output id="memo-output" class="memo"></output>
@@ -43,11 +49,12 @@
     </section>
 
     <section class="grid">
-      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the ICP Ledger directly. A global trigger attempts one <code>poke([])</code> when a poll processes any transaction.</p></article>
-      <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative Ledger/Index cursor and a slower independent reconciliation timer.</p></article>
-      <article class="card"><h2>It can beat the Index</h2><p>A poke may arrive before the ICP Index exposes the new transaction. Your application chooses its own retry/backoff policy.</p></article>
+      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the selected token ledger directly through its ICRC-3 transaction log. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p></article>
+      <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p></article>
+      <article class="card"><h2>ICP-funded</h2><p>Subscriptions are funded with ICP through Jupiter Faucet regardless of which token ledger is observed.</p></article>
       <article class="card"><h2>Specific hints win</h2><p>If account declarations also match, one sorted non-empty vector replaces the empty global hint. These subaccounts are hints, not proof that no other Ledger activity occurred. There are no transaction payloads, acknowledgements, retries or delivery guarantee.</p></article>
     </section>
+    <section class="card"><h2>Additional immutable instances</h2><p>Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed permissionlessly for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p></section>
   </main>
   <script src="app.bundle.js"></script>
 </body>

@@ -4,11 +4,13 @@ export function compactPrincipal(text) {
   return text.trim().replaceAll('-', '');
 }
 
-export function isValidAmount(text) {
-  if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/.test(text)) return false;
+export function isValidAmount(text, decimals) {
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) return false;
+  if (!/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(text)) return false;
   const [whole, frac=''] = text.split('.');
-  const cents = BigInt(whole) * 100n + BigInt((frac + '00').slice(0,2));
-  return cents >= 1n; // explicit thresholds retain the 0.01 ICP floor
+  if (frac.length > decimals) return false;
+  const units = BigInt(whole) * (10n ** BigInt(decimals)) + BigInt((frac + '0'.repeat(decimals)).slice(0, decimals) || '0');
+  return units > 0n;
 }
 
 export function memoByteLength(memo) {
@@ -28,40 +30,41 @@ function numberedSubaccount(text) {
   return value;
 }
 
-function validateAmount(amountText) {
+function validateAmount(amountText, decimals) {
   const amount = amountText.trim();
-  if (amount && !isValidAmount(amount)) {
-    throw new Error('Trigger amount must be at least 0.01 ICP with at most two decimal places, or left blank for every transfer.');
+  if (amount && !isValidAmount(amount, decimals)) {
+    throw new Error(`Trigger amount must be positive with at most ${decimals} decimal places, or left blank for every transfer.`);
   }
   return amount;
 }
 
-function checkedMemo(suffix, metadata = {}) {
-  const memo = `X.${suffix}`;
+function checkedMemo(alias, suffix, metadata = {}) {
+  if (!/^[\x21-\x7e]+$/.test(alias)) throw new Error('Instance alias must be explicit printable ASCII.');
+  const memo = `${alias}.${suffix}`;
   const bytes = memoByteLength(memo);
   if (bytes > MAX_JUPITER_MEMO_BYTES) throw new Error('This subscription memo exceeds the 32-byte Jupiter Faucet memo limit.');
   return { memo, bytes, ...metadata };
 }
 
-export function buildMemo(principalText, subaccountText, amountText = '') {
+export function buildMemo(alias, decimals, principalText, subaccountText, amountText = '') {
   const principal = validatePrincipal(principalText);
   const sub = numberedSubaccount(subaccountText);
-  const amount = validateAmount(amountText);
+  const amount = validateAmount(amountText, decimals);
   const suffix = amount ? `${principal}.${sub}:${amount}` : `${principal}.${sub}`;
-  return checkedMemo(suffix, { thresholded: Boolean(amount), global: false, range: false });
+  return checkedMemo(alias, suffix, { thresholded: Boolean(amount), global: false, range: false });
 }
 
-export function buildRangeMemo(principalText, startText, endText, amountText = '') {
+export function buildRangeMemo(alias, decimals, principalText, startText, endText, amountText = '') {
   const principal = validatePrincipal(principalText);
   const start = numberedSubaccount(startText);
   const end = numberedSubaccount(endText);
   if (end < start) throw new Error('Range end must be greater than range start.');
   if (end === start) throw new Error(`Use subaccount ${start} as a single-account subscription. A range must contain at least two subaccounts.`);
-  const amount = validateAmount(amountText);
+  const amount = validateAmount(amountText, decimals);
   const suffix = amount ? `${principal}.${start}-${end}:${amount}` : `${principal}.${start}-${end}`;
-  return checkedMemo(suffix, { thresholded: Boolean(amount), global: false, range: true });
+  return checkedMemo(alias, suffix, { thresholded: Boolean(amount), global: false, range: true });
 }
 
-export function buildGlobalMemo(principalText) {
-  return checkedMemo(validatePrincipal(principalText), { thresholded: false, global: true, range: false });
+export function buildGlobalMemo(alias, principalText) {
+  return checkedMemo(alias, validatePrincipal(principalText), { thresholded: false, global: true, range: false });
 }

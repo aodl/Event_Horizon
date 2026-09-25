@@ -1,46 +1,10 @@
 import { buildGlobalMemo, buildMemo, buildRangeMemo, compactPrincipal, memoByteLength } from './memo.js';
 import { queryBackendPricing } from './pricing-client.js';
 import { pricingMarkup, utc } from './pricing-view.js';
-
-const $ = id => document.getElementById(id);
-const form = $('memo-form');
-let pricing = null;
-function renderPricing() {
-  $('pricing').innerHTML = pricingMarkup(pricing);
-}
-function render() {
-  const out = $('memo-output'); const help = $('memo-help');
-  const scope = $('scope').value;
-  const global = scope === 'global';
-  const range = scope === 'range';
-  $('account-fields').hidden = global;
-  $('single-field').hidden = global || range;
-  $('range-fields').hidden = !range;
-  try {
-    const built = global
-      ? buildGlobalMemo($('principal').value)
-      : range
-        ? buildRangeMemo($('principal').value, $('range-start').value, $('range-end').value, $('amount').value)
-        : buildMemo($('principal').value, $('subaccount').value, $('amount').value);
-    const { memo, bytes } = built;
-    out.textContent = memo;
-    const tier = global ? 'global_icp' : range ? 'range_icp' : 'account_icp';
-    const current = pricing?.initialized ? pricing.current[tier] : null;
-    const upcoming = pricing?.next ? pricing.next[tier] : null;
-    const recommended = current === null ? null : Math.max(current, upcoming ?? current);
-    help.textContent = `${bytes}/32 bytes · ${recommended === null ? 'Wait for authoritative pricing to initialize.' : `Endow this exact declaration with ${recommended} ICP through Jupiter Faucet.`}${upcoming > current ? ` The scheduled requirement rises from ${current} ICP at ${utc(pricing.next_effective_at)}; Faucet delivery is delayed, so the builder recommends ${upcoming} ICP now.` : ''}${!global && !$('amount').value.trim() ? ' Blank threshold means every incoming transfer is relevant.' : ''}`;
-    help.classList.remove('error');
-  } catch (e) {
-    const principal = compactPrincipal($('principal').value);
-    const account = range ? `${$('range-start').value}-${$('range-end').value}` : $('subaccount').value;
-    const amount = $('amount').value.trim();
-    const draft = global ? `X.${principal}` : `X.${principal}.${account}${amount ? `:${amount}` : ''}`;
-    out.textContent = draft || '—';
-    help.textContent = `${memoByteLength(draft)}/32 bytes · ${e.message}`;
-    help.classList.add('error');
-  }
-}
-form.addEventListener('input', render); render();
-queryBackendPricing()
-  .then(value => { pricing = value; renderPricing(); render(); })
-  .catch(() => { $('pricing').textContent = 'Authoritative backend pricing is temporarily unavailable.'; render(); });
+import { INSTANCES } from './instances.js';
+const $=id=>document.getElementById(id);let selected=INSTANCES[0],pricing=null,profile=null,verified=false;
+function registryMarkup(i){return `<strong>${i.name} — ${i.status==='live'?'live':'coming soon'}</strong><br>Alias: ${i.alias}<br>Backend: ${i.backendCanisterId??'pending'}<br>Observed ledger: ${i.observedLedgerCanisterId??'pending'}<br>Expected backend Wasm SHA-256: ${i.expectedBackendWasmSha256??'pending'}<br>${i.canonical?'Canonical':'Community'} listing`;}
+function setDisabled(){const disabled=!verified;for(const input of $('memo-form').elements)input.disabled=disabled;$('instance').disabled=false;}
+function render(){const global=$('scope').value==='global',range=$('scope').value==='range';$('account-fields').hidden=global;$('single-field').hidden=global||range;$('range-fields').hidden=!range;$('amount-label').firstChild.textContent=`Minimum ${selected.symbol} amount (optional) `;const out=$('memo-output'),help=$('memo-help');if(!verified){out.textContent='—';help.textContent=selected.status==='planned'?'This canonical instance is planned; backend and ledger IDs are pending.':'Configuration verification is required before constructing a subscription.';help.classList.add('error');return}try{const args=[selected.alias,profile.decimals];const built=global?buildGlobalMemo(selected.alias,$('principal').value):range?buildRangeMemo(...args,$('principal').value,$('range-start').value,$('range-end').value,$('amount').value):buildMemo(...args,$('principal').value,$('subaccount').value,$('amount').value);out.textContent=built.memo;const tier=global?'global_icp':range?'range_icp':'account_icp',current=pricing?.initialized?pricing.current[tier]:null,upcoming=pricing?.next?pricing.next[tier]:null,recommended=current===null?null:Math.max(current,upcoming??current);help.textContent=`${built.bytes}/32 bytes · ${recommended===null?'Wait for authoritative pricing to initialize.':`Endow this exact declaration with ${recommended} ICP through Jupiter Faucet.`}${upcoming>current?` Scheduled requirement rises at ${utc(pricing.next_effective_at)}.`:''}`;help.classList.remove('error')}catch(e){const account=range?`${$('range-start').value}-${$('range-end').value}`:$('subaccount').value,amount=$('amount').value.trim(),draft=global?`${selected.alias}.${compactPrincipal($('principal').value)}`:`${selected.alias}.${compactPrincipal($('principal').value)}.${account}${amount?`:${amount}`:''}`;out.textContent=draft;help.textContent=`${memoByteLength(draft)}/32 bytes · ${e.message}`;help.classList.add('error')}}
+async function load(){selected=INSTANCES.find(i=>i.id===$('instance').value);$('instance-info').innerHTML=registryMarkup(selected);pricing=null;profile=null;verified=false;setDisabled();$('pricing').textContent=selected.status==='planned'?'Pricing unavailable until launch.':'Verifying backend configuration…';if(selected.status!=='live'){render();return}try{const result=await queryBackendPricing({canisterId:selected.backendCanisterId});const actual=result.instance.observed_ledger.toText();if(actual!==selected.observedLedgerCanisterId||!result.instance.observed_profile.length)throw new Error(`Configuration mismatch: backend reports ${actual}.`);pricing=result.pricing;profile=result.instance.observed_profile[0];if(profile.symbol!==selected.symbol)throw new Error(`Configuration mismatch: backend symbol is ${profile.symbol}.`);verified=true;$('pricing').innerHTML=pricingMarkup(pricing)}catch(e){$('pricing').innerHTML=`<strong class="error">${e.message}</strong>`}setDisabled();render()}
+for(const i of INSTANCES){const o=document.createElement('option');o.value=i.id;o.textContent=`${i.name}${i.status==='planned'?' — coming soon':''}`;$('instance').append(o)}$('memo-form').addEventListener('input',render);$('instance').addEventListener('change',load);load();
