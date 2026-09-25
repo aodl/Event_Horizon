@@ -2431,7 +2431,7 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn production_wasm_exposes_only_pricing_application_surface() -> Result<()> {
+    fn production_wasm_exposes_only_instance_and_pricing_queries() -> Result<()> {
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);

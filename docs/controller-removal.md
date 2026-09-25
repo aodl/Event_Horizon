@@ -16,12 +16,13 @@ Do not continue unless all of the following are true:
 - `log_visibility` is `public`;
 - `log_memory_limit` is exactly 16384 bytes;
 - the canister has a healthy cycles reserve;
-- the configured Ledger, CMC, Historian and Faucet constants are correct;
+- `get_instance` and recent public `CONFIG`/`HEALTH` logs report the intended immutable observed Ledger;
+- the fixed Protocol ICP Ledger, CMC, Historian and Faucet constants are correct;
 - `SURPLUS_CANISTER` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;
 - if surplus is enabled, retained-first ordering, epoch policy, immediate gates, duplicate recovery, and pending-state upgrades have passed against the canonical Wasm;
 - the Jupiter Faucet `X` alias points to this backend canister;
 - pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
-- the Wasm export audit permits exactly `canister_query get_pricing` and no other application method;
+- the Wasm export audit permits exactly `canister_query get_instance` and `canister_query get_pricing`, with no update/admin application method;
 - the frontend Wasm export audit permits exactly `canister_query http_request` and rejects `http_request_update`;
 - account, range, and global Historian admission totals have been tested against the current prices;
 - no remaining operational task requires controller access.

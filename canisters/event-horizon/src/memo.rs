@@ -16,7 +16,7 @@ impl DecimalAmount {
         digits.push_str(fraction);
         digits.extend(std::iter::repeat_n('0', decimals as usize - fraction.len()));
         let value = Nat::from_str(&digits).map_err(|_| MemoParseError::InvalidAmount)?;
-        if value == Nat::from(0u8) {
+        if value == 0u8 {
             return Err(MemoParseError::ZeroAmount);
         }
         Ok(value)

@@ -44,7 +44,7 @@ impl Subscription {
     }
 
     pub fn matches(&self, amount_units: &Nat) -> bool {
-        self.minimum_units == Nat::from(0u8) || amount_units >= &self.minimum_units
+        self.minimum_units == 0u8 || amount_units >= &self.minimum_units
     }
 }
 
