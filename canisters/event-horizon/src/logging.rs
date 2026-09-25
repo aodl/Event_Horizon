@@ -3,40 +3,64 @@
 use std::cell::Cell;
 
 thread_local! {
-    static LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
+    static OBSERVED_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
+    static ICP_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static HISTORIAN_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static IN_RESERVE_PROTECTION: Cell<bool> = const { Cell::new(false) };
-    static HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    static OBSERVED_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    static ADMISSION_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
 }
 
-pub fn history_gap(start: u64, end_exclusive: u64) {
+pub fn history_gap(stream: &str, start: u64, end_exclusive: u64) {
     if end_exclusive <= start {
         return;
     }
-    HISTORY_GAP_ACTIVE.with(|flag| {
+    let key = if stream == "observed" {
+        &OBSERVED_HISTORY_GAP_ACTIVE
+    } else {
+        &ADMISSION_HISTORY_GAP_ACTIVE
+    };
+    key.with(|flag| {
         if !flag.replace(true) {
             // A long archived prefix can span many bounded Ledger pages. Log the
             // exceptional transition once rather than evicting useful public logs
             // with one line per skipped page.
-            ic_cdk::println!("HISTORY_GAP first_skipped={}..{}", start, end_exclusive - 1);
+            ic_cdk::println!(
+                "HISTORY_GAP stream={} first_skipped={}..{}",
+                stream,
+                start,
+                end_exclusive - 1
+            );
         }
     });
 }
 
-pub fn history_live_progress() {
-    HISTORY_GAP_ACTIVE.with(|flag| flag.set(false));
-}
-
-pub fn ledger_failure(message: &str) {
-    LEDGER_UNAVAILABLE.with(|flag| {
+pub fn observed_ledger_failure(message: &str) {
+    OBSERVED_LEDGER_UNAVAILABLE.with(|flag| {
         if !flag.replace(true) {
-            ic_cdk::println!("LEDGER_UNAVAILABLE {}", message);
+            ic_cdk::println!("OBSERVED_LEDGER_UNAVAILABLE {}", message);
         }
     });
 }
 
-pub fn ledger_recovered() {
-    LEDGER_UNAVAILABLE.with(|flag| flag.set(false));
+pub fn observed_ledger_recovered() {
+    OBSERVED_LEDGER_UNAVAILABLE.with(|f| f.set(false));
+    OBSERVED_HISTORY_GAP_ACTIVE.with(|f| f.set(false));
+}
+pub fn icp_admission_ledger_failure(message: &str) {
+    ICP_LEDGER_UNAVAILABLE.with(|f| {
+        if !f.replace(true) {
+            ic_cdk::println!("ICP_ADMISSION_LEDGER_UNAVAILABLE {}", message)
+        }
+    });
+}
+pub fn icp_admission_ledger_recovered() {
+    ICP_LEDGER_UNAVAILABLE.with(|f| f.set(false));
+    ADMISSION_HISTORY_GAP_ACTIVE.with(|f| f.set(false));
+}
+pub fn ledger_recovered_all() {
+    observed_ledger_recovered();
+    icp_admission_ledger_recovered();
 }
 
 pub fn historian_failure(message: &str) {

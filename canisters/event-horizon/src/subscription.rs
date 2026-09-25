@@ -1,49 +1,50 @@
-use candid::{CandidType, Principal};
+use candid::{CandidType, Nat, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    account::{account_identifier_bytes, numbered_subaccount},
-    memo::SubscriptionDeclaration,
-};
+use crate::{account::numbered_subaccount, memo::SubscriptionDeclaration};
 
-/// `minimum_e8s == 0` means the declaration omitted a threshold and every
+/// `minimum_units == 0` means the declaration omitted a threshold and every
 /// incoming transfer to this watched account is relevant.
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Subscription {
     pub subscriber: Principal,
     pub numbered_subaccount: u8,
-    pub minimum_e8s: u64,
+    pub minimum_units: Nat,
 }
 
-impl From<SubscriptionDeclaration> for Subscription {
-    fn from(value: SubscriptionDeclaration) -> Self {
+impl Subscription {
+    pub fn from_declaration(
+        value: SubscriptionDeclaration,
+        decimals: u8,
+    ) -> Result<Self, crate::memo::MemoParseError> {
         match value {
             SubscriptionDeclaration::Account {
                 subscriber,
                 numbered_subaccount,
-                minimum_e8s,
-            } => Self {
+                minimum,
+            } => Ok(Self {
                 subscriber,
                 numbered_subaccount,
-                minimum_e8s,
-            },
+                minimum_units: minimum
+                    .map(|value| value.to_units(decimals))
+                    .transpose()?
+                    .unwrap_or_else(|| Nat::from(0u8)),
+            }),
             SubscriptionDeclaration::Global { .. } | SubscriptionDeclaration::Range { .. } => {
                 panic!("non-account declaration cannot become one account subscription")
             }
         }
     }
-}
-
-impl Subscription {
-    pub fn account_identifier(&self) -> [u8; 32] {
-        account_identifier_bytes(
-            self.subscriber,
-            numbered_subaccount(self.numbered_subaccount),
-        )
+    pub fn account(&self) -> Account {
+        Account {
+            owner: self.subscriber,
+            subaccount: Some(numbered_subaccount(self.numbered_subaccount)),
+        }
     }
 
-    pub fn matches(&self, transfer_amount_e8s: u64) -> bool {
-        self.minimum_e8s == 0 || transfer_amount_e8s >= self.minimum_e8s
+    pub fn matches(&self, amount_units: &Nat) -> bool {
+        self.minimum_units == Nat::from(0u8) || amount_units >= &self.minimum_units
     }
 }
 
@@ -57,7 +58,7 @@ pub fn merge_subscription(existing: Option<Subscription>, candidate: Subscriptio
         Some(existing)
             if existing.subscriber == candidate.subscriber
                 && existing.numbered_subaccount == candidate.numbered_subaccount
-                && existing.minimum_e8s <= candidate.minimum_e8s =>
+                && existing.minimum_units <= candidate.minimum_units =>
         {
             existing
         }
@@ -78,12 +79,12 @@ mod tests {
         let high = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 100_000_000,
+            minimum_units: Nat::from(100_000_000u64),
         };
         let low = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 1_000_000,
+            minimum_units: Nat::from(1_000_000u64),
         };
         assert_eq!(merge_subscription(Some(high), low.clone()), low);
     }
@@ -93,12 +94,12 @@ mod tests {
         let thresholded = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 1_000_000,
+            minimum_units: Nat::from(1_000_000u64),
         };
         let unfiltered = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 0,
+            minimum_units: Nat::from(0u8),
         };
         assert_eq!(
             merge_subscription(Some(thresholded), unfiltered.clone()),
@@ -111,12 +112,12 @@ mod tests {
         let low = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 1_000_000,
+            minimum_units: Nat::from(1_000_000u64),
         };
         let high = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 100_000_000,
+            minimum_units: Nat::from(100_000_000u64),
         };
         assert_eq!(merge_subscription(Some(low.clone()), high), low);
     }
@@ -126,11 +127,11 @@ mod tests {
         let sub = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 1_000_000,
+            minimum_units: Nat::from(1_000_000u64),
         };
-        assert!(!sub.matches(999_999));
-        assert!(sub.matches(1_000_000));
-        assert!(sub.matches(1_000_001));
+        assert!(!sub.matches(&Nat::from(999_999u64)));
+        assert!(sub.matches(&Nat::from(1_000_000u64)));
+        assert!(sub.matches(&Nat::from(1_000_001u64)));
     }
 
     #[test]
@@ -138,10 +139,10 @@ mod tests {
         let sub = Subscription {
             subscriber: p(),
             numbered_subaccount: 7,
-            minimum_e8s: 0,
+            minimum_units: Nat::from(0u8),
         };
-        assert!(sub.matches(0));
-        assert!(sub.matches(1));
-        assert!(sub.matches(u64::MAX));
+        assert!(sub.matches(&Nat::from(0u8)));
+        assert!(sub.matches(&Nat::from(1u8)));
+        assert!(sub.matches(&Nat::from(u128::MAX)));
     }
 }

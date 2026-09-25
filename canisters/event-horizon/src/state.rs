@@ -17,6 +17,7 @@ use crate::{
     subscription::Subscription,
     surplus::SurplusPolicyState,
 };
+use icrc_ledger_types::icrc1::account::Account;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -34,17 +35,23 @@ const SURPLUS_POLICY_MEMORY_ID: MemoryId = MemoryId::new(8);
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
-    pub bootstrapped: bool,
-    pub next_block: u64,
+    pub admission_bootstrapped: bool,
+    pub admission_next_block: u64,
+    pub observed_bootstrapped: bool,
+    pub observed_next_block: u64,
     pub polling_mode: PollingMode,
+    pub last_health_log_day: Option<u64>,
 }
 
 impl Default for Metadata {
     fn default() -> Self {
         Self {
-            bootstrapped: false,
-            next_block: 0,
+            admission_bootstrapped: false,
+            admission_next_block: 0,
+            observed_bootstrapped: false,
+            observed_next_block: 0,
             polling_mode: PollingMode::ReserveProtection,
+            last_health_log_day: None,
         }
     }
 }
@@ -81,7 +88,7 @@ pub enum FundingState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct AccountKey([u8; 32]);
+struct AccountKey(Vec<u8>);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct PrincipalKey(Vec<u8>);
@@ -108,9 +115,14 @@ impl Storable for PrincipalKey {
     };
 }
 
-impl From<[u8; 32]> for AccountKey {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
+impl From<Account> for AccountKey {
+    fn from(value: Account) -> Self {
+        let owner = value.owner.as_slice();
+        let mut bytes = Vec::with_capacity(1 + owner.len() + 32);
+        bytes.push(owner.len() as u8);
+        bytes.extend_from_slice(owner);
+        bytes.extend_from_slice(value.effective_subaccount());
+        Self(bytes)
     }
 }
 
@@ -119,16 +131,14 @@ impl Storable for AccountKey {
         Cow::Borrowed(&self.0)
     }
     fn into_bytes(self) -> Vec<u8> {
-        self.0.to_vec()
+        self.0
     }
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let mut out = [0u8; 32];
-        out.copy_from_slice(bytes.as_ref());
-        Self(out)
+        Self(bytes.into_owned())
     }
     const BOUND: Bound = Bound::Bounded {
-        max_size: 32,
-        is_fixed_size: true,
+        max_size: 62,
+        is_fixed_size: false,
     };
 }
 
@@ -154,7 +164,7 @@ macro_rules! candid_value {
     };
 }
 
-candid_value!(SubscriptionValue, Subscription, 128);
+candid_value!(SubscriptionValue, Subscription, 256);
 candid_value!(InstanceConfigValue, Option<InstanceConfig>, 256);
 candid_value!(MetadataValue, Metadata, 256);
 candid_value!(ObservationValue, Observation, 128);
@@ -332,7 +342,7 @@ pub fn modify_metadata(f: impl FnOnce(&mut Metadata)) {
 }
 
 pub fn put_subscription(subscription: Subscription) {
-    let key = AccountKey(subscription.account_identifier());
+    let key = AccountKey::from(subscription.account());
     with_subscriptions(|map| {
         let merged =
             crate::subscription::merge_subscription(map.get(&key).map(|v| v.0), subscription);
@@ -340,11 +350,10 @@ pub fn put_subscription(subscription: Subscription) {
     });
 }
 
-pub fn get_subscription(account_identifier: [u8; 32]) -> Option<Subscription> {
-    with_subscriptions(|map| map.get(&AccountKey(account_identifier)).map(|v| v.0))
+pub fn get_subscription(account: Account) -> Option<Subscription> {
+    with_subscriptions(|map| map.get(&AccountKey::from(account)).map(|v| v.0))
 }
 
-#[cfg(feature = "debug_api")]
 pub fn subscription_count() -> u64 {
     with_subscriptions(|map| map.len())
 }

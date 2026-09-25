@@ -109,8 +109,10 @@ mod debug {
 
     #[derive(CandidType, Deserialize)]
     pub struct DebugState {
-        pub bootstrapped: bool,
-        pub next_block: u64,
+        pub admission_bootstrapped: bool,
+        pub admission_next_block: u64,
+        pub observed_bootstrapped: bool,
+        pub observed_next_block: u64,
         pub polling_mode: PollingMode,
         pub subscriptions: u64,
         pub global_subscriptions: u64,
@@ -124,8 +126,10 @@ mod debug {
     fn debug_state() -> DebugState {
         let meta = state::read_metadata();
         DebugState {
-            bootstrapped: meta.bootstrapped,
-            next_block: meta.next_block,
+            admission_bootstrapped: meta.admission_bootstrapped,
+            admission_next_block: meta.admission_next_block,
+            observed_bootstrapped: meta.observed_bootstrapped,
+            observed_next_block: meta.observed_next_block,
             polling_mode: meta.polling_mode,
             subscriptions: state::subscription_count(),
             global_subscriptions: state::global_subscription_count(),
@@ -199,8 +203,10 @@ mod debug {
 
     #[ic_cdk::query]
     fn debug_subscription(args: DebugSubscriptionArgs) -> Option<Subscription> {
-        let account =
-            account_identifier_bytes(args.subscriber, numbered_subaccount(args.subaccount));
+        let account = icrc_ledger_types::icrc1::account::Account {
+            owner: args.subscriber,
+            subaccount: Some(numbered_subaccount(args.subaccount)),
+        };
         state::get_subscription(account)
     }
 
