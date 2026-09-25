@@ -87,6 +87,12 @@ def main() -> None:
             raise SystemExit(f"frontend application surface is {app_methods}, expected {expected}")
         if b"http_request_update" in data:
             raise SystemExit("frontend contains removed HTTP update proxy marker")
+        backend_principal = b"eo6ei-gaaaa-aaaar-qchra-cai"
+        if backend_principal not in data:
+            raise SystemExit("frontend does not contain the permanent backend principal")
+        for marker in [b"PUBLIC_CANISTER_ID:event_horizon", b"ic_env", b"IC_ROOT_KEY"]:
+            if marker in data:
+                raise SystemExit(f"frontend contains removed runtime-discovery marker {marker!r}")
     print(f"{args.wasm}: export audit passed ({len(names)} exports)")
 
 

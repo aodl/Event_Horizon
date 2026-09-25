@@ -1,5 +1,8 @@
 import { Actor, HttpAgent } from '@icp-sdk/core/agent';
-import { safeGetCanisterEnv } from '@icp-sdk/core/agent/canister-env';
+
+export const EVENT_HORIZON_BACKEND_CANISTER_ID =
+  'eo6ei-gaaaa-aaaar-qchra-cai';
+export const ICP_API_HOST = 'https://icp-api.io';
 
 export const pricingIdlFactory = ({ IDL }) => {
   const Price = IDL.Record({ account_icp: IDL.Nat64, range_icp: IDL.Nat64, global_icp: IDL.Nat64 });
@@ -43,18 +46,12 @@ export function normalizePricing(value) {
 }
 
 export async function queryBackendPricing({
-  canisterEnv = safeGetCanisterEnv(),
+  canisterId = EVENT_HORIZON_BACKEND_CANISTER_ID,
+  host = ICP_API_HOST,
   createAgent = options => HttpAgent.create(options),
   createActor = (factory, options) => Actor.createActor(factory, options),
 } = {}) {
-  const canisterId = canisterEnv?.['PUBLIC_CANISTER_ID:event_horizon'];
-  if (!canisterId) throw new Error('Event Horizon backend canister ID is unavailable.');
-  const localHost = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const agent = await createAgent({
-    host: localHost ? location.origin : 'https://icp-api.io',
-    rootKey: canisterEnv.IC_ROOT_KEY,
-    shouldFetchRootKey: !canisterEnv.IC_ROOT_KEY && localHost,
-  });
+  const agent = await createAgent({ host });
   const actor = createActor(pricingIdlFactory, { agent, canisterId });
   return normalizePricing(await actor.get_pricing());
 }

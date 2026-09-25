@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { queryBackendPricing } from '../public/pricing-client.js';
+import {
+  EVENT_HORIZON_BACKEND_CANISTER_ID,
+  ICP_API_HOST,
+  queryBackendPricing,
+} from '../public/pricing-client.js';
 import { formatXdrPermyriad, pricingMarkup } from '../public/pricing-view.js';
 
 const rawPricing = {
@@ -18,12 +22,11 @@ const rawPricing = {
   next_carried_forward_due_to_stale_rate: false,
 };
 
-test('pricing is read directly from the discovered backend query', async () => {
+test('pricing defaults to the permanent mainnet backend and API host', async () => {
   let actorOptions;
   let agentOptions;
   let calls = 0;
   const pricing = await queryBackendPricing({
-    canisterEnv: { 'PUBLIC_CANISTER_ID:event_horizon': 'r5m5y-diaaa-aaaaa-qanaa-cai' },
     createAgent: async options => { agentOptions = options; return { options }; },
     createActor: (_factory, options) => {
       actorOptions = options;
@@ -31,10 +34,31 @@ test('pricing is read directly from the discovered backend query', async () => {
     },
   });
   assert.equal(calls, 1);
-  assert.equal(agentOptions.host, 'https://icp-api.io');
-  assert.equal(actorOptions.canisterId, 'r5m5y-diaaa-aaaaa-qanaa-cai');
+  assert.equal(EVENT_HORIZON_BACKEND_CANISTER_ID, 'eo6ei-gaaaa-aaaar-qchra-cai');
+  assert.equal(ICP_API_HOST, 'https://icp-api.io');
+  assert.deepEqual(agentOptions, { host: ICP_API_HOST });
+  assert.equal(actorOptions.canisterId, EVENT_HORIZON_BACKEND_CANISTER_ID);
   assert.deepEqual(pricing.current, { account_icp: 5, range_icp: 10, global_icp: 50 });
   assert.deepEqual(pricing.next, { account_icp: 6, range_icp: 12, global_icp: 60 });
+});
+
+test('pricing dependencies and endpoint remain explicitly injectable', async () => {
+  const canisterId = 'r5m5y-diaaa-aaaaa-qanaa-cai';
+  const host = 'http://127.0.0.1:4943';
+  let agentOptions;
+  let actorOptions;
+  await queryBackendPricing({
+    canisterId,
+    host,
+    createAgent: async options => { agentOptions = options; return { fake: true }; },
+    createActor: (_factory, options) => {
+      actorOptions = options;
+      return { get_pricing: async () => rawPricing };
+    },
+  });
+  assert.deepEqual(agentOptions, { host });
+  assert.equal(actorOptions.canisterId, canisterId);
+  assert.deepEqual(actorOptions.agent, { fake: true });
 });
 
 test('pricing rendering formats recorded CMC rates as four-decimal XDR per ICP', () => {
@@ -64,5 +88,6 @@ test('frontend production interface has no HTTP update proxy', async () => {
   assert.doesNotMatch(did, /http_request_update/);
   assert.doesNotMatch(rust, /http_request_update/);
   assert.doesNotMatch(rust, /get_icp_xdr_conversion_rate/);
+  assert.doesNotMatch(rust, /set-cookie|ic_env/i);
   assert.match(rust, /connect-src 'self' https:\/\/icp-api\.io/);
 });
