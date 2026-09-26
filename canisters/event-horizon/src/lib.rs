@@ -148,6 +148,11 @@ mod debug {
     }
 
     #[ic_cdk::update]
+    fn debug_set_abort_after_staged_admission(enabled: bool) {
+        polling::debug_set_abort_after_staged_admission(enabled);
+    }
+
+    #[ic_cdk::update]
     async fn debug_funding_once() {
         scheduler::debug_funding_once().await;
     }

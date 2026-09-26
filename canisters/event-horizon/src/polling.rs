@@ -4,7 +4,7 @@ use crate::{
     config, logging,
     memo::{parse_subscription_memo, SubscriptionDeclaration},
     pricing, state,
-    subscription::Subscription,
+    subscription::{merge_subscription, Subscription},
 };
 use candid::{Nat, Principal};
 use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
@@ -19,6 +19,84 @@ struct SharedGlobalOrder {
     existing: BTreeSet<Principal>,
     admitted_at: BTreeMap<Principal, u64>,
     last_live: Option<u64>,
+}
+enum PreparedAdmission {
+    Global(Principal),
+    Accounts(Vec<Subscription>),
+}
+
+#[derive(Default)]
+struct PendingAdmissions {
+    globals: BTreeSet<Principal>,
+    subscriptions: BTreeMap<(Principal, u8), Subscription>,
+    shared_overlay: BTreeMap<[u8; 32], Subscription>,
+}
+
+impl PendingAdmissions {
+    fn stage(&mut self, admission: PreparedAdmission, shared: bool) {
+        match admission {
+            PreparedAdmission::Global(subscriber) => {
+                self.globals.insert(subscriber);
+            }
+            PreparedAdmission::Accounts(subscriptions) => {
+                for candidate in subscriptions {
+                    let key = (candidate.subscriber, candidate.numbered_subaccount);
+                    let existing = self.subscriptions.get(&key).cloned().or_else(|| {
+                        state::get_numbered_subscription(
+                            candidate.subscriber,
+                            candidate.numbered_subaccount,
+                        )
+                    });
+                    let effective = merge_subscription(existing, candidate);
+                    if shared {
+                        self.shared_overlay.insert(
+                            account_identifier_bytes(
+                                effective.subscriber,
+                                crate::account::numbered_subaccount(effective.numbered_subaccount),
+                            ),
+                            effective.clone(),
+                        );
+                    }
+                    self.subscriptions.insert(key, effective);
+                }
+            }
+        }
+    }
+
+    fn shared_subscription(&self, account: [u8; 32]) -> Option<Subscription> {
+        self.shared_overlay
+            .get(&account)
+            .cloned()
+            .or_else(|| state::get_icp_subscription(account))
+    }
+
+    fn publish(self) {
+        for subscription in self.subscriptions.into_values() {
+            state::put_subscription(subscription);
+        }
+        for subscriber in self.globals {
+            state::put_global_subscriber(subscriber);
+        }
+    }
+}
+
+#[cfg(feature = "debug_api")]
+thread_local! {
+    static DEBUG_ABORT_AFTER_STAGED_ADMISSION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(feature = "debug_api")]
+pub fn debug_set_abort_after_staged_admission(enabled: bool) {
+    DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(|value| value.set(enabled));
+}
+
+fn debug_abort_after_staged_admission() -> bool {
+    #[cfg(feature = "debug_api")]
+    {
+        return DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(std::cell::Cell::get);
+    }
+    #[cfg(not(feature = "debug_api"))]
+    false
 }
 #[derive(Clone, Copy)]
 enum Stream {
@@ -80,7 +158,12 @@ fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principa
     }
 }
 
-async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) -> Option<Principal> {
+async fn prepare_admission(
+    from: &[u8],
+    to: &[u8],
+    memo: Option<&[u8]>,
+    decimals: u8,
+) -> Option<PreparedAdmission> {
     let r = config::runtime();
     if account_id(from) != Some(account_identifier_bytes(r.faucet_canister, [0; 32]))
         || account_id(to)
@@ -110,37 +193,39 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) -> Opt
     .await
     {
         Ok(true) => {
-            match d {
+            let admission = match d {
                 SubscriptionDeclaration::Global { subscriber } => {
-                    state::put_global_subscriber(subscriber);
-                    logging::historian_recovered();
-                    return Some(subscriber);
+                    Some(PreparedAdmission::Global(subscriber))
                 }
                 x @ SubscriptionDeclaration::Account { .. } => {
-                    if let Ok(s) = Subscription::from_declaration(x, decimals) {
-                        state::put_subscription(s)
-                    }
+                    Subscription::from_declaration(x, decimals)
+                        .ok()
+                        .map(|subscription| PreparedAdmission::Accounts(vec![subscription]))
                 }
                 SubscriptionDeclaration::Range {
                     subscriber,
                     start_subaccount,
                     end_subaccount,
                     minimum,
-                } => {
-                    let Ok(v) = minimum.map(|x| x.to_units(decimals)).transpose() else {
-                        return None;
-                    };
-                    let v = v.unwrap_or_else(|| Nat::from(0u8));
-                    for n in start_subaccount..=end_subaccount {
-                        state::put_subscription(Subscription {
-                            subscriber,
-                            numbered_subaccount: n,
-                            minimum_units: v.clone(),
-                        })
-                    }
-                }
-            }
-            logging::historian_recovered()
+                } => minimum
+                    .map(|x| x.to_units(decimals))
+                    .transpose()
+                    .ok()
+                    .map(|minimum| {
+                        let minimum_units = minimum.unwrap_or_else(|| Nat::from(0u8));
+                        PreparedAdmission::Accounts(
+                            (start_subaccount..=end_subaccount)
+                                .map(|n| Subscription {
+                                    subscriber,
+                                    numbered_subaccount: n,
+                                    minimum_units: minimum_units.clone(),
+                                })
+                                .collect(),
+                        )
+                    }),
+            };
+            logging::historian_recovered();
+            return admission;
         }
         Ok(false) => logging::historian_recovered(),
         Err(e) if config::is_reserve_protection(&e) => {}
@@ -160,10 +245,14 @@ fn observe_icrc3(e: &icrc3::LedgerEvent, out: &mut BTreeMap<Principal, MatchStat
         }
     }
 }
-fn observe_icp(op: &Option<icp_ledger::Operation>, out: &mut BTreeMap<Principal, MatchState>) {
+fn observe_icp(
+    op: &Option<icp_ledger::Operation>,
+    pending: &PendingAdmissions,
+    out: &mut BTreeMap<Principal, MatchState>,
+) {
     if let Some(icp_ledger::Operation::Transfer { to, amount, .. }) = op {
         if let Some(id) = account_id(to) {
-            if let Some(s) = state::get_icp_subscription(id) {
+            if let Some(s) = pending.shared_subscription(id) {
                 if s.matches(&Nat::from(amount.e8s)) {
                     out.entry(s.subscriber)
                         .or_default()
@@ -319,6 +408,9 @@ async fn legacy_page(
         ));
     }
     let mut local = BTreeMap::new();
+    let mut pending = PendingAdmissions::default();
+    let mut page_global_admissions = BTreeMap::new();
+    let mut page_last_live = None;
     let mut live = false;
     for (offset, b) in r.blocks.into_iter().enumerate() {
         let id = r.first_block_index.saturating_add(offset as u64);
@@ -332,21 +424,25 @@ async fn legacy_page(
             return Err(format!("non-contiguous block expected={at} got={id}"));
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
-            if let Some(subscriber) =
-                admit(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
+            if let Some(admission) =
+                prepare_admission(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
             {
-                if let Some(order) = shared_globals.as_deref_mut() {
-                    if !order.existing.contains(&subscriber) {
-                        order.admitted_at.entry(subscriber).or_insert(id);
+                if let PreparedAdmission::Global(subscriber) = &admission {
+                    if let Some(order) = shared_globals.as_deref() {
+                        if !order.existing.contains(subscriber) {
+                            page_global_admissions.entry(*subscriber).or_insert(id);
+                        }
                     }
+                }
+                pending.stage(admission, matches!(s, Stream::Shared));
+                if debug_abort_after_staged_admission() {
+                    return Err("debug abort after staged legacy admission".into());
                 }
             }
         }
         if matches!(s, Stream::Shared) {
-            observe_icp(&b.transaction.operation, &mut local);
-            if let Some(order) = shared_globals.as_deref_mut() {
-                order.last_live = Some(id);
-            }
+            observe_icp(&b.transaction.operation, &pending, &mut local);
+            page_last_live = Some(id);
         }
         live = true;
         at += 1
@@ -355,7 +451,18 @@ async fn legacy_page(
         return Err("no live progress or archive evidence".into());
     }
     if live {
+        // No inter-canister call may separate publication of admissions verified
+        // in this page from the cursor that makes those admissions authoritative.
+        pending.publish();
         commit(s, true, at);
+        if let Some(order) = shared_globals.as_deref_mut() {
+            for (subscriber, admitted_at) in page_global_admissions {
+                order.admitted_at.entry(subscriber).or_insert(admitted_at);
+            }
+            if let Some(last_live) = page_last_live {
+                order.last_live = Some(last_live);
+            }
+        }
         merge(out, local)
     }
     Ok((at, live))

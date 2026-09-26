@@ -377,7 +377,6 @@ pub fn get_icp_subscription(account_identifier: [u8; 32]) -> Option<Subscription
     with_subscriptions(|map| map.get(&AccountKey::icp(account_identifier)).map(|v| v.0))
 }
 
-#[cfg(feature = "debug_api")]
 pub fn get_numbered_subscription(
     subscriber: candid::Principal,
     numbered: u8,

@@ -424,6 +424,14 @@ mod tests {
         fn poll(&self) -> Result<()> {
             update::<_, ()>(&self.pic, self.event_horizon, "debug_poll_once", ())
         }
+        fn set_abort_after_staged_admission(&self, enabled: bool) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_set_abort_after_staged_admission",
+                enabled,
+            )
+        }
         fn fund(&self) -> Result<()> {
             update::<_, ()>(&self.pic, self.event_horizon, "debug_funding_once", ())
         }
@@ -636,6 +644,16 @@ mod tests {
             Ok(memo)
         }
         fn admit(&self, subaccount: u8, threshold: Option<&str>, total: u64) -> Result<Vec<u8>> {
+            let memo = self.append_account_admission(subaccount, threshold, total)?;
+            self.poll()?;
+            Ok(memo)
+        }
+        fn append_account_admission(
+            &self,
+            subaccount: u8,
+            threshold: Option<&str>,
+            total: u64,
+        ) -> Result<Vec<u8>> {
             let compact = self.subscriber.to_text().replace('-', "");
             let memo = match threshold {
                 Some(v) => format!("{compact}.{subaccount}:{v}"),
@@ -649,7 +667,6 @@ mod tests {
                 10_000_000,
                 Some(memo.clone()),
             )?;
-            self.poll()?;
             Ok(memo)
         }
         fn admit_range(
@@ -1776,6 +1793,117 @@ mod tests {
         assert!(
             query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn staged_account_admission_is_not_durable_before_shared_cursor_commit() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?;
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        let source = account_id(Principal::from_slice(&[91]), [0; 32]);
+
+        env.append(
+            source.clone(),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.append_account_admission(7, None, 1_000_000_000)?;
+        env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
+
+        env.set_abort_after_staged_admission(true)?;
+        env.poll()?;
+        assert!(env.subscription(7)?.is_none());
+        let failed = env.state()?;
+        assert_eq!(failed.admission_next_block, before.admission_next_block);
+        assert_eq!(failed.observed_next_block, before.observed_next_block);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before
+        );
+
+        env.set_abort_after_staged_admission(false)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(env.subscription(7)?.is_some());
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before + 1,
+            "only the transfer after staged admission may match"
+        );
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn staged_global_admission_is_not_durable_before_shared_cursor_commit() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?;
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        let source = account_id(Principal::from_slice(&[92]), [0; 32]);
+        let unrelated = account_id(Principal::from_slice(&[93]), [0; 32]);
+
+        env.append(source.clone(), unrelated.clone(), 1, None)?;
+        env.append_global_admission(10_000_000_000)?;
+        env.append(source, unrelated, 1, None)?;
+
+        env.set_abort_after_staged_admission(true)?;
+        env.poll()?;
+        assert!(!env.global_subscription()?);
+        let failed = env.state()?;
+        assert_eq!(failed.admission_next_block, before.admission_next_block);
+        assert_eq!(failed.observed_next_block, before.observed_next_block);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before
+        );
+
+        env.set_abort_after_staged_admission(false)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(env.global_subscription()?);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before + 1,
+            "only activity after the global admission may wake it"
+        );
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn staged_distinct_admission_is_not_durable_before_admission_cursor_commit() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        let before = env.state()?;
+        env.append_account_admission(7, None, 1_000_000_000)?;
+
+        env.set_abort_after_staged_admission(true)?;
+        env.poll()?;
+        assert!(env.subscription(7)?.is_none());
+        let failed = env.state()?;
+        assert_eq!(failed.admission_next_block, before.admission_next_block);
+        assert_eq!(failed.observed_next_block, before.observed_next_block);
+
+        env.set_abort_after_staged_admission(false)?;
+        env.poll()?;
+        assert!(env.subscription(7)?.is_some());
+        assert!(env.state()?.admission_next_block > before.admission_next_block);
         Ok(())
     }
 
