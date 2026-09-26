@@ -152,7 +152,8 @@ Completed on 2026-09-26:
   `0f50ef898f5fc196fabfcaf4d7f554b8a3b56bdae175b524b53e4d3d00d5dead`.
 - Canonical frontend SHA-256:
   `3843156571a9ca2c409f6a92c87e0672e3d2a7d89ed158fb5068b49725f02a74`.
-- Deterministic canonical-artifact archive SHA-256: pending final archive.
+- Deterministic canonical-artifact archive SHA-256:
+  `dd2a3a9953d0d2a3f106b5e53bfd0e3a5412fa4c093bbded3796ff0acb9a55e0`.
 - Canonical artifact manifest: all three entries verified.
 - Source manifest: regenerated after final evidence and verified before the
   final evidence commit.
