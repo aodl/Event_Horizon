@@ -17,10 +17,15 @@ export function memoByteLength(memo) {
   return new TextEncoder().encode(memo).length;
 }
 
-function validatePrincipal(principalText) {
-  const principal = compactPrincipal(principalText);
-  if (!principal || !/^[a-z0-9]+$/i.test(principal)) throw new Error('Enter a canister principal.');
-  return principal;
+export function validatePrincipal(principalText) {
+  const trimmed = principalText.trim();
+  let parsed;
+  try { parsed = Principal.fromText(trimmed); } catch { throw new Error('Enter a valid canister principal.'); }
+  if (parsed.isAnonymous()) throw new Error('The anonymous principal cannot subscribe.');
+  if (parsed.toText() === Principal.managementCanister().toText()) throw new Error('The management principal cannot subscribe.');
+  // Rust Principal::from_text accepts this checksum-validated compact form; it is
+  // the established Jupiter memo representation and saves bytes under the limit.
+  return compactPrincipal(parsed.toText());
 }
 
 function numberedSubaccount(text) {
@@ -68,3 +73,4 @@ export function buildRangeMemo(alias, decimals, principalText, startText, endTex
 export function buildGlobalMemo(alias, principalText) {
   return checkedMemo(alias, validatePrincipal(principalText), { thresholded: false, global: true, range: false });
 }
+import { Principal } from '@icp-sdk/core/principal';
