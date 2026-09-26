@@ -6,7 +6,7 @@
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
-  `d843b5c66e7a24582e30378515024099a98d05d0`
+  `d4767d5577f00e705be688903839b003dff41752`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
