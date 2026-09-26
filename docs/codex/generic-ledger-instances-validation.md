@@ -5,7 +5,8 @@
 - Original baseline: `c0afddded408bb1c9963b235d91b32478963bb79`
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
-- Corrective implementation revision: pending final commits
+- Canonical artifact source revision:
+  `d843b5c66e7a24582e30378515024099a98d05d0`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
@@ -128,18 +129,23 @@ Completed on 2026-09-26:
   `production_wasm_exposes_only_instance_and_pricing_queries` and static checks.
 - Production frontend export audit: passed in static checks.
 - `DFX_IDENTITY=codex_local icp build -e local`: passed.
+- Full `DFX_IDENTITY=codex_local cargo run -p xtask -- validate`: passed.
+- Two independent `docker build --no-cache` artifact sets: byte-identical.
+- Canonical backend SHA-256:
+  `0f37ebed8655e27c2cebc0e5c9690216ab230daba10897181149a9a9b65c8187`.
+- Canonical frontend SHA-256:
+  `a00ed8c7bf27fa6f581d0a38b5c3298c8bac8e1d70e69db75687ff3130016ce7`.
+- Deterministic canonical-artifact archive SHA-256:
+  `389978befe8763c22e8d34830dbe9d4e431ccf49d3f8fd2a2da38b706661a74c`.
+- Canonical artifact manifest: all three entries verified.
+- Source manifest: regenerated after final evidence and verified before the
+  final evidence commit.
 
-Canonical Docker reproducibility is not confirmed. The first full validation
-attempt completed tests and security but Docker failed during the pinned Debian
-snapshot `apt-get` step with exit 100. A retry failed identically. Plain build
-output showed all Debian `InRelease` signatures rejected as invalid inside
-Docker; the host filesystem was 98% full. No global Docker/system cleanup was
-performed and apt signature verification was not weakened.
-
-Consequently the local files under `release-artifacts/` are not accepted as
-final canonical outputs, the static frontend registry intentionally retains a
-null expected backend hash, and no backend hash, frontend hash, source-manifest
-finalization, or release archive hash is claimed in this report.
+The static ICP registry pins the exact canonical backend hash above. The
+backend export audit passed with ten total Wasm exports and exactly
+`canister_query get_instance` and `canister_query get_pricing` as application
+methods. The frontend audit passed with seven total exports and exactly
+`canister_query http_request` as its application method.
 
 ## Required evidence checklist
 
@@ -180,10 +186,10 @@ finalization, or release archive hash is claimed in this report.
 - [x] Unsafe runtime text stays text — runtime text-sink frontend case.
 - [x] `SURPLUS_CANISTER=None`, exact production surfaces, and unset IO IDs —
   static checks and production export regression.
-- [ ] Final registry contains new canonical backend hash — blocked by canonical
-  Docker build failure; remains null by policy.
-- [ ] Two canonical builds are byte-identical — blocked by Debian signature
-  verification failure before the build could complete twice.
+- [x] Final registry contains new canonical backend hash — frontend registry
+  and canonical frontend artifact.
+- [x] Two canonical builds are byte-identical — `xtask validate` reproducibility
+  stage compared every emitted artifact from two `--no-cache` Docker builds.
 
 ## Safety
 
