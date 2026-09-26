@@ -6,7 +6,7 @@
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
-  `2a9976b92a86966e682a9c46cc9cc6bd7f556c1c`
+  `efac79c04070664fecfff456d059e8610281c3c7`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
@@ -135,7 +135,7 @@ Completed on 2026-09-26:
 - Rust formatting and Clippy: passed.
 - Backend unit tests: 53 passed.
 - Frontend tests: 9 passed.
-- PocketIC integration: 55 passed in the final complete current-tree run.
+- PocketIC integration: 58 passed in the final complete current-tree run.
 - Security gate: passed. `cargo audit` reported the four documented allowed
   maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
   npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
@@ -143,14 +143,16 @@ Completed on 2026-09-26:
   `production_wasm_exposes_only_instance_and_pricing_queries` and static checks.
 - Production frontend export audit: passed in static checks.
 - `DFX_IDENTITY=codex_local icp build -e local`: passed.
-- Full `DFX_IDENTITY=codex_local cargo run -p xtask -- validate`: passed.
+- Full validation stages passed. The aggregate `validate` run completed tests and
+  security, then its first no-cache build hit an invalid-signature error caused
+  by exhausted Docker build cache space. Only unused generated build cache was
+  pruned; the unchanged `repro` retry and final `canonical` stage passed.
 - Two independent `docker build --no-cache` artifact sets: byte-identical.
 - Canonical backend SHA-256:
-  `b6588d0030e7cbab81b79d67827c40669d5eb1a9a30b03c5c54e7f134d0036f6`.
+  `0f50ef898f5fc196fabfcaf4d7f554b8a3b56bdae175b524b53e4d3d00d5dead`.
 - Canonical frontend SHA-256:
-  `2032b74f6b8057312e9f30a02ca939578459a0661e9caa6a63429dc42df17cfc`.
-- Deterministic canonical-artifact archive SHA-256:
-  `fb74968b59159c48e128263e531f236783edb5043ef0a4f64a9a635c8fdd6b1d`.
+  `3843156571a9ca2c409f6a92c87e0672e3d2a7d89ed158fb5068b49725f02a74`.
+- Deterministic canonical-artifact archive SHA-256: pending final archive.
 - Canonical artifact manifest: all three entries verified.
 - Source manifest: regenerated after final evidence and verified before the
   final evidence commit.
