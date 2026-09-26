@@ -120,8 +120,7 @@ Completed on 2026-09-26:
 - Rust formatting and Clippy: passed.
 - Backend unit tests: 53 passed.
 - Frontend tests: 9 passed.
-- PocketIC integration: 50 passed in the complete gate, followed by the added
-  focused ICP operation regression passing independently (51 current scenarios).
+- PocketIC integration: 51 passed in the final complete current-tree run.
 - Security gate: passed. `cargo audit` reported the four documented allowed
   maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
   npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
