@@ -41,6 +41,11 @@ service : (DebugInitArgs) -> {
   debug_start_schedulers : () -> ();
   debug_timer_count : () -> (nat8) query;
   debug_icrc3_get_blocks_calls : () -> (nat64) query;
+  debug_legacy_query_blocks_calls : () -> (nat64) query;
+  debug_set_cursors : (record {
+    admission_bootstrapped : bool; admission_next_block : nat64;
+    observed_bootstrapped : bool; observed_next_block : nat64;
+  }) -> ();
   debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
   debug_global_subscription : (principal) -> (bool) query;
 }

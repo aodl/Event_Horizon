@@ -5,9 +5,11 @@ use std::cell::Cell;
 thread_local! {
     static OBSERVED_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static ICP_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
+    static SHARED_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static HISTORIAN_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static OBSERVED_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
     static ADMISSION_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    static SHARED_CURSOR_INVALID: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn history_gap(stream: &str, start: u64, end_exclusive: u64) {
@@ -60,6 +62,26 @@ pub fn icp_admission_ledger_recovered() {
 pub fn ledger_recovered_all() {
     observed_ledger_recovered();
     icp_admission_ledger_recovered();
+    SHARED_LEDGER_UNAVAILABLE.with(|f| f.set(false));
+}
+
+pub fn shared_ledger_failure(message: &str) {
+    SHARED_LEDGER_UNAVAILABLE.with(|flag| {
+        if !flag.replace(true) {
+            ic_cdk::println!("SHARED_ICP_LEDGER_UNAVAILABLE {}", message);
+        }
+    });
+}
+
+pub fn shared_cursor_invariant(message: &str) {
+    SHARED_CURSOR_INVALID.with(|flag| {
+        if !flag.replace(true) {
+            ic_cdk::println!("SHARED_CURSOR_INVARIANT {}", message);
+        }
+    });
+}
+pub fn shared_cursor_recovered() {
+    SHARED_CURSOR_INVALID.with(|flag| flag.set(false));
 }
 
 pub fn historian_failure(message: &str) {
@@ -93,7 +115,13 @@ pub fn daily_health() {
         .observed_profile
         .as_ref()
         .map_or("pending", |p| p.symbol.as_str());
-    ic_cdk::println!("HEALTH day={} observed_ledger={} symbol={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, symbol, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
+    let runtime = crate::config::runtime();
+    let reader = if runtime.observed_ledger == runtime.icp_ledger {
+        "icp_legacy"
+    } else {
+        "icrc3"
+    };
+    ic_cdk::println!("HEALTH day={} observed_ledger={} reader={} symbol={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, reader, symbol, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
     meta.last_health_log_day = Some(day);
     crate::state::write_metadata(meta);
 }

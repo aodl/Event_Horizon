@@ -118,7 +118,7 @@ async fn checked_call(
     if ic_cdk::api::canister_liquid_cycle_balance()
         < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
     {
-        return Err("reserve_protection".into());
+        return Err(crate::config::RESERVE_PROTECTION_ERROR.into());
     }
     call.await.map_err(|e| format!("{method} transport: {e:?}"))
 }

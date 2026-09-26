@@ -8,6 +8,7 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::account::{account_identifier_bytes, numbered_subaccount};
 #[cfg(feature = "debug_api")]
 use crate::config::RuntimeConfig;
 use crate::instance::InstanceConfig;
@@ -119,9 +120,19 @@ impl From<Account> for AccountKey {
     fn from(value: Account) -> Self {
         let owner = value.owner.as_slice();
         let mut bytes = Vec::with_capacity(1 + owner.len() + 32);
+        bytes.push(1); // ICRC account protocol tag
         bytes.push(owner.len() as u8);
         bytes.extend_from_slice(owner);
         bytes.extend_from_slice(value.effective_subaccount());
+        Self(bytes)
+    }
+}
+
+impl AccountKey {
+    fn icp(account_identifier: [u8; 32]) -> Self {
+        let mut bytes = Vec::with_capacity(33);
+        bytes.push(0); // canonical legacy ICP account protocol tag
+        bytes.extend_from_slice(&account_identifier);
         Self(bytes)
     }
 }
@@ -137,7 +148,7 @@ impl Storable for AccountKey {
         Self(bytes.into_owned())
     }
     const BOUND: Bound = Bound::Bounded {
-        max_size: 62,
+        max_size: 63,
         is_fixed_size: false,
     };
 }
@@ -342,7 +353,15 @@ pub fn modify_metadata(f: impl FnOnce(&mut Metadata)) {
 }
 
 pub fn put_subscription(subscription: Subscription) {
-    let key = AccountKey::from(subscription.account());
+    let runtime = crate::config::runtime();
+    let key = if runtime.observed_ledger == runtime.icp_ledger {
+        AccountKey::icp(account_identifier_bytes(
+            subscription.subscriber,
+            numbered_subaccount(subscription.numbered_subaccount),
+        ))
+    } else {
+        AccountKey::from(subscription.account())
+    };
     with_subscriptions(|map| {
         let merged =
             crate::subscription::merge_subscription(map.get(&key).map(|v| v.0), subscription);
@@ -352,6 +371,29 @@ pub fn put_subscription(subscription: Subscription) {
 
 pub fn get_subscription(account: Account) -> Option<Subscription> {
     with_subscriptions(|map| map.get(&AccountKey::from(account)).map(|v| v.0))
+}
+
+pub fn get_icp_subscription(account_identifier: [u8; 32]) -> Option<Subscription> {
+    with_subscriptions(|map| map.get(&AccountKey::icp(account_identifier)).map(|v| v.0))
+}
+
+#[cfg(feature = "debug_api")]
+pub fn get_numbered_subscription(
+    subscriber: candid::Principal,
+    numbered: u8,
+) -> Option<Subscription> {
+    let runtime = crate::config::runtime();
+    if runtime.observed_ledger == runtime.icp_ledger {
+        get_icp_subscription(account_identifier_bytes(
+            subscriber,
+            numbered_subaccount(numbered),
+        ))
+    } else {
+        get_subscription(Account {
+            owner: subscriber,
+            subaccount: Some(numbered_subaccount(numbered)),
+        })
+    }
 }
 
 pub fn subscription_count() -> u64 {
@@ -467,4 +509,40 @@ pub fn write_debug_config(config: RuntimeConfig) {
 #[cfg(feature = "debug_api")]
 pub fn read_debug_config() -> RuntimeConfig {
     with_debug_config(|cell| cell.get().0.clone())
+}
+
+#[cfg(test)]
+mod account_key_tests {
+    use super::*;
+
+    #[test]
+    fn protocol_tags_separate_icp_and_icrc_keys() {
+        let owner = candid::Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        let subaccount = numbered_subaccount(7);
+        let icp = AccountKey::icp(account_identifier_bytes(owner, subaccount));
+        let icrc = AccountKey::from(Account {
+            owner,
+            subaccount: Some(subaccount),
+        });
+        assert_eq!(icp.0[0], 0);
+        assert_eq!(icp.0.len(), 33);
+        assert_eq!(icrc.0[0], 1);
+        assert_eq!(icrc.0.len(), 2 + owner.as_slice().len() + 32);
+        assert_ne!(icp, icrc);
+    }
+
+    #[test]
+    fn absent_and_zero_icrc_subaccounts_have_the_same_key() {
+        let owner = candid::Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        assert_eq!(
+            AccountKey::from(Account {
+                owner,
+                subaccount: None
+            }),
+            AccountKey::from(Account {
+                owner,
+                subaccount: Some([0; 32])
+            })
+        );
+    }
 }

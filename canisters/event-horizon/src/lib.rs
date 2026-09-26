@@ -24,7 +24,7 @@ mod surplus;
 use candid::Principal;
 
 #[cfg(feature = "debug_api")]
-use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
+use debug::{DebugCursorArgs, DebugInitArgs, DebugState, DebugSubscriptionArgs};
 
 pub use account::{account_identifier_bytes, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
@@ -202,19 +202,38 @@ mod debug {
         clients::icrc3::debug_get_blocks_calls()
     }
 
+    #[ic_cdk::query]
+    fn debug_legacy_query_blocks_calls() -> u64 {
+        clients::icp_ledger::debug_query_blocks_calls()
+    }
+
     #[derive(CandidType, Deserialize)]
     pub struct DebugSubscriptionArgs {
         subscriber: Principal,
         subaccount: u8,
     }
 
+    #[derive(CandidType, Deserialize)]
+    pub struct DebugCursorArgs {
+        admission_bootstrapped: bool,
+        admission_next_block: u64,
+        observed_bootstrapped: bool,
+        observed_next_block: u64,
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_cursors(args: DebugCursorArgs) {
+        state::modify_metadata(|m| {
+            m.admission_bootstrapped = args.admission_bootstrapped;
+            m.admission_next_block = args.admission_next_block;
+            m.observed_bootstrapped = args.observed_bootstrapped;
+            m.observed_next_block = args.observed_next_block;
+        });
+    }
+
     #[ic_cdk::query]
     fn debug_subscription(args: DebugSubscriptionArgs) -> Option<Subscription> {
-        let account = icrc_ledger_types::icrc1::account::Account {
-            owner: args.subscriber,
-            subaccount: Some(numbered_subaccount(args.subaccount)),
-        };
-        state::get_subscription(account)
+        state::get_numbered_subscription(args.subscriber, args.subaccount)
     }
 
     #[ic_cdk::query]

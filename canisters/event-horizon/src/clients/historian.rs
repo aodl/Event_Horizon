@@ -64,7 +64,7 @@ pub async fn route_is_admitted(
     if ic_cdk::api::canister_liquid_cycle_balance()
         < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
     {
-        return Err("reserve_protection".to_string());
+        return Err(crate::config::RESERVE_PROTECTION_ERROR.to_string());
     }
     let response = call
         .await

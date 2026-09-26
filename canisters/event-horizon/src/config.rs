@@ -22,6 +22,24 @@ pub const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
 
 pub const TRILLION: u128 = 1_000_000_000_000;
 pub const RESERVE_PROTECTION_CYCLES: u128 = TRILLION;
+pub const RESERVE_PROTECTION_ERROR: &str = "reserve_protection";
+pub fn is_reserve_protection(error: &str) -> bool {
+    error == RESERVE_PROTECTION_ERROR
+}
+
+#[cfg(test)]
+mod reserve_tests {
+    #[test]
+    fn reserve_protection_is_classified_separately_from_remote_failures() {
+        assert!(super::is_reserve_protection(
+            super::RESERVE_PROTECTION_ERROR
+        ));
+        assert!(!super::is_reserve_protection(
+            "query_blocks transport: reject"
+        ));
+        assert!(!super::is_reserve_protection("icrc3_get_blocks decode"));
+    }
+}
 pub const ECONOMY_ENTER: u128 = 2 * TRILLION;
 pub const ECONOMY_EXIT: u128 = TRILLION;
 pub const STANDARD_ENTER: u128 = 5 * TRILLION;
