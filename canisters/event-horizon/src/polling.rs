@@ -15,6 +15,11 @@ struct MatchState {
     global: bool,
     subs: BTreeSet<u8>,
 }
+struct SharedGlobalOrder {
+    existing: BTreeSet<Principal>,
+    admitted_at: BTreeMap<Principal, u64>,
+    last_live: Option<u64>,
+}
 #[derive(Clone, Copy)]
 enum Stream {
     Admission,
@@ -75,7 +80,7 @@ fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principa
     }
 }
 
-async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
+async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) -> Option<Principal> {
     let r = config::runtime();
     if account_id(from) != Some(account_identifier_bytes(r.faucet_canister, [0; 32]))
         || account_id(to)
@@ -84,11 +89,11 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
                 [0; 32],
             ))
     {
-        return;
+        return None;
     }
-    let Some(memo) = memo else { return };
+    let Some(memo) = memo else { return None };
     let Ok(d) = parse_subscription_memo(memo) else {
-        return;
+        return None;
     };
     let class = match d {
         SubscriptionDeclaration::Global { .. } => pricing::PricingClass::Global,
@@ -96,7 +101,7 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
         SubscriptionDeclaration::Range { .. } => pricing::PricingClass::Range,
     };
     let Some(required) = pricing::current_admission_e8s(class) else {
-        return;
+        return None;
     };
     match historian::route_is_admitted(
         r.historian_canister,
@@ -109,7 +114,9 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
         Ok(true) => {
             match d {
                 SubscriptionDeclaration::Global { subscriber } => {
-                    state::put_global_subscriber(subscriber)
+                    state::put_global_subscriber(subscriber);
+                    logging::historian_recovered();
+                    return Some(subscriber);
                 }
                 x @ SubscriptionDeclaration::Account { .. } => {
                     if let Ok(s) = Subscription::from_declaration(x, decimals) {
@@ -123,7 +130,7 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
                     minimum,
                 } => {
                     let Ok(v) = minimum.map(|x| x.to_units(decimals)).transpose() else {
-                        return;
+                        return None;
                     };
                     let v = v.unwrap_or_else(|| Nat::from(0u8));
                     for n in start_subaccount..=end_subaccount {
@@ -141,6 +148,7 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) {
         Err(e) if config::is_reserve_protection(&e) => {}
         Err(e) => logging::historian_failure(&e),
     }
+    None
 }
 fn observe_icrc3(e: &icrc3::LedgerEvent, out: &mut BTreeMap<Principal, MatchState>) {
     if let icrc3::LedgerEvent::Transfer { to, amount, .. } = e {
@@ -291,6 +299,7 @@ async fn legacy_page(
     boundary: u64,
     decimals: u8,
     out: &mut BTreeMap<Principal, MatchState>,
+    mut shared_globals: Option<&mut SharedGlobalOrder>,
 ) -> Result<(u64, bool), String> {
     if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive live blocks".into());
@@ -325,12 +334,20 @@ async fn legacy_page(
             return Err(format!("non-contiguous block expected={at} got={id}"));
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
-            admit(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
+            if let Some(subscriber) =
+                admit(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
+            {
+                if let Some(order) = shared_globals.as_deref_mut() {
+                    if !order.existing.contains(&subscriber) {
+                        order.admitted_at.entry(subscriber).or_insert(id);
+                    }
+                }
+            }
         }
         if matches!(s, Stream::Shared) {
             observe_icp(&b.transaction.operation, &mut local);
-            for p in state::global_subscribers() {
-                local.entry(p).or_default().global = true
+            if let Some(order) = shared_globals.as_deref_mut() {
+                order.last_live = Some(id);
             }
         }
         live = true;
@@ -365,6 +382,13 @@ async fn scan_legacy(
         commit(s, true, tip);
         return Ok(false);
     }
+    // Snapshot once per shared scan. Admissions take effect only for later blocks,
+    // without walking the complete global registry for every transaction.
+    let mut shared_globals = matches!(s, Stream::Shared).then(|| SharedGlobalOrder {
+        existing: state::global_subscribers().into_iter().collect(),
+        admitted_at: BTreeMap::new(),
+        last_live: None,
+    });
     let first = icp_ledger::query_blocks(r.icp_ledger, at, config::LEDGER_PAGE_SIZE).await?;
     let boundary = first.chain_length;
     let mut next = Some(first);
@@ -381,9 +405,29 @@ async fn scan_legacy(
                 .await?
             }
         };
-        let (n, live) = legacy_page(response, s, boundary, decimals, out).await?;
+        let (n, live) = legacy_page(
+            response,
+            s,
+            boundary,
+            decimals,
+            out,
+            shared_globals.as_mut(),
+        )
+        .await?;
         at = n;
         activity |= live
+    }
+    if let Some(order) = shared_globals {
+        if let Some(last_live) = order.last_live {
+            for subscriber in order.existing {
+                out.entry(subscriber).or_default().global = true;
+            }
+            for (subscriber, admitted_at) in order.admitted_at {
+                if last_live > admitted_at {
+                    out.entry(subscriber).or_default().global = true;
+                }
+            }
+        }
     }
     Ok(activity)
 }

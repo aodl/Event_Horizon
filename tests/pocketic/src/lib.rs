@@ -620,6 +620,11 @@ mod tests {
             update(&self.pic, self.event_horizon, "debug_set_cursors", args)
         }
         fn admit_global(&self, total: u64) -> Result<Vec<u8>> {
+            let memo = self.append_global_admission(total)?;
+            self.poll()?;
+            Ok(memo)
+        }
+        fn append_global_admission(&self, total: u64) -> Result<Vec<u8>> {
             let memo = self.subscriber.to_text().replace('-', "").into_bytes();
             self.set_route(memo.clone(), total)?;
             self.append(
@@ -628,7 +633,6 @@ mod tests {
                 1,
                 Some(memo.clone()),
             )?;
-            self.poll()?;
             Ok(memo)
         }
         fn admit(&self, subaccount: u8, threshold: Option<&str>, total: u64) -> Result<Vec<u8>> {
@@ -1669,6 +1673,109 @@ mod tests {
                 "{kind} must not match a specific watched account"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_global_admission_block_does_not_self_wake() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.append_global_admission(10_000_000_000)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(env.global_subscription()?);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before,
+            "the admission block is not activity for its newly admitted global subscriber"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_global_admission_matches_later_same_poll_activity() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.append_global_admission(10_000_000_000)?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(env.global_subscription()?);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 1
+        );
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_global_activity_before_admission_is_not_retroactive() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.append_global_admission(10_000_000_000)?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert!(env.global_subscription()?);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before,
+            "neither earlier activity nor the admission block wakes the new subscriber"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn existing_shared_global_many_blocks_coalesce_to_one_poke() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit_global(10_000_000_000)?;
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        for destination in [7u8, 8, 9, 10] {
+            env.append(
+                account_id(Principal::from_slice(&[6]), [0; 32]),
+                account_id(Principal::from_slice(&[destination]), [0; 32]),
+                1,
+                None,
+            )?;
+        }
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 1
+        );
+        assert!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?.is_empty()
+        );
         Ok(())
     }
 

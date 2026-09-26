@@ -60,7 +60,10 @@ assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
 assert 'SubscriptionDeclaration::Range' in polling
 assert 'BTreeMap<Principal, MatchState>' in polling
-assert 'for p in state::global_subscribers()' in polling
+assert polling.count('state::global_subscribers()') == 2
+legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async fn scan_legacy')]
+assert 'state::global_subscribers()' not in legacy_page
+assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
 assert 'm.subs.into_iter().collect()' in polling
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/icp_ledger.rs').read_text()
