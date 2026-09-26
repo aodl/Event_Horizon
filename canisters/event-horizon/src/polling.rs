@@ -386,7 +386,7 @@ async fn legacy_page(
     boundary: u64,
     decimals: u8,
     out: &mut BTreeMap<Principal, MatchState>,
-    mut shared_globals: Option<&mut SharedGlobalOrder>,
+    shared_globals: Option<&mut SharedGlobalOrder>,
 ) -> Result<(u64, bool), String> {
     if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive live blocks".into());
@@ -455,7 +455,7 @@ async fn legacy_page(
         // in this page from the cursor that makes those admissions authoritative.
         pending.publish();
         commit(s, true, at);
-        if let Some(order) = shared_globals.as_deref_mut() {
+        if let Some(order) = shared_globals {
             for (subscriber, admitted_at) in page_global_admissions {
                 order.admitted_at.entry(subscriber).or_insert(admitted_at);
             }
