@@ -6,7 +6,7 @@
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
-  `d4767d5577f00e705be688903839b003dff41752`
+  `2a9976b92a86966e682a9c46cc9cc6bd7f556c1c`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
@@ -27,6 +27,12 @@ read supplies Faucet admission and ICP-instance observation in ledger order.
 `icp_instance_uses_one_page_read_for_both_roles` instruments legacy page calls.
 `shared_icp_scan_applies_admission_in_legacy_block_order` proves that admission
 starts matching only later blocks in the same authoritative stream.
+Global ordering is proved separately: `shared_global_admission_block_does_not_self_wake`,
+`shared_global_admission_matches_later_same_poll_activity`, and
+`shared_global_activity_before_admission_is_not_retroactive` cover the admission
+boundary, while `existing_shared_global_many_blocks_coalesce_to_one_poke`
+proves existing-global activity and one-poke coalescing. Static checks also
+prove `legacy_page` does not enumerate the global registry per live block.
 
 ## Generic non-ICP protocol
 
@@ -121,7 +127,7 @@ Completed on 2026-09-26:
 - Rust formatting and Clippy: passed.
 - Backend unit tests: 53 passed.
 - Frontend tests: 9 passed.
-- PocketIC integration: 51 passed in the final complete current-tree run.
+- PocketIC integration: 55 passed in the final complete current-tree run.
 - Security gate: passed. `cargo audit` reported the four documented allowed
   maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
   npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
@@ -132,11 +138,10 @@ Completed on 2026-09-26:
 - Full `DFX_IDENTITY=codex_local cargo run -p xtask -- validate`: passed.
 - Two independent `docker build --no-cache` artifact sets: byte-identical.
 - Canonical backend SHA-256:
-  `0f37ebed8655e27c2cebc0e5c9690216ab230daba10897181149a9a9b65c8187`.
+  `b6588d0030e7cbab81b79d67827c40669d5eb1a9a30b03c5c54e7f134d0036f6`.
 - Canonical frontend SHA-256:
-  `a00ed8c7bf27fa6f581d0a38b5c3298c8bac8e1d70e69db75687ff3130016ce7`.
-- Deterministic canonical-artifact archive SHA-256:
-  `caf159674d7d65da6d7a1d1b3986b46156951c1b7ac874ce40b654967b34621e`.
+  `2032b74f6b8057312e9f30a02ca939578459a0661e9caa6a63429dc42df17cfc`.
+- Deterministic canonical-artifact archive SHA-256: pending final archive.
 - Canonical artifact manifest: all three entries verified.
 - Source manifest: regenerated after final evidence and verified before the
   final evidence commit.
