@@ -4,16 +4,20 @@ Event Horizon is a ledger-generic low-latency wake-up service, funded through Ju
 
 Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; its only instance-specific production setting is immutable `observed_ledger`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
 
-It supports five exact Jupiter Faucet memo forms:
+It supports five exact Jupiter Faucet memo forms. Canonical ICP uses alias `X`
+in these examples; the grammar itself uses the reviewed per-instance alias:
 
 ```text
-X.<subscriber>                         # global Ledger activity
-X.<subscriber>.<subaccount>            # every incoming account transfer
-X.<subscriber>.<subaccount>:<amount>   # inclusive account threshold
-X.<subscriber>.<start>-<end>           # every transfer in an inclusive range
-X.<subscriber>.<start>-<end>:<amount>  # inclusive threshold throughout a range
+<alias>.<subscriber>                         # global Ledger activity
+<alias>.<subscriber>.<subaccount>            # every incoming account transfer
+<alias>.<subscriber>.<subaccount>:<amount>   # inclusive observed-token threshold
+<alias>.<subscriber>.<start>-<end>           # every transfer in an inclusive range
+<alias>.<subscriber>.<start>-<end>:<amount>  # inclusive observed-token range threshold
 ```
 
+The planned IO alias `I` is intended, not published. The full memo—including
+alias, dot, subscriber, scope or range, and optional threshold—must fit
+Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
 Ranges satisfy `0 <= start < end <= 255` and expand at admission into the existing watched-account map. Overlaps retain the lowest permanent threshold. `poke([])` signals global activity without a more-specific match; one sorted unique non-empty vector of actual matched subaccounts takes precedence.
 
 ## Dynamic admission pricing

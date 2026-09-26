@@ -1,23 +1,19 @@
-Event Horizon first-deployment schema summary
+Event Horizon generic-ledger source summary
 
-Cleanup baseline: 419cf8bd5fde877f7f6ac250aa267f1e2992948b
-Branch: codex/predeployment-schema-cleanup
+Branch: codex/generic-ledger-instances
 
-Canonical stable layout:
-- ID 0 metadata; ID 1 account subscriptions; ID 2 unused.
-- ID 3 debug-only configuration; ID 4 global subscribers.
-- IDs 5–6 pricing observations/state; ID 7 FundingState; ID 8 SurplusPolicyState.
-- FundingState initializes directly to Idle and has only Idle, CmcTransferPending, CmcNotifyPending, and SurplusTransferPending.
-- CMC pending states carry Option<PlannedSurplus>; one planned value contains destination, memo, amount, and fee before retained ICP moves.
-- SurplusTransferPending persists destination, memo, amount, fee, and creation timestamp as one complete recoverable identity.
+- Stable ID 2 stores immutable instance configuration and the discovered
+  observed-ledger profile.
+- Canonical ICP uses the fixed legacy `query_blocks` adapter for shared
+  admission and observation.
+- Every non-ICP Observed Ledger requires ICRC-1, ICRC-3, and `1xfer`.
+- The fixed Protocol ICP Ledger remains the admission and funding ledger.
+- One backend Wasm contains both adapters; immutable `observed_ledger`
+  determines the path.
+- Production backend application methods are the `get_instance` and
+  `get_pricing` queries only.
+- `SURPLUS_CANISTER` remains `None`.
 
-Pre-deployment cleanup:
-- Removed the never-deployed CmcState/ID-2 reader and initializer.
-- Removed FundingStateV2, Uninitialized, legacy surplus variants, first-read migration, and identity-hardening compatibility hook.
-- Removed active historical-Wasm fixture adapters and five development-schema migration tests.
-- Retained inert fixture binaries and historical validation reports as provenance only.
-- Retained and strengthened current-schema upgrade, financial recovery, range, subscription, pricing, polling, and scheduler-singleton tests.
-
-Protocol behavior is unchanged: optional production surplus destination remains None; the seven-day 150 T/100 T controller, 5-point steps, 95% cap, retained-first ordering, split arithmetic, subscriptions, pricing, polling, and production surfaces remain as approved.
-
-Current validation evidence and canonical artifact hashes are recorded in docs/codex/predeployment-schema-cleanup.md. No mainnet deployment, Jupiter Faucet X publication, surplus destination selection, or controller change/removal was performed.
+Current evidence is recorded in
+docs/codex/generic-ledger-instances-validation.md. No mainnet mutation was
+performed during this source work.

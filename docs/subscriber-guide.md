@@ -11,12 +11,17 @@ service : { poke : (vec nat8) -> (); }
 ## Declaration forms
 
 ```text
-X.<subscriber>                         global Ledger trigger
-X.<subscriber>.<subaccount>            all incoming transfers to account 0..255
-X.<subscriber>.<subaccount>:<amount>   incoming amount >= positive threshold
-X.<subscriber>.<start>-<end>           all transfers to an inclusive range
-X.<subscriber>.<start>-<end>:<amount>  incoming amount >= threshold in that range
+<alias>.<subscriber>                         global Ledger trigger
+<alias>.<subscriber>.<subaccount>            all incoming transfers to account 0..255
+<alias>.<subscriber>.<subaccount>:<amount>   incoming amount >= positive observed-token threshold
+<alias>.<subscriber>.<start>-<end>           all transfers to an inclusive range
+<alias>.<subscriber>.<start>-<end>:<amount>  incoming amount >= observed-token threshold in that range
 ```
+
+Canonical ICP uses alias `X`. Planned IO has intended alias `I`, which is not
+claimed to be published. A future reviewed alias need not be one character.
+The complete Jupiter memo—including alias, dot, subscriber, scope or range,
+and optional threshold—must fit the 32-byte limit.
 
 For range declarations the endpoints are inclusive and must satisfy `0 <= start < end <= 255`. Use the single-account form when both endpoints would be equal; invalid ranges are not reversed, clamped, or repaired. Integers use canonical decimal spelling without signs or leading zeroes.
 

@@ -28,14 +28,14 @@ Jupiter Historian is used for admission verification. Jupiter Faucet and Disburs
 A Jupiter Faucet endowment uses exactly one of these full memo forms:
 
 ```text
-X.<compact-subscriber-principal>
-X.<compact-subscriber-principal>.<numbered-subaccount>
-X.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-ICP>
-X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>
-X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>:<minimum-ICP>
+<alias>.<compact-subscriber-principal>
+<alias>.<compact-subscriber-principal>.<numbered-subaccount>
+<alias>.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-observed-amount>
+<alias>.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>
+<alias>.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>:<minimum-observed-amount>
 ```
 
-Examples:
+Canonical ICP examples use alias `X`:
 
 ```text
 X.r5m5ydiaaaaaaaaqanaacai
@@ -43,7 +43,11 @@ X.r5m5ydiaaaaaaaaqanaacai.7
 X.r5m5ydiaaaaaaaaqanaacai.7:0.01
 ```
 
-`X` is a Jupiter Faucet runtime alias whose mapping is owned by Jupiter Historian. Event Horizon itself receives only the outgoing suffix, for example:
+The planned canonical IO instance has intended alias `I`; that alias is not
+claimed to be published. Aliases are reviewed Jupiter Faucet runtime aliases
+whose mappings are owned by Jupiter Historian. Future aliases are not assumed
+to be one byte or one character. Event Horizon itself receives only the
+outgoing suffix, for example:
 
 ```text
 r5m5ydiaaaaaaaaqanaacai
@@ -77,7 +81,8 @@ Rules:
 - explicit threshold matching semantics are always `transfer amount >= declared amount`;
 - the smallest valid explicit amount is one raw observed-token unit;
 - a colon with no amount is invalid; omission means omitting the colon and amount together;
-- the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit.
+- the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit,
+  including the alias, dot, subscriber, scope or range, and optional threshold.
 
 Observed amounts are arbitrary-precision integer raw token units. Floating-point arithmetic is forbidden. Zero is the omitted-threshold sentinel; explicit thresholds must exceed zero.
 
@@ -114,7 +119,7 @@ A fresh installation is prospective. On first successful Ledger observation it r
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. It separately records whether the poll processed any transaction. After the fixed boundary has been completely processed, it incorporates admitted global subscribers once when that flag is true. It does not enumerate global subscribers per transaction.
+For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. It separately records whether the poll processed any transaction. In shared ICP mode it snapshots existing global subscribers once at scan start and records successful global admission block indexes. After the fixed boundary has been completely processed, existing global subscribers match any live block, while a newly admitted global subscriber matches only when a live block was processed strictly after its admission block. Distinct-ledger mode retains its poll-start snapshot ordering. Event Horizon never enumerates the global registry per transaction.
 
 Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty sorted unique account set takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
 
@@ -122,13 +127,18 @@ Event Horizon attempts at most one poke to each accumulated subscriber. A non-em
 
 Event Horizon does not traverse Ledger archives.
 
-If the next required block is no longer locally available, Event Horizon:
+Event Horizon may skip a prefix only when the Ledger response itself explicitly
+proves that the contiguous required interval is archived. For such a proved
+archived interval Event Horizon:
 
 1. writes one concise public `HISTORY_GAP` exceptional log for the skipped interval;
-2. advances its cursor to the first locally available block;
+2. advances its cursor past exactly that archived interval;
 3. continues normal operation.
 
-It does not halt, reconstruct the gap, or create administrative recovery work.
+Archive-only progress is not global activity. Archive callbacks are never
+called. An unexplained live hole does not advance the cursor and is retried
+later; Event Horizon does not infer archival merely from the first live block
+returned.
 
 This is acceptable because subscribers retain authoritative reconciliation.
 
