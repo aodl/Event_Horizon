@@ -5,6 +5,7 @@ members = [
   "canisters/frontend",
   "tools/xtask",
   "tests/mocks/mock-icp-ledger",
+  "tests/mocks/mock-icrc3-ledger",
   "tests/mocks/mock-historian",
   "tests/mocks/mock-cmc",
   "tests/mocks/mock-subscriber",

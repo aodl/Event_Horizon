@@ -1295,6 +1295,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-icrc3-ledger"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "crc32fast",
+ "ic-cdk",
+ "icrc-ledger-types",
+ "serde",
+ "sha2",
+]
+
+[[package]]
 name = "mock-subscriber"
 version = "0.1.0"
 dependencies = [

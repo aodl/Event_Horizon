@@ -1,12 +1,16 @@
 [package]
-name = "mock-icp-ledger"
+name = "mock-icrc3-ledger"
 version = "0.1.0"
 edition = "2021"
 publish = false
-[features]
-generic_icrc3 = []
+
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["generic_icrc3"]
+generic_icrc3 = []
+
 [dependencies]
 candid = { workspace = true }
 crc32fast = { workspace = true }

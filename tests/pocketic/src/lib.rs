@@ -13,6 +13,7 @@ mod tests {
     use sha2::{Digest, Sha224};
 
     static LEDGER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    static ICRC3_LEDGER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static HISTORIAN_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static CMC_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
@@ -136,6 +137,18 @@ mod tests {
         amount_e8s: u64,
         icrc1_memo: Option<Vec<u8>>,
     }
+    #[derive(CandidType, Deserialize)]
+    struct DebugProfile {
+        symbol: String,
+        decimals: u8,
+        supports_2xfer: bool,
+    }
+    #[derive(CandidType, Deserialize)]
+    struct DebugCapabilities {
+        advertises_icrc1: bool,
+        advertises_icrc3: bool,
+        advertises_1xfer: bool,
+    }
     #[derive(CandidType, Deserialize, Debug)]
     struct DebugState {
         admission_bootstrapped: bool,
@@ -150,10 +163,24 @@ mod tests {
         surplus_destination: Option<Principal>,
         pricing: Pricing,
     }
+    #[derive(CandidType, Deserialize)]
+    struct DebugCursorArgs {
+        admission_bootstrapped: bool,
+        admission_next_block: u64,
+        observed_bootstrapped: bool,
+        observed_next_block: u64,
+    }
     #[derive(CandidType, Deserialize, Debug)]
     struct InstanceInfo {
         observed_ledger: Principal,
+        observed_profile: Option<ObservedProfile>,
         icp_ledger: Principal,
+    }
+    #[derive(CandidType, Deserialize, Debug)]
+    struct ObservedProfile {
+        symbol: String,
+        decimals: u8,
+        supports_icrc2_transfer_from: bool,
     }
     #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
     struct Price {
@@ -341,10 +368,20 @@ mod tests {
             if separate_observed {
                 pic.install_canister(
                     observed_ledger,
-                    wasm(&LEDGER_WASM, "mock-icp-ledger", None)?,
+                    wasm(&ICRC3_LEDGER_WASM, "mock-icrc3-ledger", None)?,
                     vec![],
                     None,
                 );
+                update::<_, ()>(
+                    &pic,
+                    observed_ledger,
+                    "debug_set_profile",
+                    DebugProfile {
+                        symbol: "IO".into(),
+                        decimals: 8,
+                        supports_2xfer: true,
+                    },
+                )?;
             }
             pic.install_canister(
                 historian,
@@ -452,6 +489,14 @@ mod tests {
                 },
             )
         }
+        fn append_legacy_other(&self, kind: &str) -> Result<u64> {
+            update(
+                &self.pic,
+                self.ledger,
+                "debug_append_legacy_other",
+                kind.to_string(),
+            )
+        }
         fn state(&self) -> Result<DebugState> {
             query(&self.pic, self.event_horizon, "debug_state", ())
         }
@@ -551,6 +596,28 @@ mod tests {
                 "debug_global_subscription",
                 self.subscriber,
             )
+        }
+        fn set_observed_profile_available(&self, value: bool) -> Result<()> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_set_profile_available",
+                value,
+            )
+        }
+        fn set_observed_capabilities(&self, value: DebugCapabilities) -> Result<()> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_set_capabilities",
+                value,
+            )
+        }
+        fn set_observed_profile(&self, value: DebugProfile) -> Result<()> {
+            update(&self.pic, self.observed_ledger, "debug_set_profile", value)
+        }
+        fn set_cursors(&self, args: DebugCursorArgs) -> Result<()> {
+            update(&self.pic, self.event_horizon, "debug_set_cursors", args)
         }
         fn admit_global(&self, total: u64) -> Result<Vec<u8>> {
             let memo = self.subscriber.to_text().replace('-', "").into_bytes();
@@ -778,24 +845,277 @@ mod tests {
         let before = query::<_, u64>(
             &env.pic,
             env.event_horizon,
-            "debug_icrc3_get_blocks_calls",
+            "debug_legacy_query_blocks_calls",
             (),
         )?;
         env.poll()?;
         let after = query::<_, u64>(
             &env.pic,
             env.event_horizon,
-            "debug_icrc3_get_blocks_calls",
+            "debug_legacy_query_blocks_calls",
             (),
         )?;
         assert_eq!(
             after - before,
             1,
-            "one ICRC-3 page feeds admission and observed processing"
+            "one legacy query_blocks page feeds admission and observed processing"
         );
         assert_eq!(
             env.state()?.admission_next_block,
             env.state()?.observed_next_block
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn canonical_icp_mock_does_not_expose_icrc3() -> Result<()> {
+        let env = Env::new()?;
+        let result = env.pic.query_call(
+            env.ledger,
+            Principal::anonymous(),
+            "icrc3_supported_block_types",
+            encode_one(())?,
+        );
+        assert!(
+            result.is_err(),
+            "canonical ICP fixture must reject ICRC-3 methods"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_profile_requires_icrc1_icrc3_and_1xfer_but_not_2xfer() -> Result<()> {
+        for capabilities in [
+            DebugCapabilities {
+                advertises_icrc1: false,
+                advertises_icrc3: true,
+                advertises_1xfer: true,
+            },
+            DebugCapabilities {
+                advertises_icrc1: true,
+                advertises_icrc3: false,
+                advertises_1xfer: true,
+            },
+            DebugCapabilities {
+                advertises_icrc1: true,
+                advertises_icrc3: true,
+                advertises_1xfer: false,
+            },
+        ] {
+            let env = Env::new_two_ledgers()?;
+            env.set_observed_capabilities(capabilities)?;
+            env.poll()?;
+            let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+            assert!(info.observed_profile.is_none());
+            assert!(env.state()?.admission_bootstrapped);
+            assert!(!env.state()?.observed_bootstrapped);
+        }
+
+        let env = Env::new_two_ledgers()?;
+        env.set_observed_profile(DebugProfile {
+            symbol: "IO".into(),
+            decimals: 18,
+            supports_2xfer: false,
+        })?;
+        env.poll()?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        let profile = info
+            .observed_profile
+            .expect("optional 2xfer must not block readiness");
+        assert_eq!(profile.symbol, "IO");
+        assert_eq!(profile.decimals, 18);
+        assert!(!profile.supports_icrc2_transfer_from);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn reserve_protection_does_not_mutate_cursors_or_log_remote_outages() -> Result<()> {
+        let wasm = wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?;
+        for separate_observed in [false, true] {
+            let env = Env::with_event_horizon_wasm_and_surplus_mode(
+                wasm.clone(),
+                900_000_000_000,
+                false,
+                separate_observed,
+            )?;
+            let before = env.state()?;
+            env.poll()?;
+            let after = env.state()?;
+            assert_eq!(after.admission_bootstrapped, before.admission_bootstrapped);
+            assert_eq!(after.admission_next_block, before.admission_next_block);
+            assert_eq!(after.observed_bootstrapped, before.observed_bootstrapped);
+            assert_eq!(after.observed_next_block, before.observed_next_block);
+            let logs = env
+                .pic
+                .fetch_canister_logs(env.event_horizon, Principal::anonymous())
+                .map_err(|error| anyhow!("fetch canister logs: {error:?}"))?;
+            let text = logs
+                .into_iter()
+                .map(|record| String::from_utf8_lossy(&record.content).into_owned())
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(!text.contains("OBSERVED_LEDGER_UNAVAILABLE"), "{text}");
+            assert!(!text.contains("ICP_ADMISSION_LEDGER_UNAVAILABLE"), "{text}");
+            assert!(!text.contains("SHARED_ICP_LEDGER_UNAVAILABLE"), "{text}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn fresh_profile_failure_preserves_prospective_icp_admission_start() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.set_observed_profile_available(false)?;
+        env.poll()?;
+        let parked = env.state()?;
+        assert!(parked.admission_bootstrapped);
+        assert!(!parked.observed_bootstrapped);
+
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7:0.00000001").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        env.poll()?;
+        assert_eq!(
+            env.state()?.admission_next_block,
+            parked.admission_next_block
+        );
+
+        env.set_observed_profile_available(true)?;
+        env.poll()?;
+        assert!(
+            env.subscription(7)?.is_some(),
+            "parked payout must be admitted after readiness"
+        );
+        env.append_observed(
+            account_id(Principal::from_slice(&[99]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?,
+            vec![7]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_cursor_divergence_fails_closed_without_rewind_or_fetch() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before_calls = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        env.set_cursors(DebugCursorArgs {
+            admission_bootstrapped: true,
+            admission_next_block: 3,
+            observed_bootstrapped: true,
+            observed_next_block: 4,
+        })?;
+        env.poll()?;
+        let state = env.state()?;
+        assert_eq!(
+            (state.admission_next_block, state.observed_next_block),
+            (3, 4)
+        );
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                ()
+            )?,
+            before_calls
+        );
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            0
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_icp_scan_applies_admission_in_legacy_block_order() -> Result<()> {
+        let earlier_transfer = Env::new()?;
+        earlier_transfer.poll()?;
+        let compact = earlier_transfer.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        earlier_transfer.set_route(memo.clone(), 1_000_000_000)?;
+        earlier_transfer.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(earlier_transfer.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        earlier_transfer.append(
+            account_id(earlier_transfer.faucet, [0; 32]),
+            account_id(earlier_transfer.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        earlier_transfer.poll()?;
+        for _ in 0..5 {
+            earlier_transfer.pic.tick();
+        }
+        assert!(earlier_transfer.subscription(7)?.is_some());
+        assert_eq!(
+            query::<_, u64>(
+                &earlier_transfer.pic,
+                earlier_transfer.subscriber,
+                "debug_pokes",
+                ()
+            )?,
+            0,
+            "a transfer before its admission must not match retroactively"
+        );
+
+        let later_transfer = Env::new()?;
+        later_transfer.poll()?;
+        let compact = later_transfer.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        later_transfer.set_route(memo.clone(), 1_000_000_000)?;
+        later_transfer.append(
+            account_id(later_transfer.faucet, [0; 32]),
+            account_id(later_transfer.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        later_transfer.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(later_transfer.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        later_transfer.poll()?;
+        for _ in 0..5 {
+            later_transfer.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<u8>>(
+                &later_transfer.pic,
+                later_transfer.subscriber,
+                "debug_last_subaccounts",
+                ()
+            )?,
+            vec![7]
         );
         Ok(())
     }
@@ -1321,6 +1641,34 @@ mod tests {
             reverse.subscription(7)?.unwrap().minimum_units,
             candid::Nat::from(10_000_000u64)
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn icp_mint_burn_and_approve_are_global_only_activity() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        env.admit_global(10_000_000_000)?;
+        for kind in ["mint", "burn", "approve"] {
+            let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+            env.append_legacy_other(kind)?;
+            env.poll()?;
+            for _ in 0..5 {
+                env.pic.tick();
+            }
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                before + 1,
+                "{kind} must count as one global activity"
+            );
+            assert!(
+                query::<_, Vec<u8>>(&env.pic, env.subscriber, "debug_last_subaccounts", ())?
+                    .is_empty(),
+                "{kind} must not match a specific watched account"
+            );
+        }
         Ok(())
     }
 
