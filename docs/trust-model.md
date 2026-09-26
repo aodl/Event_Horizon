@@ -4,7 +4,7 @@ For a finalized instance, verify the canister principal, empty controller list, 
 
 Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 
-- The ICP Ledger defines processed activity and fixed poll boundaries.
+- Canonical ICP defines Faucet admission for every instance. It also defines observed activity and `chain_length` boundaries only for the ICP instance; non-ICP observed activity and `log_length` boundaries come from the configured ICRC-3 Ledger.
 - Jupiter Faucet origin plus a complete Jupiter Historian exact-route total define admission.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - Liquid cycles observed hourly are the only adaptive-surplus health signal.

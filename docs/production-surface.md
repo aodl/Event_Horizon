@@ -1,5 +1,7 @@
 # Production surface
 
+The canonical backend contains both fixed protocol adapters. Equality with the compiled canonical ICP principal selects the legacy `query_blocks` reader for a shared admission/observation scan; every other observed principal uses ICRC-3 while admission remains on the canonical legacy ICP reader. Reader selection is not an application method and cannot be changed after installation.
+
 The backend exposes exactly two bounded queries:
 
 ```candid

@@ -1,105 +1,192 @@
-# Generic ledger instances validation
+# Generic ledger instances corrective validation
 
-## Revision and scope
+## Revision information
 
-- Starting commit: `c0afddded408bb1c9963b235d91b32478963bb79`.
-- Implementation/artifact revision: `22e62acf171824b5a658c17fa98a694226a4f60b`.
-- Final evidence commit: the commit containing this report; its SHA is reported with the release archive because a Git commit cannot contain its own hash.
-- Branch: `codex/generic-ledger-instances`.
-- No mainnet deployment, reinstall, alias publication, controller change, or Jupiter Faucet repository change was performed.
+- Original baseline: `c0afddded408bb1c9963b235d91b32478963bb79`
+- Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
+- Branch: `codex/generic-ledger-instances`
+- Corrective implementation revision: pending final commits
 
-Commits through the validated artifact revision:
+No migration from the acceptance deployment or an intermediate generic schema
+was added. A deliberate reinstall remains the accepted transition.
 
-1. `a602f05` Introduce immutable instance configuration
-2. `550518d` Add generic ICRC-3 block decoder
-3. `325e5d0` Split admission and observed ledger streams
-4. `502f806` Add generic ledger PocketIC coverage and observability
-5. `c737a70` Add verified multi-instance frontend registry
-6. `3b60200` Add acceptance cycles observation tooling
-7. `d47b0d9` Document immutable generic instance deployment
-8. `bd38a5c` Prove same-Wasm and dual-ledger invariants
-9. `681e650` Harden generic stream processing semantics
-10. `8dcd9b7` Complete generic validation hardening
-11. `22e62ac` Pin reviewed generic backend hash in registry
+## Canonical ICP protocol
 
-No decoder, flag, fixture, or migration path for the prior acceptance schema was added. Current-schema upgrade behavior remains covered.
+Operator-supplied read-only mainnet evidence from 2026-09-26 establishes that
+canonical ICP Ledger `ryjl3-tyaaa-aaaaa-aaaba-cai` advertises exactly ICRC-1,
+ICRC-2, and ICRC-21. A query-mode `icrc3_supported_block_types` call was
+rejected with `IC0536`: `Canister has no query method
+'icrc3_supported_block_types'`. Codex did not generate that live evidence; it
+was supplied from the operator's network-enabled environment. Pinned official
+DFINITY source/Candid evidence is retained in
+`decision-required-canonical-icp-ledger-contract.md`.
 
-## Production contract and stable state
+Canonical ICP uses the fixed legacy `query_blocks` adapter. One physical page
+read supplies Faucet admission and ICP-instance observation in ledger order.
+`icp_instance_uses_one_page_read_for_both_roles` instruments legacy page calls.
+`shared_icp_scan_applies_admission_in_legacy_block_order` proves that admission
+starts matching only later blocks in the same authoritative stream.
 
-The production constructor is:
+## Generic non-ICP protocol
 
-```candid
-type InitArgs = record { observed_ledger : principal };
-service : (InitArgs) -> {
-  get_instance : () -> (InstanceInfo) query;
-  get_pricing : () -> (Pricing) query;
-}
-```
+Every non-ICP Observed Ledger must advertise ICRC-1 and ICRC-3 and expose
+`1xfer`; `2xfer` is optional. The profile caches bounded symbol, decimals, and
+transfer-from capability. The narrow decoder recognizes `1xfer`, advertised
+`2xfer`, and the reviewed absent-`btype`/`tx.op=xfer` legacy form. Identified
+malformed transfers fail closed; unknown valid types are global activity only.
 
-Anonymous and management principals are rejected. The observed Ledger is written once and has no mutation method. Production exports exactly `canister_query get_instance` and `canister_query get_pricing`; there are no application update/admin methods. `SURPLUS_CANISTER` remains `None`.
+`generic_profile_requires_icrc1_icrc3_and_1xfer_but_not_2xfer` proves each
+mandatory capability and optional `2xfer`. `transfer_from_global_other_and_
+malformed_retry_semantics` proves transfer-from, unknown-block, global, and
+malformed retry behavior.
 
-Stable memory is: ID 0 metadata (including independent admission/observed cursors and daily-health marker), ID 1 watched ICRC accounts, ID 2 immutable instance configuration/profile, ID 3 debug-only injected dependencies, ID 4 global subscribers, ID 5 price observations, ID 6 pricing state, ID 7 ICP funding state, and ID 8 surplus-policy state.
+## Same-Wasm proof
 
-## Ledger protocol semantics
+One backend Wasm contains both adapters. Equality with the compiled canonical
+ICP principal selects the shared legacy reader; every other principal selects
+ICRC-3 observation plus legacy ICP admission. There is no fallback, mutable
+reader choice, or arbitrary legacy-ledger support.
 
-Readiness queries `icrc1_supported_standards`, `icrc1_symbol`, `icrc1_decimals`, and `icrc3_supported_block_types`. ICRC-1, ICRC-3, and `1xfer` are required; `2xfer` is optional. Symbol storage is limited to 32 UTF-8 bytes. The official `icrc-ledger-types 0.2.0` types are locked in `Cargo.lock`.
+`same_wasm_supports_independent_observed_ledger_and_fixed_icp_funding` installs
+the same debug backend bytes with two different observed-ledger principals,
+checks their SHA-256 equality, proves independent observed activity, and proves
+that funding still calls only the Protocol ICP Ledger. The production artifact
+remains a single `event_horizon.wasm`.
 
-The narrow decoder recognizes `btype=1xfer`, `btype=2xfer`, and the backward-compatible absent-`btype`/`tx.op=xfer` form. It extracts only `from`, `to`, `amt`, and optional `memo`. An identified malformed transfer fails closed and preserves its live-page cursor. Unknown valid types become `Other` and count only as global live activity. Collection guards reject more than 256 returned live blocks or more than 256 archive requests in aggregate; generic values are not recursively traversed.
+## Stream and stable-state semantics
 
-Fresh admission and observed streams bootstrap prospectively at their respective `log_length`. The first response pins the poll boundary. Archive callbacks are never invoked. Explicit contiguous archive prefixes are coalesced, logged, and skipped; unexplained holes preserve the cursor. Archive-only progress is not global activity. Live cursor changes commit once only after the complete returned page succeeds. Shared ICP mode logs gaps as `stream=shared`, performs one physical ICRC-3 page read, and synchronizes both cursors.
+Fresh cursors are prospective: legacy streams use `chain_length`; generic
+streams use `log_length`. Both shared and distinct modes establish the Protocol
+ICP starting cursor before profile discovery. In distinct mode, observed
+scanning uses subscriptions present at poll start, then admission runs, then the
+already-determined match set is delivered.
 
-For distinct Ledgers the ordering is observed scan against the starting subscription set, ICP admission scan, then delivery of the already-determined match set. No timestamp-based cross-ledger ordering is invented. Either stream still runs when the other fails.
+Only explicit contiguous archive ranges may advance a cursor and archive
+callbacks are never called. Archive-only progress is not live activity. A live
+page commits after complete decoding; an unexplained hole or malformed required
+transfer preserves its live cursor. Reserve Protection is local suppression,
+does not mutate cursors, and does not emit a remote-outage transition.
 
-ICRC accounts are keyed by principal length, principal bytes, and effective 32-byte subaccount. `null` and an explicit zero subaccount normalize identically; numbered subaccounts 1–255 use the final byte. Thresholds are arbitrary-precision `Nat` observed-token units. The structural parser accepts canonical unsigned ASCII decimals only; admission applies the discovered decimals. Explicit zero, signs, exponents, shorthand `.1`, leading zeros, and excess fractional precision are rejected. Omission remains the zero sentinel for every incoming transfer.
+Shared cursor flags and values must agree. Divergence logs one exceptional
+diagnostic and fails closed without a fetch, rewind, mutation, or poke.
 
-Admission and funding always use the fixed canonical ICP Ledger. Faucet source/destination/memo matching, Historian evidence, pricing, legacy CMC transfer, and top-up notification remain ICP-based. The observed asset never funds cycles.
-
-## Public verification and observability
-
-`get_instance` returns the observed Ledger/profile and the compiled ICP Ledger, CMC, Faucet, Historian, and disabled surplus destination. Init emits:
+The final ID 1 watched-account keys are:
 
 ```text
-CONFIG instance=<principal> observed_ledger=<principal> icp_ledger=<principal> faucet=<principal> historian=<principal> cmc=<principal> surplus=none
+0x00 || 32-byte ICP AccountIdentifier
+0x01 || principal-length byte || principal || effective 32-byte ICRC subaccount
 ```
 
-Readiness emits the bounded profile. At most once per UTC day the maintenance path emits:
+This collision-separates the irreversible legacy ICP representation from ICRC
+Account semantics while retaining one direct stable-map lookup. There is no
+abandoned-key migration. Threshold values remain arbitrary-precision `Nat`;
+ICP uses eight decimals and generic precision comes from `icrc1_decimals`.
 
-```text
-HEALTH day=<day> observed_ledger=<principal> symbol=<symbol-or-pending> mode=<mode> liquid_cycles=<cycles> observed_cursor=<block> admission_cursor=<block> watched_accounts=<count> global_subscribers=<count> pricing_initialized=<bool>
-```
+Evidence includes:
 
-Actual mode changes emit `POLL_MODE_CHANGE from=<mode> to=<mode> liquid_cycles=<cycles>`. Ledger failures and `HISTORY_GAP` lines name `observed`, `admission`, or `shared`. Public backend log retention is 16384 bytes and transaction contents are not logged.
+- `fresh_profile_failure_preserves_prospective_icp_admission_start`
+- `distinct_ledger_admission_is_not_retroactive_within_a_poll`
+- `distinct_stream_failures_do_not_suppress_the_other_stream`
+- `archive_only_progress_does_not_poke_a_global_subscriber`
+- `unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives`
+- `live_page_cursor_is_atomic_across_a_late_malformed_block`
+- `reserve_protection_does_not_mutate_cursors_or_log_remote_outages`
+- `shared_cursor_divergence_fails_closed_without_rewind_or_fetch`
+- `subscription_and_cursor_survive_upgrade`
 
-`tools/scripts/mainnet-observe` is separate, read-only host tooling. It captures timestamp/revision, backend status/metrics/instance/pricing/logs, and frontend status/metrics under ignored `observations/`. Controller-only `canister_metrics` failures are recorded without aborting. `docs/acceptance-observation.md` documents cumulative counter deltas, cycles/day, category contribution, cadence, balance, cursor, and subscriber observations.
+## Frontend
 
-## Frontend and immutable listing
+The registry is static: ICP is live/canonical with alias `X`; IO is
+planned/canonical with intended alias `I` and unset principals/hash. A live
+entry must match `get_instance.observed_ledger` and have an observed profile
+before memo construction is enabled.
 
-The certified static registry contains exactly:
+The UI uses the official `@icp-sdk/core` Principal parser, trims UI whitespace,
+rejects malformed checksum/encoding plus anonymous and management principals,
+emits the compact representation already accepted by the backend, and applies
+the 32-byte limit to the final memo. Runtime ledger/error text uses
+`textContent` through `renderRuntimeError`.
 
-- ICP: live, canonical, alias `X`, backend `eo6ei-gaaaa-aaaar-qchra-cai`, observed Ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`, expected backend hash `0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb`.
-- IO: planned, canonical, intended alias `I`, with backend/Ledger/hash all `null`.
+Frontend cases `official Principal parsing matches backend subscriber rules`,
+`memo limit applies after validated Principal normalization`, and `runtime
+error rendering uses a text sink` cover validation parity, exact/over-limit
+memos, and malicious-looking runtime text.
 
-The selected live backend's `get_instance` result must match the registry and expose a profile before memo construction. Alias bytes are included in the 32-byte limit. Threshold labels/precision use the verified token profile, while prices remain ICP. There is no remote/mutable registry, cookie, URL, local-storage, or `ic_env` configuration.
+## Validation results
 
-Listing requirements cover a published dedicated Jupiter alias, ICRC-1/3 plus `1xfer`, matching query/log configuration, reviewed generic Wasm hash, public status/logs, adequate funding, reproducible source evidence, and `controllers=[]`. The verification tuple is canister ID + module hash + empty controllers + observed Ledger query/log evidence + Jupiter alias. IO identifiers were deliberately not fabricated.
+Completed on 2026-09-26:
 
-## Test and release evidence
-
-- `npm ci`: passed.
-- `cargo run -p xtask -- validate` with `DFX_IDENTITY=codex_local`: passed.
-- Backend unit tests: 50 passed.
-- Frontend tests: 6 passed.
-- PocketIC tests: 44 passed.
-- Security gate: passed (`cargo audit`, `cargo deny`, npm audit, OSV policy).
-- Two clean canonical Docker builds: byte-identical.
-- Canonical backend SHA-256: `0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb`.
-- Canonical frontend SHA-256: `f853976bde532dfc6fc07f0585f1153e5a483c4bf9ccf72f34ba602172d3b35b`.
-- Backend export audit: passed, exactly the two production queries.
-- Frontend export audit: passed, exactly `canister_query http_request` as its application method.
+- Static/source checks: passed.
+- Rust formatting and Clippy: passed.
+- Backend unit tests: 53 passed.
+- Frontend tests: 9 passed.
+- PocketIC integration: 50 passed in the complete gate, followed by the added
+  focused ICP operation regression passing independently (51 current scenarios).
+- Security gate: passed. `cargo audit` reported the four documented allowed
+  maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
+  npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
+- Production backend export audit: passed in
+  `production_wasm_exposes_only_instance_and_pricing_queries` and static checks.
+- Production frontend export audit: passed in static checks.
 - `DFX_IDENTITY=codex_local icp build -e local`: passed.
 
-PocketIC installs the same cached backend Wasm bytes into instances with different observed Ledgers, verifies the identical hash/bytes, observes different `get_instance` values, proves each instance reacts only to its configured Ledger, and proves both use the ICP admission/funding Ledger. Further regression evidence covers prospective bootstrap, fixed boundaries, archive gaps without callbacks, atomic malformed-page replay, archive-only non-activity, ICRC-1/2 transfers, unknown global activity, specific/global precedence, coalescing, separate-stream failure independence, non-retroactive cross-ledger admission, one-fetch shared mode, pricing, funding, cadence, surplus-disabled operation, and current-schema upgrades.
+Canonical Docker reproducibility is not confirmed. The first full validation
+attempt completed tests and security but Docker failed during the pinned Debian
+snapshot `apt-get` step with exit 100. A retry failed identically. Plain build
+output showed all Debian `InRelease` signatures rejected as invalid inside
+Docker; the host filesystem was 98% full. No global Docker/system cleanup was
+performed and apt signature verification was not weakened.
 
-Static checks prove the canonical ICP trust anchor is compiled into backend source, no production observed-instance principal is compiled into the backend, the production surface is query-only, and the frontend registry has only ICP live and IO planned. Reproducibility and artifact manifests passed. The source manifest is regenerated and verified after this report in the final evidence commit.
+Consequently the local files under `release-artifacts/` are not accepted as
+final canonical outputs, the static frontend registry intentionally retains a
+null expected backend hash, and no backend hash, frontend hash, source-manifest
+finalization, or release archive hash is claimed in this report.
 
-Remaining planned IO fields are its canonical SNS Ledger principal, Event Horizon backend principal, and expected generic release hash at launch. They remain intentionally unset pending launch, alias approval, verification, controlled testing, and controller removal.
+## Required evidence checklist
+
+- [x] Live canonical contract recorded — resolved-contract report.
+- [x] ICP mock has no successful ICRC-3 endpoint —
+  `canonical_icp_mock_does_not_expose_icrc3`.
+- [x] Generic mock is a separate package/artifact — `mock-icrc3-ledger`.
+- [x] Same Wasm runs ICP and non-ICP modes — `same_wasm_supports_...`.
+- [x] ICP uses one legacy page fetch — `icp_instance_uses_one_page_read_...`.
+- [x] Non-ICP uses ICRC-3 observation plus legacy admission — same-Wasm and
+  distinct-order tests.
+- [x] Observed asset never funds Event Horizon — same-Wasm funding assertion.
+- [x] Profile outage cannot skip later payout — `fresh_profile_failure_...`.
+- [x] Distinct failures are independent — `distinct_stream_failures_...`.
+- [x] Shared order controls matching — `shared_icp_scan_applies_...`.
+- [x] Distinct admission is non-retroactive — `distinct_ledger_admission_...`.
+- [x] Archive-only progress never wakes global — `archive_only_progress_...`.
+- [x] Unexplained gap preserves cursor — `unexplained_ledger_hole_...`.
+- [x] Malformed transfer preserves cursor — `live_page_cursor_is_atomic_...`.
+- [x] Reserve Protection logs no false outage — `reserve_protection_...`.
+- [x] Shared divergence fails closed/no rewind — `shared_cursor_divergence_...`.
+- [x] Final-schema upgrade causes no duplicate poke —
+  `subscription_and_cursor_survive_upgrade`.
+- [x] ICP default/numbered/range watched accounts — admission, multi-account,
+  maximum-range, and range-overlap tests.
+- [x] Generic ICRC Account and zero normalization — transfer test plus
+  `absent_and_zero_icrc_subaccounts_have_the_same_key`.
+- [x] Arbitrary-precision thresholds and precision sources — backend decimal
+  tests and generic readiness test; ICP integration uses eight decimals.
+- [x] `1xfer`, optional `2xfer`, and unknown activity — generic readiness and
+  transfer/global/malformed test.
+- [x] ICP mint/burn/approve global-only behavior —
+  `icp_mint_burn_and_approve_are_global_only_activity`.
+- [x] Specific/global precedence and maximum one poke — global precedence and
+  coalescing tests.
+- [x] Real frontend Principal parsing/parity/special-principal rejection —
+  frontend Principal and memo-limit cases plus backend memo unit tests.
+- [x] Unsafe runtime text stays text — runtime text-sink frontend case.
+- [x] `SURPLUS_CANISTER=None`, exact production surfaces, and unset IO IDs —
+  static checks and production export regression.
+- [ ] Final registry contains new canonical backend hash — blocked by canonical
+  Docker build failure; remains null by policy.
+- [ ] Two canonical builds are byte-identical — blocked by Debian signature
+  verification failure before the build could complete twice.
+
+## Safety
+
+No deployment, reinstall, upgrade, transfer, top-up, controller change,
+blackholing, alias publication, or other mainnet mutation was performed.

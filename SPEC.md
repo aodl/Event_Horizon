@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads an immutable configured ICRC-1/ICRC-3 Observed Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` when relevant activity is observed. A non-empty poke contains distinct matching numbered subaccounts; an empty poke signals global observed-ledger activity. Neither contains transaction data. Each subscriber retains authoritative reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains distinct matching numbered subaccounts; an empty poke signals global observed-ledger activity. Neither contains transaction data. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -108,7 +108,7 @@ If Historian is unavailable/incomplete for one payout, Event Horizon does not pe
 
 ## 6. Ledger reader
 
-Event Horizon reads the configured Observed Ledger through `icrc3_get_blocks`; it does not depend on an Index. The fixed Protocol ICP Ledger is separately scanned for Faucet admission and remains the only funding asset.
+Event Horizon does not depend on an Index. If the Observed Ledger is canonical ICP, one legacy `query_blocks` scan supplies both Faucet admission and observed activity in ledger order. Otherwise the fixed Protocol ICP Ledger is scanned through `query_blocks` for admission while the configured non-ICP Observed Ledger is scanned through `icrc3_get_blocks`. ICP remains the only funding asset.
 
 A fresh installation is prospective. On first successful Ledger observation it records the current chain tip and processes future activity only.
 
@@ -220,9 +220,9 @@ Continuous means no deliberately inserted delay after one complete poll; polls n
 
 ## 12. Production observability and immutability
 
-The Observed Ledger is the sole production install configuration. It must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Its symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
+The Observed Ledger is the sole production install configuration. Canonical ICP is the single explicit protocol exception: it uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
 
-Admission and observed activity have separate prospective durable cursors. Fresh streams bootstrap to `log_length` without replay. When both roles use ICP, one ICRC-3 page stream feeds both roles. Otherwise failures are independent. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
+Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
 
 Global subscriptions match every processed block. Specific accounts match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers. Thresholds are observed-token units; subscription prices and endowments are ICP.
 

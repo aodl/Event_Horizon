@@ -28,4 +28,4 @@ A subscriber with a global declaration treats every poke as a reason to advance 
 
 A subscriber without a global declaration receives only non-empty account hints. Any vector is a wake-up hint, not proof of payment or proof that no other Ledger activity occurred. Coalesce concurrent wake-ups and route them through the same reconciliation worker as an independent periodic timer.
 
-Event Horizon reads the Ledger directly, so a poke can precede ICP Index visibility. The subscriber owns Index retry and backoff behavior. Event Horizon sends no transaction payload, retries, acknowledgements, or delivery guarantees.
+Event Horizon reads the selected Ledger directly (legacy `query_blocks` for canonical ICP and ICRC-3 for non-ICP ledgers), so a poke can precede an optional application Index. The subscriber owns any Index retry and backoff behavior. Event Horizon sends no transaction payload, retries, acknowledgements, or delivery guarantees.

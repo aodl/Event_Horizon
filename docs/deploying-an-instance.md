@@ -2,7 +2,7 @@
 
 The same reviewed `event_horizon.wasm` serves every compatible instance. Only `observed_ledger` is supplied at install; ICP Ledger, CMC, Jupiter Faucet, Jupiter Historian, and `SURPLUS_CANISTER=None` are compiled trust anchors.
 
-Before final deployment, obtain a dedicated Jupiter Faucet alias through the Jupiter Faucet community review process: identify the ICRC-1/ICRC-3 Ledger, reserve the Event Horizon canister principal, submit a Faucet source pull request for the alias mapping, raise the community discussion/proposal required by Jupiter governance, and wait for approval/activation planning. Do not modify Jupiter as part of an Event Horizon deployment.
+Before final deployment, obtain a dedicated Jupiter Faucet alias through the Jupiter Faucet community review process: identify the target Ledger (canonical ICP, or a non-ICP ledger supporting ICRC-1, ICRC-3, and `1xfer`), reserve the Event Horizon canister principal, submit a Faucet source pull request for the alias mapping, raise the community discussion/proposal required by Jupiter governance, and wait for approval/activation planning. Do not modify Jupiter as part of an Event Horizon deployment.
 
 Then install and verify the instance, establish Faucet endowment funding, confirm `get_instance` and public CONFIG/HEALTH logs, verify the reviewed generic module hash, set `status_visibility=public`, `log_visibility=public`, and backend `log_memory_limit=16384`, test functionality, and remove every controller. Event Horizon calls this finalized state immutable or blackholed: `controllers = []`; no separate blackhole canister is required and there is no operator afterward.
 

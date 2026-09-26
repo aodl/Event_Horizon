@@ -77,6 +77,8 @@ Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by `v
 
 ## Required backend settings
 
+The production constructor is exactly `record { observed_ledger : principal }`. Canonical ICP selects the fixed legacy `query_blocks` adapter; any other principal selects the generic ICRC-3 adapter and must pass ICRC-1/ICRC-3/`1xfer` readiness. This is immutable dispatch, not fallback.
+
 `icp.yaml` declares the production observability settings:
 
 - `status_visibility: public`

@@ -7,19 +7,19 @@ Canonical ICP Ledger ───►│                     │
 Historian ───────────────►│   Event Horizon     │
 CMC ─────────────────────►│                     │
                          │                     │
-Observed ICRC Ledger ────►│ Trigger reader      │
+Observed Ledger ─────────►│ Trigger reader      │
                          └─────────┬───────────┘
                                    ▼
                               subscriber.poke
 ```
 
-The observed asset can differ per immutable instance; the funding asset never does. Event Horizon has no token-specific business logic and requires no Index.
+The observed asset can differ per immutable instance; the funding asset never does. Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index.
 
 Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
 ## Poll lane
 
-Each poll captures the first Ledger response's exclusive `chain_length` and never processes beyond it. Account transfers accumulate sorted subaccount hints per subscriber. The backend records whether any transaction was processed and, only after the boundary completes, incorporates the stable global-subscriber set once. Each subscriber receives at most one poke: a non-empty account hint wins over a global empty hint.
+Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Account transfers accumulate sorted subaccount hints per subscriber. Only decoded live blocks count as activity; archive-only progress never wakes global subscribers. Each subscriber receives at most one poke: a non-empty account hint wins over a global empty hint.
 
 The reader uses no Index or archive traversal. A proven archived prefix is logged and skipped. Subscribers own authoritative reconciliation.
 
@@ -31,7 +31,7 @@ A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-
 |---:|---|
 | 0 | existing metadata and Ledger cursor |
 | 1 | existing account subscriptions |
-| 2 | existing CMC conversion state |
+| 2 | immutable instance configuration and discovered observed profile |
 | 3 | debug configuration in debug Wasm only |
 | 4 | global subscriber set |
 | 5 | daily pricing observations keyed by UTC day |
@@ -39,7 +39,7 @@ A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-
 | 7 | authoritative funding state V2 for retained transfer, CMC notify, and surplus transfer |
 | 8 | adaptive surplus epoch, observed minimum, and diversion level |
 
-The first production schema uses IDs 0–1 and 3–8; ID 2 is intentionally unused. ID 7 contains the canonical `FundingState` and initializes directly to `Idle`. ID 8 defaults to disabled/uninitialized level zero because that initialization is part of the live surplus policy. Pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
+The final generic schema uses IDs 0–8. ID 1 keys are protocol-tagged: `0x00 || AccountIdentifier` for canonical ICP and `0x01 || principal_length || principal || effective_subaccount` for ICRC accounts. This permits one bounded stable map without reversing ICP AccountIdentifiers. ID 7 contains the canonical `FundingState` and initializes directly to `Idle`. ID 8 defaults to disabled/uninitialized level zero because that initialization is part of the live surplus policy.
 
 ## Independent timer lanes
 

@@ -48,6 +48,7 @@ registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert "alias:'X'" in registry and "alias:'I'" in registry
+assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
 for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env', 'IC_ROOT_KEY']:
     assert marker not in frontend_client, f'frontend client contains removed discovery marker {marker}'
@@ -65,8 +66,13 @@ funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/icp_ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
 assert 'Call::unbounded_wait(ledger, "transfer")' in ledger
-assert 'query_blocks' not in polling
+assert 'scan_legacy' in polling and 'scan_icrc' in polling
+assert 'r.observed_ledger==r.icp_ledger' in polling.replace(' ', '')
+assert 'Call::bounded_wait(ledger, "query_blocks")' in ledger
 assert 'icrc3_get_blocks' in (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
+mock_icp=(root/'tests/mocks/mock-icp-ledger/src/lib.rs').read_text()
+assert '#[cfg(feature = "generic_icrc3")]\n#[ic_cdk::query]\nfn icrc3_get_blocks' in mock_icp
+assert 'default = ["generic_icrc3"]' in (root/'tests/mocks/mock-icrc3-ledger/Cargo.toml').read_text()
 assert 'Call::bounded_wait(ledger, "icrc1_balance_of")' in ledger
 assert 'Call::bounded_wait(ledger, "icrc1_fee")' in ledger
 assert 'CallErrorExt' in ledger
@@ -146,7 +152,7 @@ for canister_lib in [
     assert 'ic_cdk::export_candid!();' in canister_lib.read_text(), f'missing export_candid in {canister_lib}'
 
 lock=(root/'Cargo.lock').read_text()
-for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-subscriber']:
+for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber']:
     assert f'name = "{package}"' in lock, f'Cargo.lock missing workspace package {package}'
 
 print('workspace_members', len(workspace['workspace']['members']))
