@@ -70,9 +70,14 @@ already-determined match set is delivered.
 
 Only explicit contiguous archive ranges may advance a cursor and archive
 callbacks are never called. Archive-only progress is not live activity. A live
-page commits after complete decoding; an unexplained hole or malformed required
-transfer preserves its live cursor. Reserve Protection is local suppression,
-does not mutate cursors, and does not emit a remote-outage transition.
+page publishes its admission mutations and corresponding cursor together only
+after all required page processing. Historian-verified admissions remain in a
+page-local staging overlay and are not durable ahead of that cursor. Later
+shared-page blocks can match the staged account overlay, while the admission
+block and earlier activity remain non-matching. An unexplained hole or malformed
+required transfer preserves its live cursor. Reserve Protection is local
+suppression, does not mutate cursors, and does not emit a remote-outage
+transition.
 
 Shared cursor flags and values must agree. Divergence logs one exceptional
 diagnostic and fails closed without a fetch, rewind, mutation, or poke.
@@ -97,6 +102,9 @@ Evidence includes:
 - `archive_only_progress_does_not_poke_a_global_subscriber`
 - `unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives`
 - `live_page_cursor_is_atomic_across_a_late_malformed_block`
+- `staged_account_admission_is_not_durable_before_shared_cursor_commit`
+- `staged_global_admission_is_not_durable_before_shared_cursor_commit`
+- `staged_distinct_admission_is_not_durable_before_admission_cursor_commit`
 - `reserve_protection_does_not_mutate_cursors_or_log_remote_outages`
 - `shared_cursor_divergence_fails_closed_without_rewind_or_fetch`
 - `subscription_and_cursor_survive_upgrade`
@@ -171,6 +179,10 @@ methods. The frontend audit passed with seven total exports and exactly
 - [x] Archive-only progress never wakes global — `archive_only_progress_...`.
 - [x] Unexplained gap preserves cursor — `unexplained_ledger_hole_...`.
 - [x] Malformed transfer preserves cursor — `live_page_cursor_is_atomic_...`.
+- [x] Verified admission never becomes durable ahead of its legacy cursor —
+  `staged_account_admission_is_not_durable_before_shared_cursor_commit`,
+  `staged_global_admission_is_not_durable_before_shared_cursor_commit`, and
+  `staged_distinct_admission_is_not_durable_before_admission_cursor_commit`.
 - [x] Reserve Protection logs no false outage — `reserve_protection_...`.
 - [x] Shared divergence fails closed/no rewind — `shared_cursor_divergence_...`.
 - [x] Final-schema upgrade causes no duplicate poke —
