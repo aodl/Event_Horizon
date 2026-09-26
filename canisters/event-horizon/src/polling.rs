@@ -91,7 +91,7 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) -> Opt
     {
         return None;
     }
-    let Some(memo) = memo else { return None };
+    let memo = memo?;
     let Ok(d) = parse_subscription_memo(memo) else {
         return None;
     };
@@ -100,9 +100,7 @@ async fn admit(from: &[u8], to: &[u8], memo: Option<&[u8]>, decimals: u8) -> Opt
         SubscriptionDeclaration::Account { .. } => pricing::PricingClass::Account,
         SubscriptionDeclaration::Range { .. } => pricing::PricingClass::Range,
     };
-    let Some(required) = pricing::current_admission_e8s(class) else {
-        return None;
-    };
+    let required = pricing::current_admission_e8s(class)?;
     match historian::route_is_admitted(
         r.historian_canister,
         ic_cdk::api::canister_self(),
