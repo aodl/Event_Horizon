@@ -1,4 +1,5 @@
 export const MAX_JUPITER_MEMO_BYTES = 32;
+export const U64_MAX = 18446744073709551615n;
 
 export function compactPrincipal(text) {
   return text.trim().replaceAll('-', '');
@@ -29,10 +30,10 @@ export function validatePrincipal(principalText) {
 }
 
 function numberedSubaccount(text) {
-  if (!/^(0|[1-9][0-9]*)$/.test(text)) throw new Error('Subaccounts must use canonical decimal integers between 0 and 255.');
-  const value = Number(text);
-  if (!Number.isInteger(value) || value < 0 || value > 255) throw new Error('Subaccounts must be between 0 and 255.');
-  return value;
+  if (!/^(0|[1-9][0-9]*)$/.test(text)) throw new Error('Targets must use canonical unsigned decimal integers.');
+  const value = BigInt(text);
+  if (value > U64_MAX) throw new Error('Target exceeds the maximum unsigned 64-bit value.');
+  return { value, text };
 }
 
 function validateAmount(amountText, decimals) {
@@ -53,7 +54,7 @@ function checkedMemo(alias, suffix, metadata = {}) {
 
 export function buildMemo(alias, decimals, principalText, subaccountText, amountText = '') {
   const principal = validatePrincipal(principalText);
-  const sub = numberedSubaccount(subaccountText);
+  const sub = numberedSubaccount(subaccountText).text;
   const amount = validateAmount(amountText, decimals);
   const suffix = amount ? `${principal}.${sub}:${amount}` : `${principal}.${sub}`;
   return checkedMemo(alias, suffix, { thresholded: Boolean(amount), global: false, range: false });
@@ -61,13 +62,27 @@ export function buildMemo(alias, decimals, principalText, subaccountText, amount
 
 export function buildRangeMemo(alias, decimals, principalText, startText, endText, amountText = '') {
   const principal = validatePrincipal(principalText);
-  const start = numberedSubaccount(startText);
-  const end = numberedSubaccount(endText);
-  if (end < start) throw new Error('Range end must be greater than range start.');
-  if (end === start) throw new Error(`Use subaccount ${start} as a single-account subscription. A range must contain at least two subaccounts.`);
+  const start = numberedSubaccount(startText), end = numberedSubaccount(endText);
+  if (end.value < start.value) throw new Error('Range end must be greater than range start.');
+  if (end.value === start.value) throw new Error(`Use target ${start.text} as a single-target subscription. A range must contain at least two targets.`);
+  if (end.value - start.value > 255n) throw new Error('A range may contain at most 256 targets.');
   const amount = validateAmount(amountText, decimals);
-  const suffix = amount ? `${principal}.${start}-${end}:${amount}` : `${principal}.${start}-${end}`;
+  const suffix = amount ? `${principal}.${start.text}-${end.text}:${amount}` : `${principal}.${start.text}-${end.text}`;
   return checkedMemo(alias, suffix, { thresholded: Boolean(amount), global: false, range: true });
+}
+
+export function buildNeuronMemo(alias, decimals, principalText, nonceText, amountText = '') {
+  const principal = validatePrincipal(principalText), nonce = numberedSubaccount(nonceText).text;
+  const amount = validateAmount(amountText, decimals);
+  return checkedMemo(alias, amount ? `${principal}.n${nonce}:${amount}` : `${principal}.n${nonce}`, { thresholded:Boolean(amount), global:false, range:false, neuron:true });
+}
+
+export function buildNeuronRangeMemo(alias, decimals, principalText, startText, endText, amountText = '') {
+  const principal = validatePrincipal(principalText), start=numberedSubaccount(startText), end=numberedSubaccount(endText);
+  if (end.value <= start.value) throw new Error('Range end must be greater than range start.');
+  if (end.value - start.value > 255n) throw new Error('A range may contain at most 256 targets.');
+  const amount=validateAmount(amountText,decimals);
+  return checkedMemo(alias, amount ? `${principal}.n${start.text}-${end.text}:${amount}` : `${principal}.n${start.text}-${end.text}`, { thresholded:Boolean(amount),global:false,range:true,neuron:true });
 }
 
 export function buildGlobalMemo(alias, principalText) {

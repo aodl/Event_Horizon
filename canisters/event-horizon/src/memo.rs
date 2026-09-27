@@ -30,13 +30,14 @@ pub enum SubscriptionDeclaration {
     },
     Account {
         subscriber: Principal,
-        numbered_subaccount: u8,
+        target: crate::subscription::WatchTarget,
         minimum: Option<DecimalAmount>,
     },
     Range {
         subscriber: Principal,
-        start_subaccount: u8,
-        end_subaccount: u8,
+        neuron: bool,
+        start: u64,
+        end: u64,
         minimum: Option<DecimalAmount>,
     },
 }
@@ -59,7 +60,7 @@ pub enum MemoParseError {
     InvalidShape,
     #[error("subscriber principal is invalid")]
     InvalidPrincipal,
-    #[error("numbered subaccount must be 0..255")]
+    #[error("target must be a canonical unsigned 64-bit decimal")]
     InvalidSubaccount,
     #[error("range must have exactly two numbered subaccount endpoints")]
     InvalidRange,
@@ -67,6 +68,8 @@ pub enum MemoParseError {
     ReversedRange,
     #[error("use the single-account form when both range endpoints are equal")]
     DegenerateRange,
+    #[error("a range may contain at most 256 targets")]
+    RangeTooWide,
     #[error("amount must be a canonical unsigned ASCII decimal")]
     InvalidAmount,
     #[error("amount has more fractional digits than the observed ledger supports")]
@@ -126,17 +129,14 @@ fn parse_decimal(text: &str) -> Result<DecimalAmount, MemoParseError> {
     Ok(DecimalAmount(text.to_string()))
 }
 
-fn parse_numbered_subaccount(text: &str) -> Result<u8, MemoParseError> {
+pub fn parse_canonical_u64(text: &str) -> Result<u64, MemoParseError> {
     if text.is_empty()
         || !text.bytes().all(|b| b.is_ascii_digit())
         || (text.len() > 1 && text.starts_with('0'))
     {
         return Err(MemoParseError::InvalidSubaccount);
     }
-    let value: u16 = text
-        .parse()
-        .map_err(|_| MemoParseError::InvalidSubaccount)?;
-    u8::try_from(value).map_err(|_| MemoParseError::InvalidSubaccount)
+    text.parse().map_err(|_| MemoParseError::InvalidSubaccount)
 }
 
 pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, MemoParseError> {
@@ -165,31 +165,43 @@ pub fn parse_subscription_memo(memo: &[u8]) -> Result<SubscriptionDeclaration, M
 
     let minimum = amount_text.map(parse_decimal).transpose()?;
     let subscriber = parse_principal(principal_text)?;
-    if subaccount_text.contains('-') {
-        let mut endpoints = subaccount_text.split('-');
+    let (neuron, target_text) = match subaccount_text.strip_prefix('n') {
+        Some(value) => (true, value),
+        None => (false, subaccount_text),
+    };
+    if target_text.contains('-') {
+        let mut endpoints = target_text.split('-');
         let start = endpoints.next().ok_or(MemoParseError::InvalidRange)?;
         let end = endpoints.next().ok_or(MemoParseError::InvalidRange)?;
         if endpoints.next().is_some() || start.is_empty() || end.is_empty() {
             return Err(MemoParseError::InvalidRange);
         }
-        let start_subaccount = parse_numbered_subaccount(start)?;
-        let end_subaccount = parse_numbered_subaccount(end)?;
-        if start_subaccount > end_subaccount {
+        let start = parse_canonical_u64(start)?;
+        let end = parse_canonical_u64(end)?;
+        if start > end {
             return Err(MemoParseError::ReversedRange);
         }
-        if start_subaccount == end_subaccount {
+        if start == end {
             return Err(MemoParseError::DegenerateRange);
+        }
+        if end - start > 255 {
+            return Err(MemoParseError::RangeTooWide);
         }
         Ok(SubscriptionDeclaration::Range {
             subscriber,
-            start_subaccount,
-            end_subaccount,
+            neuron,
+            start,
+            end,
             minimum,
         })
     } else {
         Ok(SubscriptionDeclaration::Account {
             subscriber,
-            numbered_subaccount: parse_numbered_subaccount(subaccount_text)?,
+            target: if neuron {
+                crate::subscription::WatchTarget::NeuronNonce(parse_canonical_u64(target_text)?)
+            } else {
+                crate::subscription::WatchTarget::Subaccount(parse_canonical_u64(target_text)?)
+            },
             minimum,
         })
     }
@@ -208,7 +220,7 @@ mod tests {
             parsed,
             SubscriptionDeclaration::Account {
                 subscriber: Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap(),
-                numbered_subaccount: 7,
+                target: crate::subscription::WatchTarget::Subaccount(7),
                 minimum: Some(parse_decimal("0.01").unwrap()),
             }
         );
@@ -224,7 +236,7 @@ mod tests {
         assert!(matches!(
             parsed,
             SubscriptionDeclaration::Account {
-                numbered_subaccount: 7,
+                target: crate::subscription::WatchTarget::Subaccount(7),
                 minimum: None,
                 ..
             }
@@ -360,8 +372,9 @@ mod tests {
                 parse_subscription_memo(memo.as_bytes()).unwrap(),
                 SubscriptionDeclaration::Range {
                     subscriber,
-                    start_subaccount: start,
-                    end_subaccount: end,
+                    neuron: false,
+                    start,
+                    end,
                     minimum,
                 },
                 "{memo}"
@@ -373,7 +386,14 @@ mod tests {
     fn rejects_invalid_ranges_without_normalizing_them() {
         let principal = "r5m5ydiaaaaaaaaqanaacai";
         for suffix in [
-            "10-9", "-1-5", "1-256", "256-257", "7-", "-18", "7--18", "7-18-20", "7-18:", "007-18",
+            "10-9",
+            "1000-1256",
+            "7-",
+            "-18",
+            "7--18",
+            "7-18-20",
+            "7-18:",
+            "007-18",
             "7-018",
         ] {
             let memo = format!("{principal}.{suffix}");
@@ -395,8 +415,8 @@ mod tests {
         assert!(matches!(
             parsed,
             SubscriptionDeclaration::Range {
-                start_subaccount: 7,
-                end_subaccount: 18,
+                start: 7,
+                end: 18,
                 minimum: Some(_),
                 ..
             }
@@ -417,10 +437,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_subaccount_above_255() {
-        assert_eq!(
-            parse_subscription_memo(b"r5m5ydiaaaaaaaaqanaacai.256:1").unwrap_err(),
-            MemoParseError::InvalidSubaccount
-        );
+    fn accepts_full_u64_and_neuron_ranges() {
+        assert!(parse_subscription_memo(b"r5m5ydiaaaaaaaaqanaacai.18446744073709551615").is_ok());
+        for memo in [
+            b"r5m5ydiaaaaaaaaqanaacai.1000-1255".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai.n0-255",
+            b"r5m5ydiaaaaaaaaqanaacai.n1000000-1000255",
+        ] {
+            assert!(parse_subscription_memo(memo).is_ok(), "{memo:?}");
+        }
+        for memo in [
+            b"r5m5ydiaaaaaaaaqanaacai.1000-1256".as_slice(),
+            b"r5m5ydiaaaaaaaaqanaacai.n1000000-1000256",
+            b"r5m5ydiaaaaaaaaqanaacai.N1",
+            b"r5m5ydiaaaaaaaaqanaacai.n01",
+        ] {
+            assert!(parse_subscription_memo(memo).is_err(), "{memo:?}");
+        }
     }
 }

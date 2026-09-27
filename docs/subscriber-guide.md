@@ -1,36 +1,26 @@
 # Subscriber guide
 
-`poke : (vec nat8) -> ()` is unchanged. Values identify numbered subaccounts on the selected observed token ledger. Thresholds use that token's verified decimals; the Jupiter endowment and displayed subscription price remain ICP. A poke may precede an optional Index, and subscriber reconciliation remains authoritative.
-
-Implement and authenticate this endpoint:
+Implement and authenticate the target-aware callback:
 
 ```candid
-service : { poke : (vec nat8) -> (); }
+type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type PokeMatch = record { target : PokeTarget; max_amount : nat };
+service : { poke : (vec PokeMatch) -> (); }
 ```
 
-## Declaration forms
+Jupiter suffixes accept `<subscriber>`, `<subscriber>.<number>[:<amount>]`, `<subscriber>.<start>-<end>[:<amount>]`, and corresponding neuron forms using `n<nonce>` or `n<start>-<end>`. Numbers are canonical decimal `u64`. An inclusive range contains 2 through 256 targets and may begin anywhere. The complete routed memo still must fit 32 bytes.
 
-```text
-<alias>.<subscriber>                         global Ledger trigger
-<alias>.<subscriber>.<subaccount>            all incoming transfers to account 0..255
-<alias>.<subscriber>.<subaccount>:<amount>   incoming amount >= positive observed-token threshold
-<alias>.<subscriber>.<start>-<end>           all transfers to an inclusive range
-<alias>.<subscriber>.<start>-<end>:<amount>  incoming amount >= observed-token threshold in that range
-```
+Numeric subaccount `N` means subscriber ownership with `24 zero bytes || N.to_be_bytes()`. Neuron nonce `N` derives the staking subaccount with controller equal to the subscriber principal. ICP uses NNS Governance as owner; an SNS-token instance uses its verified SNS Governance. This excludes hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts.
 
-Canonical ICP uses alias `X`. Planned IO has intended alias `I`, which is not
-claimed to be published. A future reviewed alias need not be one character.
-The complete Jupiter memo—including alias, dot, subscriber, scope or range,
-and optional threshold—must fit the 32-byte limit.
+A safe handler follows this order:
 
-For range declarations the endpoints are inclusive and must satisfy `0 <= start < end <= 255`. Use the single-account form when both endpoints would be equal; invalid ranges are not reversed, clamped, or repaired. Integers use canonical decimal spelling without signs or leading zeroes.
+1. Authenticate `caller` as a trusted Event Horizon instance.
+2. Return cheaply on `poke([])` if global activity is irrelevant; otherwise reconcile the global cursor.
+3. Ignore unknown targets.
+4. Compare `max_amount` with the application's own local threshold and return if none qualify.
+5. Only then reconcile authoritative Ledger or optional Index state.
+6. Perform consequential work solely from reconciled state.
 
-An explicit threshold uses at most the observed ledger's verified decimals and may be one raw token unit. Omission means every incoming transfer to the numbered account or every account in the range. A global declaration means any block anywhere on the observed Ledger; it does not subscribe all of the canister's subaccounts.
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. It is a prefilter hint, not proof of payment. For example, an ICP policy requiring `1_000_000` e8s returns on a `300_000` hint and reconciles on `2_000_000`.
 
-## Poke interpretation
-
-A subscriber with a global declaration treats every poke as a reason to advance its global authoritative cursor. `poke([])` means the poll processed Ledger activity but no account declaration for that subscriber matched. A non-empty sorted vector identifies account declarations that matched and takes precedence over the empty global hint.
-
-A subscriber without a global declaration receives only non-empty account hints. Any vector is a wake-up hint, not proof of payment or proof that no other Ledger activity occurred. Coalesce concurrent wake-ups and route them through the same reconciliation worker as an independent periodic timer.
-
-Event Horizon reads the selected Ledger directly (legacy `query_blocks` for canonical ICP and ICRC-3 for non-ICP ledgers), so a poke can precede an optional application Index. The subscriber owns any Index retry and backoff behavior. Event Horizon sends no transaction payload, retries, acknowledgements, or delivery guarantees.
+Specific matches take precedence over simultaneous global activity. `poke([])` means global-only activity. Non-empty targets are ordered as numeric subaccounts ascending and then neuron nonces ascending, with at most 256 retained targets per subscriber per poll. Any omission affects wake-up latency only. Event Horizon provides no retries or acknowledgements; independent periodic reconciliation remains required.

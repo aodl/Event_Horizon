@@ -17,7 +17,9 @@ assert 'get_instance : () -> (InstanceInfo) query;' in backend_did
 assert 'account_icp : nat64; range_icp : nat64; global_icp : nat64' in backend_did
 assert backend_did.count(' query;') == 2
 assert ' -> ();' not in backend_did
-assert (root/'candid/subscriber.did').read_text().strip() == 'service : {\n  poke : (vec nat8) -> ();\n}'
+subscriber_did=(root/'candid/subscriber.did').read_text()
+assert 'target : PokeTarget' in subscriber_did and 'max_amount : nat' in subscriber_did
+assert 'vec nat8' not in subscriber_did
 thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
 unfiltered='X.r5m5ydiaaaaaaaaqanaacai.7'
 assert len(thresholded.encode()) == 32
@@ -25,6 +27,8 @@ assert len(unfiltered.encode()) == 27
 print('thresholded_example_bytes', len(thresholded.encode()))
 print('unfiltered_example_bytes', len(unfiltered.encode()))
 assert 'buildRangeMemo' in (root/'canisters/frontend/public/memo.js').read_text()
+assert 'buildNeuronMemo' in (root/'canisters/frontend/public/memo.js').read_text()
+assert 'BigInt(text)' in (root/'canisters/frontend/public/memo.js').read_text()
 assert 'range_icp: IDL.Nat64' in (root/'canisters/frontend/public/pricing-client.js').read_text()
 
 workspace=tomllib.loads((root/'Cargo.toml').read_text())
@@ -64,7 +68,8 @@ assert polling.count('state::global_subscribers()') == 2
 legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async fn scan_legacy')]
 assert 'state::global_subscribers()' not in legacy_page
 assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
-assert 'm.subs.into_iter().collect()' in polling
+assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
+assert 'PokeMatch { target, max_amount }' in polling
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/icp_ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
@@ -114,6 +119,10 @@ backend_src='\n'.join(p.read_text(errors='ignore') for p in (root/'canisters/eve
 assert 'eo6ei-gaaaa-aaaar-qchra-cai' not in backend_src
 assert 'observed_ledger: Principal' in backend_src
 assert 'ryjl3-tyaaa-aaaaa-aaaba-cai' in backend_src, 'fixed protocol ICP ledger missing'
+assert 'rrkah-fqaaa-aaaaa-aaaaq-cai' in backend_src, 'fixed NNS Governance missing'
+assert 'sns_root: Option<Principal>' in backend_src
+assert 'debug_set_sns_root' not in backend_src
+assert 'compute_neuron_staking_subaccount_bytes' in backend_src
 assert 'SURPLUS_CANISTER: Option<&str> = None' in backend_src
 for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
     assert forbidden not in backend_src, f'backend source unexpectedly contains management mutation path {forbidden}'
@@ -151,11 +160,12 @@ for canister_lib in [
     root/'tests/mocks/mock-historian/src/lib.rs',
     root/'tests/mocks/mock-cmc/src/lib.rs',
     root/'tests/mocks/mock-subscriber/src/lib.rs',
+    root/'tests/mocks/mock-sns-root/src/lib.rs',
 ]:
     assert 'ic_cdk::export_candid!();' in canister_lib.read_text(), f'missing export_candid in {canister_lib}'
 
 lock=(root/'Cargo.lock').read_text()
-for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber']:
+for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-sns-root']:
     assert f'name = "{package}"' in lock, f'Cargo.lock missing workspace package {package}'
 
 print('workspace_members', len(workspace['workspace']['members']))

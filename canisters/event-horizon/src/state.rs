@@ -8,14 +8,14 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::account::{account_identifier_bytes, numbered_subaccount};
+use crate::account::account_identifier_bytes;
 #[cfg(feature = "debug_api")]
 use crate::config::RuntimeConfig;
 use crate::instance::InstanceConfig;
 use crate::{
     cadence::PollingMode,
     pricing::{Observation, PricingState},
-    subscription::Subscription,
+    subscription::{Subscription, WatchTarget},
     surplus::SurplusPolicyState,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -354,13 +354,19 @@ pub fn modify_metadata(f: impl FnOnce(&mut Metadata)) {
 
 pub fn put_subscription(subscription: Subscription) {
     let runtime = crate::config::runtime();
+    let governance = read_instance_config()
+        .observed_profile
+        .and_then(|p| p.neuron_governance);
+    let account = subscription
+        .account(governance)
+        .expect("neuron subscription requires verified governance");
     let key = if runtime.observed_ledger == runtime.icp_ledger {
         AccountKey::icp(account_identifier_bytes(
-            subscription.subscriber,
-            numbered_subaccount(subscription.numbered_subaccount),
+            account.owner,
+            *account.effective_subaccount(),
         ))
     } else {
-        AccountKey::from(subscription.account())
+        AccountKey::from(account)
     };
     with_subscriptions(|map| {
         let merged =
@@ -377,21 +383,27 @@ pub fn get_icp_subscription(account_identifier: [u8; 32]) -> Option<Subscription
     with_subscriptions(|map| map.get(&AccountKey::icp(account_identifier)).map(|v| v.0))
 }
 
-pub fn get_numbered_subscription(
+pub fn get_target_subscription(
     subscriber: candid::Principal,
-    numbered: u8,
+    target: WatchTarget,
 ) -> Option<Subscription> {
     let runtime = crate::config::runtime();
+    let governance = read_instance_config()
+        .observed_profile
+        .and_then(|p| p.neuron_governance);
+    let account = Subscription {
+        subscriber,
+        target,
+        minimum_units: 0u8.into(),
+    }
+    .account(governance)?;
     if runtime.observed_ledger == runtime.icp_ledger {
         get_icp_subscription(account_identifier_bytes(
-            subscriber,
-            numbered_subaccount(numbered),
+            account.owner,
+            *account.effective_subaccount(),
         ))
     } else {
-        get_subscription(Account {
-            owner: subscriber,
-            subaccount: Some(numbered_subaccount(numbered)),
-        })
+        get_subscription(account)
     }
 }
 
@@ -513,6 +525,7 @@ pub fn read_debug_config() -> RuntimeConfig {
 #[cfg(test)]
 mod account_key_tests {
     use super::*;
+    use crate::numbered_subaccount;
 
     #[test]
     fn protocol_tags_separate_icp_and_icrc_keys() {

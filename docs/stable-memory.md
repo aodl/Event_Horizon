@@ -22,7 +22,9 @@ Every new split freezes one `PlannedSurplus { destination, memo, amount_e8s, fee
 
 ID 8 defaults to an uninitialized level-zero policy. This is live protocol state, not schema migration: destination-disabled operation accrues no entitlement, and enabling begins a fresh epoch. Levels above 19 or backwards-time state fail closed to a new level-zero epoch. Current-Wasm upgrades cover every pending funding phase and policy persistence.
 
-Account `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands into the ID 1 map. Its bounded key is protocol-tagged: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. Absent and explicit-zero ICRC subaccounts therefore normalize identically.
+Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands once into the ID 1 map. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
+
+ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from the prior `u8` subscription or pre-`sns_root` configuration; the acceptance backend is reinstalled. Current-schema upgrades only preserve this final representation.
 
 The stable pricing `Price` is `{ account_icp, global_icp }`. Public `get_pricing` values derive `range_icp = ceil(global_icp / 5)` with quotient/remainder arithmetic, exactly equal to `ceil(20F/C)`.
 

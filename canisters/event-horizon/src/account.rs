@@ -1,12 +1,25 @@
 use candid::Principal;
-use sha2::{Digest, Sha224};
+use sha2::{Digest, Sha224, Sha256};
 
-/// Event Horizon's deliberately narrow numbered-subaccount convention.
-/// Subaccount 0 is the all-zero/default subaccount; 1..=255 set only the last byte.
-pub fn numbered_subaccount(number: u8) -> [u8; 32] {
+/// Event Horizon's numeric-subaccount convention: 24 zero bytes followed by the
+/// unsigned 64-bit number in big-endian order.
+pub fn numbered_subaccount(number: u64) -> [u8; 32] {
     let mut subaccount = [0u8; 32];
-    subaccount[31] = number;
+    subaccount[24..].copy_from_slice(&number.to_be_bytes());
     subaccount
+}
+
+/// Standard NNS/SNS neuron staking-subaccount derivation.
+///
+/// Source: dfinity/ic, rs/nervous_system/common/src/ledger.rs,
+/// `compute_neuron_staking_subaccount_bytes`.
+pub fn neuron_staking_subaccount(controller: Principal, nonce: u64) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update([0x0c]);
+    hasher.update(b"neuron-stake");
+    hasher.update(controller.as_slice());
+    hasher.update(nonce.to_be_bytes());
+    hasher.finalize().into()
 }
 
 /// CMC payment subaccount convention: principal byte length followed by principal bytes.
@@ -38,11 +51,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn numbered_subaccount_only_uses_last_byte() {
-        assert_eq!(numbered_subaccount(0), [0u8; 32]);
-        let mut expected = [0u8; 32];
-        expected[31] = 7;
-        assert_eq!(numbered_subaccount(7), expected);
+    fn numbered_subaccount_is_big_endian_u64() {
+        for number in [0, 1, 7, 255, 256, 65_535, 1_000_000, u64::MAX] {
+            let actual = numbered_subaccount(number);
+            assert_eq!(&actual[..24], &[0; 24]);
+            assert_eq!(&actual[24..], &number.to_be_bytes());
+        }
+        assert_eq!(&numbered_subaccount(256)[..30], &[0; 30]);
+        assert_eq!(&numbered_subaccount(256)[30..], &[0x01, 0x00]);
+    }
+
+    #[test]
+    fn neuron_staking_subaccount_matches_dfinity_vectors() {
+        let controller = Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        for (nonce, expected) in [
+            (
+                0,
+                "536840bb85686ffd063f0d09da7accec98a3b15f6cd683707ad81294fcc2efd1",
+            ),
+            (
+                42,
+                "c7fe59656f136313d31b7b5d0cbd57a248f741b2e2831771d90a0d28a79e7ccf",
+            ),
+            (
+                1_000_000,
+                "cea791a58db37863afde77b275ce6b74661bc5ffb3384a2c4e11a9292e02184b",
+            ),
+        ] {
+            assert_eq!(
+                hex::encode(neuron_staking_subaccount(controller, nonce)),
+                expected
+            );
+        }
     }
 
     #[test]

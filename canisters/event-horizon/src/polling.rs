@@ -4,16 +4,18 @@ use crate::{
     config, logging,
     memo::{parse_subscription_memo, SubscriptionDeclaration},
     pricing, state,
-    subscription::{merge_subscription, Subscription},
+    subscription::{merge_subscription, Subscription, WatchTarget},
 };
 use candid::{Nat, Principal};
 use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
 use std::collections::{BTreeMap, BTreeSet};
 
+const MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256;
+
 #[derive(Default)]
 struct MatchState {
     global: bool,
-    subs: BTreeSet<u8>,
+    subs: BTreeMap<WatchTarget, Nat>,
 }
 struct SharedGlobalOrder {
     existing: BTreeSet<Principal>,
@@ -28,7 +30,7 @@ enum PreparedAdmission {
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
-    subscriptions: BTreeMap<(Principal, u8), Subscription>,
+    subscriptions: BTreeMap<(Principal, WatchTarget), Subscription>,
     shared_overlay: BTreeMap<[u8; 32], Subscription>,
 }
 
@@ -40,19 +42,22 @@ impl PendingAdmissions {
             }
             PreparedAdmission::Accounts(subscriptions) => {
                 for candidate in subscriptions {
-                    let key = (candidate.subscriber, candidate.numbered_subaccount);
+                    let key = (candidate.subscriber, candidate.target);
                     let existing = self.subscriptions.get(&key).cloned().or_else(|| {
-                        state::get_numbered_subscription(
-                            candidate.subscriber,
-                            candidate.numbered_subaccount,
-                        )
+                        state::get_target_subscription(candidate.subscriber, candidate.target)
                     });
                     let effective = merge_subscription(existing, candidate);
                     if shared {
+                        let governance = state::read_instance_config()
+                            .observed_profile
+                            .and_then(|p| p.neuron_governance);
+                        let account = effective
+                            .account(governance)
+                            .expect("verified neuron governance");
                         self.shared_overlay.insert(
                             account_identifier_bytes(
-                                effective.subscriber,
-                                crate::account::numbered_subaccount(effective.numbered_subaccount),
+                                account.owner,
+                                *account.effective_subaccount(),
                             ),
                             effective.clone(),
                         );
@@ -154,7 +159,19 @@ fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principa
     for (p, m) in source {
         let e = target.entry(p).or_default();
         e.global |= m.global;
-        e.subs.extend(m.subs)
+        for (target_key, amount) in m.subs {
+            record_match(e, target_key, amount);
+        }
+    }
+}
+
+fn record_match(state: &mut MatchState, target: WatchTarget, amount: Nat) {
+    if let Some(existing) = state.subs.get_mut(&target) {
+        if amount > *existing {
+            *existing = amount;
+        }
+    } else if state.subs.len() < MAX_SPECIFIC_TARGETS_PER_POKE {
+        state.subs.insert(target, amount);
     }
 }
 
@@ -178,6 +195,22 @@ async fn prepare_admission(
     let Ok(d) = parse_subscription_memo(memo) else {
         return None;
     };
+    let neuron_requested = matches!(
+        &d,
+        SubscriptionDeclaration::Account {
+            target: WatchTarget::NeuronNonce(_),
+            ..
+        } | SubscriptionDeclaration::Range { neuron: true, .. }
+    );
+    if neuron_requested
+        && state::read_instance_config()
+            .observed_profile
+            .as_ref()
+            .and_then(|p| p.neuron_governance)
+            .is_none()
+    {
+        return None;
+    }
     let class = match d {
         SubscriptionDeclaration::Global { .. } => pricing::PricingClass::Global,
         SubscriptionDeclaration::Account { .. } => pricing::PricingClass::Account,
@@ -204,8 +237,9 @@ async fn prepare_admission(
                 }
                 SubscriptionDeclaration::Range {
                     subscriber,
-                    start_subaccount,
-                    end_subaccount,
+                    neuron,
+                    start,
+                    end,
                     minimum,
                 } => minimum
                     .map(|x| x.to_units(decimals))
@@ -214,10 +248,14 @@ async fn prepare_admission(
                     .map(|minimum| {
                         let minimum_units = minimum.unwrap_or_else(|| Nat::from(0u8));
                         PreparedAdmission::Accounts(
-                            (start_subaccount..=end_subaccount)
+                            (start..=end)
                                 .map(|n| Subscription {
                                     subscriber,
-                                    numbered_subaccount: n,
+                                    target: if neuron {
+                                        WatchTarget::NeuronNonce(n)
+                                    } else {
+                                        WatchTarget::Subaccount(n)
+                                    },
                                     minimum_units: minimum_units.clone(),
                                 })
                                 .collect(),
@@ -237,10 +275,11 @@ fn observe_icrc3(e: &icrc3::LedgerEvent, out: &mut BTreeMap<Principal, MatchStat
     if let icrc3::LedgerEvent::Transfer { to, amount, .. } = e {
         if let Some(s) = state::get_subscription(*to) {
             if s.matches(amount) {
-                out.entry(s.subscriber)
-                    .or_default()
-                    .subs
-                    .insert(s.numbered_subaccount);
+                record_match(
+                    out.entry(s.subscriber).or_default(),
+                    s.target,
+                    amount.clone(),
+                );
             }
         }
     }
@@ -254,10 +293,11 @@ fn observe_icp(
         if let Some(id) = account_id(to) {
             if let Some(s) = pending.shared_subscription(id) {
                 if s.matches(&Nat::from(amount.e8s)) {
-                    out.entry(s.subscriber)
-                        .or_default()
-                        .subs
-                        .insert(s.numbered_subaccount);
+                    record_match(
+                        out.entry(s.subscriber).or_default(),
+                        s.target,
+                        Nat::from(amount.e8s),
+                    );
                 }
             }
         }
@@ -566,8 +606,17 @@ pub async fn run_poll() {
     let profile = match crate::instance::ensure_observed_profile().await {
         Ok(p) => p,
         Err(e) => {
-            if !config::is_reserve_protection(&e) {
-                logging::observed_ledger_failure(&e)
+            match e {
+                crate::instance::ProfileError::ReserveProtection => {}
+                crate::instance::ProfileError::ObservedLedger(message) => {
+                    logging::observed_ledger_failure(&message)
+                }
+                crate::instance::ProfileError::SnsRoot(message) => {
+                    logging::sns_root_failure(&message)
+                }
+                crate::instance::ProfileError::InvalidSns(message) => {
+                    logging::sns_relation_invalid(&message)
+                }
             }
             return;
         }
@@ -608,8 +657,49 @@ pub async fn run_poll() {
         let hint = if m.subs.is_empty() {
             vec![]
         } else {
-            m.subs.into_iter().collect()
+            m.subs
+                .into_iter()
+                .map(|(target, max_amount)| subscriber::PokeMatch { target, max_amount })
+                .collect()
         };
         let _ = subscriber::poke(p, hint);
+    }
+}
+
+#[cfg(test)]
+mod target_match_tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn maxima_order_and_arbitrary_precision_are_preserved() {
+        let mut state = MatchState::default();
+        record_match(&mut state, WatchTarget::NeuronNonce(1), Nat::from(9u8));
+        record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(100u16));
+        record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(500u16));
+        record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(300u16));
+        let huge = Nat::from_str("18446744073709551616000000000000000000").unwrap();
+        record_match(&mut state, WatchTarget::Subaccount(8), huge.clone());
+        assert_eq!(state.subs[&WatchTarget::Subaccount(7)], Nat::from(500u16));
+        assert_eq!(state.subs[&WatchTarget::Subaccount(8)], huge);
+        assert_eq!(
+            state.subs.keys().copied().collect::<Vec<_>>(),
+            vec![
+                WatchTarget::Subaccount(7),
+                WatchTarget::Subaccount(8),
+                WatchTarget::NeuronNonce(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn specific_target_bound_keeps_updates_for_retained_targets() {
+        let mut state = MatchState::default();
+        for n in 0..300 {
+            record_match(&mut state, WatchTarget::Subaccount(n), Nat::from(n));
+        }
+        assert_eq!(state.subs.len(), MAX_SPECIFIC_TARGETS_PER_POKE);
+        record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(999u16));
+        assert_eq!(state.subs[&WatchTarget::Subaccount(7)], Nat::from(999u16));
     }
 }

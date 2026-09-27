@@ -33,7 +33,7 @@
       <p>Choose a global Ledger, single-subaccount, or inclusive contiguous-range trigger. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
       <form id="memo-form">
         <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
-        <label>Subscription mode <select id="scope"><option value="global">Global Ledger</option><option value="account" selected>Single subaccount</option><option value="range">Subaccount range</option></select></label>
+        <label>Subscription mode <select id="scope"><option value="global">Global Ledger</option><option value="account" selected>Single subaccount</option><option value="range">Subaccount range</option><option value="neuron">Single neuron nonce</option><option value="neuron-range">Neuron nonce range</option></select></label>
         <span id="account-fields" class="account-fields">
           <label id="single-field">Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
           <span id="range-fields" class="range-fields" hidden>

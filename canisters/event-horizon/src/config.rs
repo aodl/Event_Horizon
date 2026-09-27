@@ -10,6 +10,7 @@ pub const ICP_LEDGER_CANISTER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub const CMC_CANISTER: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const JUPITER_HISTORIAN_CANISTER: &str = "j5gs6-uiaaa-aaaar-qb5cq-cai";
 pub const JUPITER_FAUCET_CANISTER: &str = "acjuz-liaaa-aaaar-qb4qq-cai";
+pub const NNS_GOVERNANCE_CANISTER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 /// Immutable production surplus destination. `None` keeps diversion disabled.
 pub const SURPLUS_CANISTER: Option<&str> = None;
 

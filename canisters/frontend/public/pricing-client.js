@@ -17,8 +17,8 @@ export const backendIdlFactory = ({ IDL }) => {
     latest_observed_at: IDL.Nat64,
     next_carried_forward_due_to_stale_rate: IDL.Bool,
   });
-  const Profile=IDL.Record({symbol:IDL.Text,decimals:IDL.Nat8,supports_icrc2_transfer_from:IDL.Bool});
-  const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal)});
+  const Profile=IDL.Record({symbol:IDL.Text,decimals:IDL.Nat8,supports_icrc2_transfer_from:IDL.Bool,neuron_governance:IDL.Opt(IDL.Principal)});
+  const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),sns_root:IDL.Opt(IDL.Principal),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal)});
   return IDL.Service({ get_instance:IDL.Func([], [Instance], ['query']), get_pricing: IDL.Func([], [Pricing], ['query']) });
 };
 

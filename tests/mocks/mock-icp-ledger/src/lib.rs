@@ -121,6 +121,11 @@ pub struct DebugProfile {
 }
 #[cfg(feature = "generic_icrc3")]
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugMintingAccount {
+    pub account: Option<IcrcAccount>,
+}
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugCapabilities {
     pub advertises_icrc1: bool,
     pub advertises_icrc3: bool,
@@ -169,6 +174,8 @@ struct State {
     supports_2xfer: bool,
     #[cfg(feature = "generic_icrc3")]
     capabilities: DebugCapabilities,
+    #[cfg(feature = "generic_icrc3")]
+    minting_account: Option<IcrcAccount>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -195,6 +202,8 @@ impl Default for State {
                 advertises_icrc3: true,
                 advertises_1xfer: true,
             },
+            #[cfg(feature = "generic_icrc3")]
+            minting_account: None,
         }
     }
 }
@@ -673,6 +682,11 @@ fn icrc1_decimals() -> u8 {
 }
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::query]
+fn icrc1_minting_account() -> Option<IcrcAccount> {
+    STATE.with(|s| s.borrow().minting_account)
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
 fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
     STATE.with(|s| {
         if !s.borrow().profile_available {
@@ -747,6 +761,11 @@ fn debug_set_profile(value: DebugProfile) {
         s.decimals = value.decimals;
         s.supports_2xfer = value.supports_2xfer;
     });
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_minting_account(value: DebugMintingAccount) {
+    STATE.with(|s| s.borrow_mut().minting_account = value.account);
 }
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::update]

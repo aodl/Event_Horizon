@@ -1307,6 +1307,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-sns-root"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
+]
+
+[[package]]
 name = "mock-subscriber"
 version = "0.1.0"
 dependencies = [

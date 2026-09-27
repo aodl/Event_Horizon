@@ -95,6 +95,12 @@ pub fn historian_failure(message: &str) {
 pub fn historian_recovered() {
     HISTORIAN_UNAVAILABLE.with(|flag| flag.set(false));
 }
+pub fn sns_root_failure(message: &str) {
+    ic_cdk::println!("SNS_ROOT_UNAVAILABLE {}", message);
+}
+pub fn sns_relation_invalid(message: &str) {
+    ic_cdk::println!("SNS_RELATION_INVALID {}", message);
+}
 
 pub fn poll_mode_change(
     from: crate::cadence::PollingMode,
@@ -121,7 +127,21 @@ pub fn daily_health() {
     } else {
         "icrc3"
     };
-    ic_cdk::println!("HEALTH day={} observed_ledger={} reader={} symbol={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, reader, symbol, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
+    let neuron_support = instance
+        .observed_profile
+        .as_ref()
+        .and_then(|p| p.neuron_governance)
+        .map_or_else(
+            || "none".into(),
+            |p| {
+                if reader == "icp_legacy" {
+                    "NNS".into()
+                } else {
+                    format!("SNS:{p}")
+                }
+            },
+        );
+    ic_cdk::println!("HEALTH day={} observed_ledger={} reader={} symbol={} neuron_support={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, reader, symbol, neuron_support, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
     meta.last_health_log_day = Some(day);
     crate::state::write_metadata(meta);
 }

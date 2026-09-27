@@ -1,8 +1,8 @@
 # Event Horizon
 
-Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. It calls a subscriber's unchanged `poke(vec nat8)` endpoint. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
+Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. Its target-aware poke reports each matching numeric subaccount or neuron nonce and the largest qualifying raw transfer amount. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
 
-Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; its only instance-specific production setting is immutable `observed_ledger`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
+Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger` and optional `sns_root`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
 
 It supports five exact Jupiter Faucet memo forms. Canonical ICP uses alias `X`
 in these examples; the grammar itself uses the reviewed per-instance alias:
@@ -18,7 +18,7 @@ in these examples; the grammar itself uses the reviewed per-instance alias:
 The planned IO alias `I` is intended, not published. The full memo—including
 alias, dot, subscriber, scope or range, and optional threshold—must fit
 Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
-Ranges satisfy `0 <= start < end <= 255` and expand at admission into the existing watched-account map. Overlaps retain the lowest permanent threshold. `poke([])` signals global activity without a more-specific match; one sorted unique non-empty vector of actual matched subaccounts takes precedence.
+Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand at admission into the existing watched-account map. `n<nonce>` selects a subscriber-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. `poke([])` signals global-only activity; a non-empty vector of target/max-amount matches takes precedence and is capped at 256 targets.
 
 ## Dynamic admission pricing
 

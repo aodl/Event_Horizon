@@ -166,6 +166,12 @@ pub async fn decimals(ledger: Principal) -> Result<u8, String> {
         .candid()
         .map_err(|e| format!("decimals decode: {e:?}"))
 }
+pub async fn minting_account(ledger: Principal) -> Result<Option<Account>, String> {
+    checked_call(ledger, "icrc1_minting_account", None)
+        .await?
+        .candid()
+        .map_err(|e| format!("icrc1_minting_account decode: {e:?}"))
+}
 pub async fn supported_block_types(ledger: Principal) -> Result<Vec<SupportedBlockType>, String> {
     checked_call(ledger, "icrc3_supported_block_types", None)
         .await?

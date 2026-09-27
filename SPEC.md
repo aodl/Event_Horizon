@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads an immutable configured Observed Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains distinct matching numbered subaccounts; an empty poke signals global observed-ledger activity. Neither contains transaction data. Each subscriber retains authoritative reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets and per-target maximum qualifying raw transfer amounts; an empty poke signals global-only observed-ledger activity. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -70,9 +70,9 @@ Rules:
 - a principal alone declares a global Ledger subscription: any transaction processed in a completed poll is relevant;
 - a global declaration does not represent all 256 subaccounts of the subscriber;
 - anonymous and management principals are invalid;
-- subaccount is a decimal integer `0..255`;
+- numeric subaccount is a canonical decimal `u64`, or `n` followed by a canonical decimal neuron nonce;
 - integer spelling is canonical decimal: `0` or a nonzero digit followed by decimal digits; signs and leading zeroes are invalid;
-- range endpoints are inclusive and must satisfy `0 <= start < end <= 255`;
+- range endpoints are inclusive canonical `u64`, satisfy `start < end`, and span at most 256 targets;
 - reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
 - when present, amount is decimal observed-token value with at most its verified `icrc1_decimals`, or an integer;
@@ -88,7 +88,9 @@ Observed amounts are arbitrary-precision integer raw token units. Floating-point
 
 ## 4. Watched account
 
-The numbered subaccount convention is 32 zero bytes with the integer stored in the last byte. Subaccount `0` is therefore the default all-zero subaccount.
+The numeric-subaccount convention is `24 zero bytes || N.to_be_bytes()`. Values `0..255` therefore retain their former bytes. Subaccount `0` is the default all-zero subaccount. Ranges require `start < end` and `end - start <= 255`; endpoint values are otherwise unrestricted `u64`.
+
+A neuron target `n<N>` derives `SHA256(0x0c || "neuron-stake" || subscriber principal bytes || N.to_be_bytes())`. The controller is the subscriber principal. ICP uses fixed NNS Governance as owner. A non-ICP instance supports neuron targets only after its immutable SNS Root reports the configured Ledger and a valid SNS Governance and that Ledger reports Governance's default account as `icrc1_minting_account`. Hotkeys, permission holders, arbitrary governance owners, and arbitrary accounts are not supported.
 
 The watched ICRC Account contains the subscriber principal and numbered subaccount. Absent and explicit all-zero subaccounts normalize to the same effective account.
 
@@ -119,9 +121,9 @@ A fresh installation is prospective. On first successful Ledger observation it r
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. It separately records whether the poll processed any transaction. In shared ICP mode it snapshots existing global subscribers once at scan start and records successful global admission block indexes. After the fixed boundary has been completely processed, existing global subscribers match any live block, while a newly admitted global subscriber matches only when a live block was processed strictly after its admission block. Distinct-ledger mode retains its poll-start snapshot ordering. Event Horizon never enumerates the global registry per transaction.
+For each relevant transfer to an admitted watched account, Event Horizon records the maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still update their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
-Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty sorted unique account set takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
+Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
 
 ## 7. Archives and history gaps
 
@@ -148,11 +150,11 @@ Subscriber contract:
 
 ```candid
 service : {
-  poke : (vec nat8) -> ();
+  poke : (vec record { target : variant { subaccount : nat64; neuron_nonce : nat64 }; max_amount : nat }) -> ();
 }
 ```
 
-The vector contains the distinct numbered subaccounts on that subscriber canister that saw relevant activity in the completed poll. Event Horizon sends at most one poke per subscriber per completed poll, and a non-empty vector is deterministically sorted and deduplicated. For an admitted global subscriber, `poke([])` means that the poll processed Ledger activity without a more-specific account match. Any poke tells a global subscriber to advance its global authoritative cursor. A non-empty vector additionally identifies account declarations that matched.
+The vector contains specific targets that saw relevant activity and each target's largest individual qualifying incoming transfer in observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. `max_amount` is a prefilter hint, never proof of payment.
 
 The subaccount list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
 

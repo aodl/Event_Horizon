@@ -26,21 +26,26 @@ use candid::Principal;
 #[cfg(feature = "debug_api")]
 use debug::{DebugCursorArgs, DebugInitArgs, DebugState, DebugSubscriptionArgs};
 
-pub use account::{account_identifier_bytes, numbered_subaccount};
+pub use account::{account_identifier_bytes, neuron_staking_subaccount, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
 pub use instance::{InitArgs, InstanceInfo, ObservedLedgerProfile};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
 pub use pricing::{Price, Pricing, PublicPrice};
-pub use subscription::{merge_subscription, Subscription};
+pub use subscription::{merge_subscription, Subscription, WatchTarget};
 
 #[cfg(not(feature = "debug_api"))]
 #[ic_cdk::init]
 fn init(args: InitArgs) {
-    instance::validate_observed_ledger(args.observed_ledger);
+    instance::validate_init(
+        args.observed_ledger,
+        args.sns_root,
+        config::RuntimeConfig::production(args.observed_ledger).icp_ledger,
+    );
     state::initialize_if_needed();
     state::initialize_instance_config(instance::InstanceConfig {
         observed_ledger: args.observed_ledger,
         observed_profile: None,
+        sns_root: args.sns_root,
     });
     instance::log_config();
     scheduler::start();
@@ -77,6 +82,7 @@ mod debug {
         pub historian_canister: Principal,
         pub faucet_canister: Principal,
         pub surplus_canister: Option<Principal>,
+        pub sns_root: Option<Principal>,
     }
 
     impl From<DebugInitArgs> for config::RuntimeConfig {
@@ -95,10 +101,11 @@ mod debug {
     #[ic_cdk::init]
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
-        instance::validate_observed_ledger(args.observed_ledger);
+        instance::validate_init(args.observed_ledger, args.sns_root, args.icp_ledger);
         state::initialize_instance_config(instance::InstanceConfig {
             observed_ledger: args.observed_ledger,
             observed_profile: None,
+            sns_root: args.sns_root,
         });
         state::write_debug_config(args.into());
         // Debug builds are manually driven to keep PocketIC tests deterministic.
@@ -215,7 +222,7 @@ mod debug {
     #[derive(CandidType, Deserialize)]
     pub struct DebugSubscriptionArgs {
         subscriber: Principal,
-        subaccount: u8,
+        target: WatchTarget,
     }
 
     #[derive(CandidType, Deserialize)]
@@ -238,7 +245,7 @@ mod debug {
 
     #[ic_cdk::query]
     fn debug_subscription(args: DebugSubscriptionArgs) -> Option<Subscription> {
-        state::get_numbered_subscription(args.subscriber, args.subaccount)
+        state::get_target_subscription(args.subscriber, args.target)
     }
 
     #[ic_cdk::query]

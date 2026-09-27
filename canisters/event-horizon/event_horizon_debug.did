@@ -11,6 +11,7 @@ type DebugInitArgs = record {
   observed_ledger : principal; icp_ledger : principal; cmc_canister : principal;
   historian_canister : principal; faucet_canister : principal;
   surplus_canister : opt principal;
+  sns_root : opt principal;
 };
 type DebugState = record {
   admission_bootstrapped : bool; admission_next_block : nat64;
@@ -19,13 +20,13 @@ type DebugState = record {
   surplus_policy : text; surplus_destination : opt principal;
   pricing : Pricing;
 };
-type Subscription = record {
-  subscriber : principal; numbered_subaccount : nat8; minimum_units : nat;
-};
+type WatchTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type Subscription = record { subscriber : principal; target : WatchTarget; minimum_units : nat };
 service : (DebugInitArgs) -> {
   get_instance : () -> (record {
     observed_ledger : principal;
-    observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool };
+    observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool; neuron_governance : opt principal };
+    sns_root : opt principal;
     icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
     jupiter_historian : principal; surplus_canister : opt principal;
   }) query;
@@ -46,6 +47,6 @@ service : (DebugInitArgs) -> {
     admission_bootstrapped : bool; admission_next_block : nat64;
     observed_bootstrapped : bool; observed_next_block : nat64;
   }) -> ();
-  debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
+  debug_subscription : (record { subscriber : principal; target : WatchTarget }) -> (opt Subscription) query;
   debug_global_subscription : (principal) -> (bool) query;
 }

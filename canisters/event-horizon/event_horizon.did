@@ -8,13 +8,15 @@ type Pricing = record {
 };
 type ObservedLedgerProfile = record {
   symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool;
+  neuron_governance : opt principal;
 };
 type InstanceInfo = record {
   observed_ledger : principal; observed_profile : opt ObservedLedgerProfile;
+  sns_root : opt principal;
   icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
   jupiter_historian : principal; surplus_canister : opt principal;
 };
-type InitArgs = record { observed_ledger : principal };
+type InitArgs = record { observed_ledger : principal; sns_root : opt principal };
 service : (InitArgs) -> {
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
