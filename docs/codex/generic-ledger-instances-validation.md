@@ -12,7 +12,7 @@ The callback reports deterministic `{ target; max_amount : Nat }` matches. Maxim
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
-  `efac79c04070664fecfff456d059e8610281c3c7`
+  `83d5167143098611108296afc946bf79fd435b2e`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
@@ -60,11 +60,20 @@ ICP principal selects the shared legacy reader; every other principal selects
 ICRC-3 observation plus legacy ICP admission. There is no fallback, mutable
 reader choice, or arbitrary legacy-ledger support.
 
-`same_wasm_supports_independent_observed_ledger_and_fixed_icp_funding` installs
-the same debug backend bytes with two different observed-ledger principals,
-checks their SHA-256 equality, proves independent observed activity, and proves
-that funding still calls only the Protocol ICP Ledger. The production artifact
-remains a single `event_horizon.wasm`.
+`same_wasm_supports_icp_generic_and_verified_sns_modes` uses the same cached
+debug backend bytes for ICP/NNS, generic non-SNS, and verified generic SNS
+configurations, checks their SHA-256 equality, proves mode-specific behavior,
+and proves that funding still calls only the Protocol ICP Ledger. The
+production artifact remains a single `event_horizon.wasm`.
+
+SNS relationship discovery fails closed. Root/Ledger mismatch,
+Root-Governance/Ledger-minting-owner mismatch, and non-default minting
+subaccounts all leave the profile unresolved and observed processing parked.
+`sns_root_ledger_mismatch_fails_closed_then_recovers` proves correction can
+recover normally. `sns_profile_failures_log_once_per_episode_and_recover`
+proves repeated Root transport failure emits one `SNS_ROOT_UNAVAILABLE`,
+repeated semantic mismatch emits one `SNS_RELATION_INVALID`, and successful
+verification clears the transient failure state. These flags are not stable.
 
 ## Stream and stable-state semantics
 
@@ -114,13 +123,23 @@ Evidence includes:
 - `reserve_protection_does_not_mutate_cursors_or_log_remote_outages`
 - `shared_cursor_divergence_fails_closed_without_rewind_or_fetch`
 - `subscription_and_cursor_survive_upgrade`
+- `sns_current_schema_profile_subscription_and_cursor_survive_upgrade`
+- `ordinary_u64_target_256_matches_only_big_endian_account`
+- `nns_neuron_range_is_prospective_and_reports_deterministic_maxima`
+- `sns_neuron_range_uses_verified_governance_owner`
+- `generic_nat_amount_survives_end_to_end_poke`
+- `outbound_poke_retains_first_256_specific_targets`
+- `loosened_threshold_reports_largest_transfer_for_local_prefilter`
 
 ## Frontend
 
 The registry is static: ICP is live/canonical with alias `X`; IO is
 planned/canonical with intended alias `I` and unset principals/hash. A live
-entry must match `get_instance.observed_ledger` and have an observed profile
-before memo construction is enabled.
+entry must match `get_instance.observed_ledger` and `get_instance.sns_root`,
+and have an observed profile before memo construction is enabled. The UI shows
+SNS Root and verified neuron Governance, changes labels between numeric
+subaccounts and neuron nonces, disables unsupported neuron modes, and returns
+an invalid selection to ordinary account mode when instances change.
 
 The UI uses the official `@icp-sdk/core` Principal parser, trims UI whitespace,
 rejects malformed checksum/encoding plus anonymous and management principals,
@@ -140,8 +159,8 @@ Target-aware extension completed on 2026-09-27:
 - Static/source checks: passed.
 - Rust formatting and Clippy: passed.
 - Backend unit tests: 56 passed.
-- Frontend tests: 10 passed.
-- PocketIC integration: 60 passed in the final complete current-tree run.
+- Frontend tests: 11 passed.
+- PocketIC integration: 72 passed in the final complete current-tree run.
 - Security gate: passed. `cargo audit` reported the four documented allowed
   maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
   npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
@@ -153,13 +172,11 @@ Target-aware extension completed on 2026-09-27:
   reproducibility builds, and the final canonical build all completed.
 - Two independent `docker build --no-cache` artifact sets: byte-identical.
 - Canonical backend SHA-256:
-  `c38964533b9dd8235339e016bdcd61595afff21095a20094d6f0e6091b868edc`.
+  `91a12fe2f63edb5f7a3bab311a34294195a45bdde8df6eae3f83d3694387ad77`.
 - Canonical frontend SHA-256:
-  `0a049ea28d3beb7aafef8b6b05302b402c15481e0d5040b50e0abc70844cbc9c`.
+  `9028449c0caccd1358dd29b5055484d0e5fef9e3a498fe4a11fb2289b0a26187`.
 - Deterministic canonical-artifact archive SHA-256:
-  `d2803876442cfa14993dc0186d34d1897c08bf691dab24addce008126d050b74`.
-- Canonical artifact source revision:
-  `d2ee6fe3217e737d66f27da98add04e77016a85d`.
+  `8c39c2b16078eebbb70c06b49e122882755d00bb9502966d6c2010bce3395439`.
 - Canonical artifact manifest: all three entries verified.
 - Source manifest: regenerated after final evidence and verified before the
   final evidence commit.
