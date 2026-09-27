@@ -108,6 +108,14 @@ pub struct DebugAppendTransfer {
     pub amount_e8s: u64,
     pub icrc1_memo: Option<Vec<u8>>,
 }
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugAppendNatTransfer {
+    pub from: IcrcAccount,
+    pub to: IcrcAccount,
+    pub amount: Nat,
+    pub icrc1_memo: Option<Vec<u8>>,
+}
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugSetBalance {
     pub account: Account,
@@ -503,6 +511,36 @@ fn debug_append_transfer_from(arg: DebugAppendTransfer) -> u64 {
         if let ICRC3Value::Map(block) = &mut s.icrc_blocks[id as usize] {
             block.insert("btype".into(), ICRC3Value::Text("2xfer".into()));
         }
+        id
+    })
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_append_nat_transfer(arg: DebugAppendNatTransfer) -> u64 {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let id = state.icrc_blocks.len() as u64;
+        let account_value = |account: IcrcAccount| {
+            ICRC3Value::Array(vec![
+                ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+            ])
+        };
+        let mut tx = std::collections::BTreeMap::from([
+            ("op".into(), ICRC3Value::Text("xfer".into())),
+            ("from".into(), account_value(arg.from)),
+            ("to".into(), account_value(arg.to)),
+            ("amt".into(), ICRC3Value::Nat(arg.amount)),
+        ]);
+        if let Some(memo) = arg.icrc1_memo {
+            tx.insert("memo".into(), ICRC3Value::Blob(memo.into()));
+        }
+        state
+            .icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+                ("btype".into(), ICRC3Value::Text("1xfer".into())),
+                ("tx".into(), ICRC3Value::Map(tx)),
+            ])));
         id
     })
 }

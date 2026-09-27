@@ -199,6 +199,7 @@ pub async fn ensure_observed_profile() -> Result<ObservedLedgerProfile, ProfileE
         },
         neuron_governance,
     };
+    crate::logging::sns_profile_recovered();
     state::write_observed_profile(profile.clone());
     ic_cdk::println!(
         "CONFIG observed_ledger={} symbol={} decimals={} icrc2_transfer_from={} neuron_governance={}",

@@ -107,6 +107,8 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 - unfiltered and thresholded watched accounts;
 - one poke carrying deterministic target/max-amount matches per subscriber per poll, bounded to 256 specific targets;
 - NNS and verified-SNS neuron ownership/nonce derivation and exact raw amounts;
+- SNS Root transport and relationship failures remain fail-closed and log once per uninterrupted failure episode;
+- ordinary `u64` target 256, NNS/SNS neuron ranges, arbitrary-precision generic amounts, and the outbound 256-target bound;
 - subscriber trap isolation;
 - archive-gap skip-and-continue behavior;
 - legacy ICP CMC top-up transfer;

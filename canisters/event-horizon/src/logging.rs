@@ -7,6 +7,8 @@ thread_local! {
     static ICP_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static SHARED_LEDGER_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static HISTORIAN_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
+    static SNS_ROOT_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
+    static SNS_RELATION_INVALID: Cell<bool> = const { Cell::new(false) };
     static OBSERVED_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
     static ADMISSION_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
     static SHARED_CURSOR_INVALID: Cell<bool> = const { Cell::new(false) };
@@ -96,10 +98,22 @@ pub fn historian_recovered() {
     HISTORIAN_UNAVAILABLE.with(|flag| flag.set(false));
 }
 pub fn sns_root_failure(message: &str) {
-    ic_cdk::println!("SNS_ROOT_UNAVAILABLE {}", message);
+    SNS_ROOT_UNAVAILABLE.with(|flag| {
+        if !flag.replace(true) {
+            ic_cdk::println!("SNS_ROOT_UNAVAILABLE {}", message);
+        }
+    });
 }
 pub fn sns_relation_invalid(message: &str) {
-    ic_cdk::println!("SNS_RELATION_INVALID {}", message);
+    SNS_RELATION_INVALID.with(|flag| {
+        if !flag.replace(true) {
+            ic_cdk::println!("SNS_RELATION_INVALID {}", message);
+        }
+    });
+}
+pub fn sns_profile_recovered() {
+    SNS_ROOT_UNAVAILABLE.with(|flag| flag.set(false));
+    SNS_RELATION_INVALID.with(|flag| flag.set(false));
 }
 
 pub fn poll_mode_change(

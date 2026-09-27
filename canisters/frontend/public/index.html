@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Event Horizon</title>
-  <meta name="description" content="Ledger-generic ICRC event triggers funded through Jupiter Faucet in ICP.">
+  <meta name="description" content="Best-effort ledger event triggers funded through Jupiter Faucet in ICP.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <header class="hero">
       <p class="eyebrow">Powered by Jupiter Faucet</p>
       <h1>Event Horizon</h1>
-      <p class="lead">Best-effort wake-ups for compatible ICRC token ledgers, funded through Jupiter Faucet in ICP.</p>
+      <p class="lead">Best-effort wake-ups for canonical ICP and compatible ICRC token ledgers, funded through Jupiter Faucet in ICP.</p>
     </header>
 
     <section class="card">
@@ -30,29 +30,29 @@
 
     <section class="card builder">
       <h2>Subscription memo</h2>
-      <p>Choose a global Ledger, single-subaccount, or inclusive contiguous-range trigger. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
+      <p>Choose a global Ledger, numeric-subaccount, or neuron-nonce trigger; either specific target may be a single value or an inclusive contiguous range. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
       <form id="memo-form">
         <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
         <label>Subscription mode <select id="scope"><option value="global">Global Ledger</option><option value="account" selected>Single subaccount</option><option value="range">Subaccount range</option><option value="neuron">Single neuron nonce</option><option value="neuron-range">Neuron nonce range</option></select></label>
         <span id="account-fields" class="account-fields">
-          <label id="single-field">Numbered subaccount <input id="subaccount" inputmode="numeric" value="0"></label>
+          <label id="single-field"><span id="single-label">Numbered subaccount</span> <input id="subaccount" inputmode="numeric" value="0"></label>
           <span id="range-fields" class="range-fields" hidden>
-            <label>Start subaccount <input id="range-start" inputmode="numeric" value="0"></label>
-            <label>End subaccount <input id="range-end" inputmode="numeric" value="1"></label>
+            <label><span id="range-start-label">Start subaccount</span> <input id="range-start" inputmode="numeric" value="0"></label>
+            <label><span id="range-end-label">End subaccount</span> <input id="range-end" inputmode="numeric" value="1"></label>
           </span>
           <label id="amount-label">Minimum ICP amount (optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
         </span>
       </form>
       <output id="memo-output" class="memo"></output>
       <p id="memo-help" class="help"></p>
-      <p>A range subscription covers one contiguous inclusive range of numbered subaccounts and uses a 2× standard economic basis, regardless of range width.</p>
+      <p>A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.</p>
     </section>
 
     <section class="grid">
-      <article class="card"><h2>Fast path</h2><p>Event Horizon reads the selected token ledger directly through its ICRC-3 transaction log. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p></article>
+      <article class="card"><h2>Fast path</h2><p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p></article>
       <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p></article>
       <article class="card"><h2>ICP-funded</h2><p>Subscriptions are funded with ICP through Jupiter Faucet regardless of which token ledger is observed.</p></article>
-      <article class="card"><h2>Specific hints win</h2><p>If account declarations also match, one sorted non-empty vector replaces the empty global hint. These subaccounts are hints, not proof that no other Ledger activity occurred. There are no transaction payloads, acknowledgements, retries or delivery guarantee.</p></article>
+      <article class="card"><h2>Specific hints win</h2><p>A non-empty poke reports each retained specific target and its maximum observed qualifying transfer amount; an empty poke reports global-only activity. Both are best-effort hints, and <code>max_amount</code> is not proof of payment. There are no acknowledgements, retries or delivery guarantee.</p></article>
     </section>
     <section class="card"><h2>Additional immutable instances</h2><p>Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed permissionlessly for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p></section>
   </main>

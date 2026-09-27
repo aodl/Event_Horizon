@@ -149,6 +149,13 @@ mod tests {
         icrc1_memo: Option<Vec<u8>>,
     }
     #[derive(CandidType, Deserialize)]
+    struct AppendNat {
+        from: Account,
+        to: Account,
+        amount: candid::Nat,
+        icrc1_memo: Option<Vec<u8>>,
+    }
+    #[derive(CandidType, Deserialize)]
     struct DebugProfile {
         symbol: String,
         decimals: u8,
@@ -252,10 +259,8 @@ mod tests {
         target: WatchTarget,
         max_amount: candid::Nat,
     }
-    impl PartialEq<u8> for PokeMatch {
-        fn eq(&self, other: &u8) -> bool {
-            self.target == WatchTarget::Subaccount((*other).into())
-        }
+    fn targets(matches: &[PokeMatch]) -> Vec<WatchTarget> {
+        matches.iter().map(|value| value.target).collect()
     }
     #[derive(CandidType, Deserialize)]
     struct DebugSubscriptionArgs {
@@ -315,6 +320,7 @@ mod tests {
         subscriber: Principal,
         event_horizon: Principal,
         faucet: Principal,
+        sns_root: Option<Principal>,
     }
     impl Env {
         fn new() -> Result<Self> {
@@ -350,15 +356,18 @@ mod tests {
             Ok(env)
         }
         fn new_sns() -> Result<Self> {
-            let env = Self::with_event_horizon_wasm_and_surplus_mode(
+            let env = Self::new_sns_unpriced()?;
+            env.price_once()?;
+            Ok(env)
+        }
+        fn new_sns_unpriced() -> Result<Self> {
+            Self::with_event_horizon_wasm_and_surplus_mode(
                 wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
                 200_000_000_000_000,
                 true,
                 true,
                 true,
-            )?;
-            env.price_once()?;
-            Ok(env)
+            )
         }
         fn with_event_horizon_wasm(
             event_horizon_wasm: Vec<u8>,
@@ -500,6 +509,7 @@ mod tests {
                 subscriber,
                 event_horizon,
                 faucet,
+                sns_root,
             })
         }
         fn poll(&self) -> Result<()> {
@@ -574,6 +584,24 @@ mod tests {
                     from,
                     to,
                     amount_e8s: amount,
+                    icrc1_memo: None,
+                },
+            )
+        }
+        fn append_observed_nat(
+            &self,
+            from: Account,
+            to: Account,
+            amount: candid::Nat,
+        ) -> Result<u64> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_append_nat_transfer",
+                AppendNat {
+                    from,
+                    to,
+                    amount,
                     icrc1_memo: None,
                 },
             )
@@ -753,6 +781,53 @@ mod tests {
             self.poll()?;
             Ok(memo)
         }
+        fn admit_neuron_range(&self, start: u64, end: u64, total: u64) -> Result<Vec<u8>> {
+            let compact = self.subscriber.to_text().replace('-', "");
+            let memo = format!("{compact}.n{start}-{end}").into_bytes();
+            self.set_route(memo.clone(), total)?;
+            self.append(
+                account_id(self.faucet, [0; 32]),
+                account_id(self.event_horizon, [0; 32]),
+                10_000_000,
+                Some(memo.clone()),
+            )?;
+            self.poll()?;
+            Ok(memo)
+        }
+        fn set_sns_canisters(&self, value: SnsCanisters) -> Result<()> {
+            update(
+                &self.pic,
+                self.sns_root.expect("SNS Root"),
+                "debug_set_canisters",
+                value,
+            )
+        }
+        fn set_sns_unavailable(&self, value: bool) -> Result<()> {
+            update(
+                &self.pic,
+                self.sns_root.expect("SNS Root"),
+                "debug_set_unavailable",
+                value,
+            )
+        }
+        fn set_minting_account(&self, account: Option<Account>) -> Result<()> {
+            update(
+                &self.pic,
+                self.observed_ledger,
+                "debug_set_minting_account",
+                DebugMintingAccount { account },
+            )
+        }
+        fn public_logs(&self) -> Result<String> {
+            Ok(self
+                .pic
+                .fetch_canister_logs(self.event_horizon, Principal::anonymous())
+                .map_err(|error| anyhow!("fetch canister logs: {error:?}"))?
+                .into_iter()
+                .map(|record| String::from_utf8_lossy(&record.content).into_owned())
+                .collect::<Vec<_>>()
+                .join("\n"))
+        }
         fn append_account_admission(
             &self,
             subaccount: u64,
@@ -870,7 +945,10 @@ mod tests {
         );
         let matches =
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?;
-        assert_eq!(matches, vec![7, 8]);
+        assert_eq!(
+            targets(&matches),
+            vec![WatchTarget::Subaccount(7), WatchTarget::Subaccount(8)]
+        );
         assert_eq!(matches[0].max_amount, candid::Nat::from(1u8));
         assert_eq!(matches[1].max_amount, candid::Nat::from(1_000_000u64));
         Ok(())
@@ -944,7 +1022,379 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn same_wasm_supports_independent_observed_ledger_and_fixed_icp_funding() -> Result<()> {
+    fn sns_root_ledger_mismatch_fails_closed_then_recovers() -> Result<()> {
+        let env = Env::new_sns_unpriced()?;
+        let root = env.sns_root.expect("SNS Root");
+        env.set_sns_canisters(SnsCanisters {
+            root: Some(root),
+            ledger: Some(env.ledger),
+            governance: Some(env.cmc),
+        })?;
+        env.poll()?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert!(info.observed_profile.is_none());
+        assert!(!env.state()?.observed_bootstrapped);
+        env.admit_neuron(0, 1_000_000_000)?;
+        assert!(env
+            .target_subscription(WatchTarget::NeuronNonce(0))?
+            .is_none());
+
+        env.set_sns_canisters(SnsCanisters {
+            root: Some(root),
+            ledger: Some(env.observed_ledger),
+            governance: Some(env.cmc),
+        })?;
+        env.poll()?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(
+            info.observed_profile
+                .expect("profile recovers")
+                .neuron_governance,
+            Some(env.cmc)
+        );
+        assert!(env.state()?.observed_bootstrapped);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sns_governance_minting_owner_mismatch_fails_closed() -> Result<()> {
+        let env = Env::new_sns_unpriced()?;
+        env.set_minting_account(Some(account_id(Principal::from_slice(&[77]), [0; 32])))?;
+        env.poll()?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert!(info.observed_profile.is_none());
+        assert!(!env.state()?.observed_bootstrapped);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sns_non_default_minting_subaccount_fails_closed() -> Result<()> {
+        let env = Env::new_sns_unpriced()?;
+        env.set_minting_account(Some(account_id(env.cmc, numbered(1))))?;
+        env.poll()?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert!(info.observed_profile.is_none());
+        assert!(!env.state()?.observed_bootstrapped);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sns_profile_failures_log_once_per_episode_and_recover() -> Result<()> {
+        let unavailable = Env::new_sns_unpriced()?;
+        unavailable.set_sns_unavailable(true)?;
+        for _ in 0..3 {
+            unavailable.poll()?;
+        }
+        assert_eq!(
+            unavailable
+                .public_logs()?
+                .matches("SNS_ROOT_UNAVAILABLE")
+                .count(),
+            1
+        );
+        unavailable.set_sns_unavailable(false)?;
+        unavailable.poll()?;
+        assert!(query::<_, InstanceInfo>(
+            &unavailable.pic,
+            unavailable.event_horizon,
+            "get_instance",
+            (),
+        )?
+        .observed_profile
+        .is_some());
+        let invalid = Env::new_sns_unpriced()?;
+        let root = invalid.sns_root.expect("SNS Root");
+        invalid.set_sns_canisters(SnsCanisters {
+            root: Some(root),
+            ledger: Some(invalid.ledger),
+            governance: Some(invalid.cmc),
+        })?;
+        for _ in 0..3 {
+            invalid.poll()?;
+        }
+        assert_eq!(
+            invalid
+                .public_logs()?
+                .matches("SNS_RELATION_INVALID")
+                .count(),
+            1
+        );
+        invalid.set_sns_canisters(SnsCanisters {
+            root: Some(root),
+            ledger: Some(invalid.observed_ledger),
+            governance: Some(invalid.cmc),
+        })?;
+        invalid.poll()?;
+        assert!(
+            query::<_, InstanceInfo>(&invalid.pic, invalid.event_horizon, "get_instance", (),)?
+                .observed_profile
+                .is_some()
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_non_sns_rejects_neuron_but_accepts_ordinary_subscription() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        assert!(
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .observed_profile
+                .expect("generic profile")
+                .neuron_governance
+                .is_none()
+        );
+        let before = env.state()?.subscriptions;
+        env.admit_neuron(0, 1_000_000_000)?;
+        assert_eq!(env.state()?.subscriptions, before);
+        assert!(env
+            .target_subscription(WatchTarget::NeuronNonce(0))?
+            .is_none());
+        env.admit(256, None, 1_000_000_000)?;
+        assert!(env.subscription(256)?.is_some());
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn ordinary_u64_target_256_matches_only_big_endian_account() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(256, None, 1_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        env.append_observed(
+            source.clone(),
+            account_id(env.subscriber, [0; 32]),
+            99,
+            None,
+        )?;
+        env.append_observed(
+            source,
+            account_id(env.subscriber, numbered(256)),
+            123_456,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(256),
+                max_amount: candid::Nat::from(123_456u64),
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn nns_neuron_range_is_prospective_and_reports_deterministic_maxima() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let governance = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(governance, neuron_staking(env.subscriber, 0)),
+            999,
+            None,
+        )?;
+        env.admit_neuron_range(0, 2, 2_000_000_000)?;
+        for nonce in 0..=2 {
+            assert!(env
+                .target_subscription(WatchTarget::NeuronNonce(nonce))?
+                .is_some());
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            0
+        );
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(governance, neuron_staking(env.subscriber, 2)),
+            200,
+            None,
+        )?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(governance, neuron_staking(env.subscriber, 0)),
+            100,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![
+                PokeMatch {
+                    target: WatchTarget::NeuronNonce(0),
+                    max_amount: candid::Nat::from(100u8),
+                },
+                PokeMatch {
+                    target: WatchTarget::NeuronNonce(2),
+                    max_amount: candid::Nat::from(200u16),
+                },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sns_neuron_range_uses_verified_governance_owner() -> Result<()> {
+        let env = Env::new_sns()?;
+        env.poll()?;
+        env.admit_neuron_range(0, 2, 2_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        for (nonce, amount) in [(0, 10), (1, 20), (2, 30)] {
+            env.append_observed(
+                source.clone(),
+                account_id(env.cmc, neuron_staking(env.subscriber, nonce)),
+                amount,
+                None,
+            )?;
+        }
+        env.append_observed(
+            source,
+            account_id(env.subscriber, neuron_staking(env.subscriber, 1)),
+            999,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![
+                PokeMatch {
+                    target: WatchTarget::NeuronNonce(0),
+                    max_amount: candid::Nat::from(10u8)
+                },
+                PokeMatch {
+                    target: WatchTarget::NeuronNonce(1),
+                    max_amount: candid::Nat::from(20u8)
+                },
+                PokeMatch {
+                    target: WatchTarget::NeuronNonce(2),
+                    max_amount: candid::Nat::from(30u8)
+                },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_nat_amount_survives_end_to_end_poke() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(256, None, 1_000_000_000)?;
+        let amount = candid::Nat::from(18_446_744_073_709_551_616u128)
+            * candid::Nat::from(1_000_000_000_000_000_000u128);
+        env.append_observed_nat(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(256)),
+            amount.clone(),
+        )?;
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(256),
+                max_amount: amount,
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn outbound_poke_retains_first_256_specific_targets() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit_range(0, 255, None, 2_000_000_000)?;
+        env.admit(256, None, 1_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        for subaccount in 0..=256 {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(subaccount)),
+                subaccount + 1,
+                None,
+            )?;
+        }
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            before + 1
+        );
+        let matches =
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?;
+        assert_eq!(matches.len(), 256);
+        assert_eq!(
+            targets(&matches),
+            (0..256).map(WatchTarget::Subaccount).collect::<Vec<_>>()
+        );
+        assert_eq!(matches[255].max_amount, candid::Nat::from(256u16));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn loosened_threshold_reports_largest_transfer_for_local_prefilter() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        assert_eq!(
+            env.subscription(7)?.expect("thresholded").minimum_units,
+            candid::Nat::from(1_000_000u64)
+        );
+        env.admit(7, None, 1_000_000_000)?;
+        assert_eq!(
+            env.subscription(7)?.expect("loosened").minimum_units,
+            candid::Nat::from(0u8)
+        );
+        let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        for amount in [100_000, 2_000_000, 500_000] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                amount,
+                None,
+            )?;
+        }
+        env.poll()?;
+        for _ in 0..5 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(2_000_000u64),
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn same_wasm_supports_icp_generic_and_verified_sns_modes() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?; // prospective bootstrap for both logs
         let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
@@ -978,8 +1428,13 @@ mod tests {
             env.pic.tick();
         }
         assert_eq!(
-            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7]
+            targets(&query::<_, Vec<PokeMatch>>(
+                &env.pic,
+                env.subscriber,
+                "debug_last_matches",
+                (),
+            )?),
+            vec![WatchTarget::Subaccount(7)]
         );
 
         env.set_balance(100_000_000)?;
@@ -1022,6 +1477,27 @@ mod tests {
         let second_info: InstanceInfo = query(&env.pic, second, "get_instance", ())?;
         assert_eq!(second_info.observed_ledger, env.ledger);
         assert_eq!(second_info.icp_ledger, env.ledger);
+
+        let sns = Env::new_sns()?;
+        sns.poll()?;
+        let sns_info: InstanceInfo = query(&sns.pic, sns.event_horizon, "get_instance", ())?;
+        assert_eq!(sns_info.sns_root, sns.sns_root);
+        assert_eq!(
+            sns_info
+                .observed_profile
+                .expect("verified SNS profile")
+                .neuron_governance,
+            Some(sns.cmc)
+        );
+        assert_eq!(
+            sha2::Sha256::digest(wasm(
+                &EVENT_HORIZON_WASM,
+                "event-horizon",
+                Some("debug_api")
+            )?),
+            hash_a,
+            "all three modes use the same cached backend bytes"
+        );
         Ok(())
     }
 
@@ -1202,7 +1678,10 @@ mod tests {
         }
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7]
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
         );
         Ok(())
     }
@@ -1310,7 +1789,10 @@ mod tests {
                 "debug_last_matches",
                 ()
             )?,
-            vec![7]
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
         );
         Ok(())
     }
@@ -1333,7 +1815,10 @@ mod tests {
         }
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7]
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
         );
         update::<_, u64>(
             &env.pic,
@@ -1412,7 +1897,10 @@ mod tests {
         );
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7]
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
         );
         Ok(())
     }
@@ -1737,7 +2225,20 @@ mod tests {
         }
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![0, 128, 255]
+            vec![
+                PokeMatch {
+                    target: WatchTarget::Subaccount(0),
+                    max_amount: candid::Nat::from(1u8)
+                },
+                PokeMatch {
+                    target: WatchTarget::Subaccount(128),
+                    max_amount: candid::Nat::from(1u8)
+                },
+                PokeMatch {
+                    target: WatchTarget::Subaccount(255),
+                    max_amount: candid::Nat::from(1u8)
+                },
+            ]
         );
 
         env.upgrade_same_debug_wasm()?;
@@ -1780,7 +2281,16 @@ mod tests {
         );
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![11, 18],
+            vec![
+                PokeMatch {
+                    target: WatchTarget::Subaccount(11),
+                    max_amount: candid::Nat::from(10_000_000u64)
+                },
+                PokeMatch {
+                    target: WatchTarget::Subaccount(18),
+                    max_amount: candid::Nat::from(100_000_000u64)
+                },
+            ],
             "only actual qualifying range accounts are sent"
         );
 
@@ -1829,7 +2339,10 @@ mod tests {
         );
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7],
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }],
             "only account 7 is unfiltered; thresholded range accounts remain filtered"
         );
 
@@ -2019,7 +2532,10 @@ mod tests {
         );
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7]
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
         );
         Ok(())
     }
@@ -2165,7 +2681,10 @@ mod tests {
         );
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![7],
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }],
             "specific account information takes precedence over the global empty hint"
         );
         Ok(())
@@ -3124,11 +3643,13 @@ mod tests {
     fn subscription_and_cursor_survive_upgrade() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
-        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit(256, Some("0.01"), 1_000_000_000)?;
+        env.admit_neuron(1_000_000, 1_000_000_000)?;
         env.admit_range(8, 9, None, 10_000_000_000)?;
         env.admit_global(10_000_000_000)?;
         let before = env.state()?;
         let pricing_before = env.pricing()?;
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         env.upgrade_same_debug_wasm()?;
         let after = env.state()?;
         assert_eq!(after.observed_next_block, before.observed_next_block);
@@ -3137,14 +3658,67 @@ mod tests {
         assert_eq!(after.global_subscriptions, before.global_subscriptions);
         assert_eq!(env.pricing()?, pricing_before);
         assert_eq!(
-            env.subscription(7)?
+            env.subscription(256)?
                 .expect("subscription survives")
                 .minimum_units,
             candid::Nat::from(1_000_000u64)
         );
+        assert!(env
+            .target_subscription(WatchTarget::NeuronNonce(1_000_000))?
+            .is_some());
         assert!(env.subscription(8)?.is_some());
         assert!(env.subscription(9)?.is_some());
         assert!(env.global_subscription()?);
+        assert_eq!(
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .observed_profile
+                .expect("profile survives")
+                .neuron_governance,
+            Some(Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?)
+        );
+        env.poll()?;
+        for _ in 0..3 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before,
+            "upgrade does not replay already committed cursor activity"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sns_current_schema_profile_subscription_and_cursor_survive_upgrade() -> Result<()> {
+        let env = Env::new_sns()?;
+        env.poll()?;
+        env.admit_neuron(1_000_000, 1_000_000_000)?;
+        let before = env.state()?;
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        env.upgrade_same_debug_wasm()?;
+        let after = env.state()?;
+        assert_eq!(after.observed_next_block, before.observed_next_block);
+        assert_eq!(after.admission_next_block, before.admission_next_block);
+        assert!(env
+            .target_subscription(WatchTarget::NeuronNonce(1_000_000))?
+            .is_some());
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(info.sns_root, env.sns_root);
+        assert_eq!(
+            info.observed_profile
+                .expect("SNS profile survives")
+                .neuron_governance,
+            Some(env.cmc)
+        );
+        env.poll()?;
+        for _ in 0..3 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            pokes_before
+        );
         Ok(())
     }
 

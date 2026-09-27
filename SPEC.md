@@ -156,7 +156,7 @@ service : {
 
 The vector contains specific targets that saw relevant activity and each target's largest individual qualifying incoming transfer in observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. `max_amount` is a prefilter hint, never proof of payment.
 
-The subaccount list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
+The specific-target list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
 
 There is:
 
@@ -167,7 +167,7 @@ There is:
 - no delivery journal;
 - no ordering or delivery guarantee.
 
-Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied subaccount numbers, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path.
+Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied specific targets, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path.
 
 Because Event Horizon reads the Ledger directly, a poke may arrive before the ICP Index exposes the triggering transaction. The subscriber owns any Index retry/backoff policy.
 
