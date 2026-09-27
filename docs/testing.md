@@ -105,7 +105,8 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 - incomplete/faulted Historian rejection and later natural admission on another Faucet payout;
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;
-- one poke carrying sorted unique subaccounts per subscriber per poll;
+- one poke carrying deterministic target/max-amount matches per subscriber per poll, bounded to 256 specific targets;
+- NNS and verified-SNS neuron ownership/nonce derivation and exact raw amounts;
 - subscriber trap isolation;
 - archive-gap skip-and-continue behavior;
 - legacy ICP CMC top-up transfer;

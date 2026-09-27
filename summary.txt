@@ -8,8 +8,10 @@ Branch: codex/generic-ledger-instances
   admission and observation.
 - Every non-ICP Observed Ledger requires ICRC-1, ICRC-3, and `1xfer`.
 - The fixed Protocol ICP Ledger remains the admission and funding ledger.
-- One backend Wasm contains both adapters; immutable `observed_ledger`
-  determines the path.
+- One backend Wasm contains both adapters; immutable `observed_ledger` and
+  optional verified `sns_root` determine the mode.
+- Specific targets are full `u64` numeric subaccounts or neuron nonces;
+  callbacks carry the per-target maximum qualifying arbitrary-precision amount.
 - Production backend application methods are the `get_instance` and
   `get_pricing` queries only.
 - `SURPLUS_CANISTER` remains `None`.

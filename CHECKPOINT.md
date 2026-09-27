@@ -1,5 +1,7 @@
 # Event Horizon repository status
 
+The current target-aware release extends immutable instance configuration with optional `sns_root`, uses full-width numeric and neuron-nonce targets, and replaces the legacy callback with target plus raw `Nat` maximums. Its canonical hashes and full 2026-09-27 validation evidence are recorded in `docs/codex/generic-ledger-instances-validation.md`; historical reports below remain provenance only.
+
 `SPEC.md` is the normative protocol. Repository evidence is divided into three stages so historical claims are not confused with checks executed later.
 
 ## Checkpoint 03 historical import

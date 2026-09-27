@@ -135,13 +135,13 @@ memos, and malicious-looking runtime text.
 
 ## Validation results
 
-Completed on 2026-09-26:
+Target-aware extension completed on 2026-09-27:
 
 - Static/source checks: passed.
 - Rust formatting and Clippy: passed.
-- Backend unit tests: 53 passed.
-- Frontend tests: 9 passed.
-- PocketIC integration: 58 passed in the final complete current-tree run.
+- Backend unit tests: 56 passed.
+- Frontend tests: 10 passed.
+- PocketIC integration: 60 passed in the final complete current-tree run.
 - Security gate: passed. `cargo audit` reported the four documented allowed
   maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
   npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
@@ -149,17 +149,17 @@ Completed on 2026-09-26:
   `production_wasm_exposes_only_instance_and_pricing_queries` and static checks.
 - Production frontend export audit: passed in static checks.
 - `DFX_IDENTITY=codex_local icp build -e local`: passed.
-- Full validation stages passed. The aggregate `validate` run completed tests and
-  security, then its first no-cache build hit an invalid-signature error caused
-  by exhausted Docker build cache space. Only unused generated build cache was
-  pruned; the unchanged `repro` retry and final `canonical` stage passed.
+- Full `xtask validate` passed without retry: tests, security, two no-cache
+  reproducibility builds, and the final canonical build all completed.
 - Two independent `docker build --no-cache` artifact sets: byte-identical.
 - Canonical backend SHA-256:
-  `0f50ef898f5fc196fabfcaf4d7f554b8a3b56bdae175b524b53e4d3d00d5dead`.
+  `c38964533b9dd8235339e016bdcd61595afff21095a20094d6f0e6091b868edc`.
 - Canonical frontend SHA-256:
-  `3843156571a9ca2c409f6a92c87e0672e3d2a7d89ed158fb5068b49725f02a74`.
+  `0a049ea28d3beb7aafef8b6b05302b402c15481e0d5040b50e0abc70844cbc9c`.
 - Deterministic canonical-artifact archive SHA-256:
-  `dd2a3a9953d0d2a3f106b5e53bfd0e3a5412fa4c093bbded3796ff0acb9a55e0`.
+  `d2803876442cfa14993dc0186d34d1897c08bf691dab24addce008126d050b74`.
+- Canonical artifact source revision:
+  `d2ee6fe3217e737d66f27da98add04e77016a85d`.
 - Canonical artifact manifest: all three entries verified.
 - Source manifest: regenerated after final evidence and verified before the
   final evidence commit.
@@ -217,6 +217,12 @@ methods. The frontend audit passed with seven total exports and exactly
   and canonical frontend artifact.
 - [x] Two canonical builds are byte-identical — `xtask validate` reproducibility
   stage compared every emitted artifact from two `--no-cache` Docker builds.
+- [x] Full-width numeric and neuron derivations — numeric encoding/parser unit
+  cases, DFINITY staking vectors, `nns_neuron_nonce_...`, and
+  `verified_sns_neuron_uses_governance_owner`.
+- [x] Target-aware maximum/bound behavior — exact ICP/SNS poke assertions plus
+  `maxima_order_and_arbitrary_precision_are_preserved` and
+  `specific_target_bound_keeps_updates_for_retained_targets`.
 
 ## Safety
 
