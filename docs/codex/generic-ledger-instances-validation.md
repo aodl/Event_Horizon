@@ -13,6 +13,8 @@ The callback reports deterministic `{ target; max_amount : Nat }` matches. Maxim
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
   `83d5167143098611108296afc946bf79fd435b2e`
+- Final source/evidence revision:
+  `e0e680772d0eb385f47fe178edbd44f5ee452212`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
