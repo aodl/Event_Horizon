@@ -14,7 +14,7 @@ The callback reports deterministic `{ target; max_amount : Nat }` matches. Maxim
 - Canonical artifact source revision:
   `15b2bc591f449937de3073e3279d047cee5e2682`
 - Final source/evidence revision:
-  recorded after the validation-evidence commit
+  `f1e8eb023e99b206de9926430ded6159667e7a6e`
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
