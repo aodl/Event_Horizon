@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -u
+backend="${1:-eo6ei-gaaaa-aaaar-qchra-cai}"
+frontend="${2:-ej7c4-lyaaa-aaaar-qchrq-cai}"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+out="$root/observations/$stamp"
+mkdir -p "$out"
+date -u +%Y-%m-%dT%H:%M:%SZ >"$out/timestamp.txt"
+git -C "$root" rev-parse HEAD >"$out/git-revision.txt"
+capture(){ local file="$1"; shift; { "$@"; } >"$out/$file" 2>&1 || true; }
+capture backend-status.txt icp canister status "$backend" -n ic
+capture frontend-status.txt icp canister status "$frontend" -n ic
+capture backend-instance.txt icp canister call "$backend" get_instance '()' -n ic --query
+capture backend-pricing.txt icp canister call "$backend" get_pricing '()' -n ic --query
+capture backend-logs.txt icp canister logs "$backend" -n ic
+metrics(){ local id="$1" file="$2"; if ! icp canister call aaaaa-aa canister_metrics "(record { canister_id = principal \"$id\" })" -n ic --query --candid "$root/candid/ic-management-metrics.did" >"$out/$file" 2>&1; then printf '\nMetrics unavailable: caller may no longer be a controller.\n' >>"$out/$file"; fi; }
+metrics "$backend" backend-metrics.txt
+metrics "$frontend" frontend-metrics.txt
+printf 'Read-only observation written to %s\n' "$out"

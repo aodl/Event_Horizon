@@ -1,6 +1,6 @@
 # Frontend
 
-The separately controlled Rust frontend embeds and certifies the supplied static assets. Its builder offers Global Ledger, Single subaccount, and Subaccount range modes, preserves the exact declaration text, continuously shows the complete ASCII byte count, and enforces the 32-byte Jupiter Faucet memo limit. Range fields are start, end, and optional minimum ICP; validation never reverses endpoints, drops thresholds, shortens values, or creates multiple memos.
+The separately controlled Rust frontend embeds and certifies the supplied static assets. Its builder offers Global Ledger, Single subaccount, Subaccount range, Single neuron nonce, and Neuron nonce range modes. Target parsing uses `BigInt` across the full `u64` domain; ranges contain at most 256 targets. Neuron modes require live `neuron_governance`. The builder preserves exact declaration text, enforces the complete 32-byte Jupiter memo limit, and verifies both observed Ledger and optional SNS Root against the static registry.
 
 The embedded browser bundle uses `@icp-sdk/core` to invoke the permanent backend `eo6ei-gaaaa-aaaar-qchra-cai` through `https://icp-api.io`. The principal and API host are explicit constants in the certified JavaScript asset and are consequently committed into the frontend Wasm. The production path does not use runtime discovery or fetch a root key; the mainnet root key is embedded by the agent. The frontend canister has no HTTP update endpoint or pricing proxy.
 
@@ -10,4 +10,4 @@ Static HTML, JavaScript, CSS, and SVG bytes remain embedded and certified. The p
 
 When a frozen next price is higher, the builder recommends that amount immediately and explains Faucet delivery delay. When it is lower, the builder continues recommending the current amount until activation. Backend evaluation remains authoritative.
 
-Static assets retain certified query responses. Pricing is obtained at runtime from the read-only backend query rather than inserted into the frontend's static certificate tree. No production backend method beyond `get_pricing` is used.
+Static assets retain certified query responses. Runtime values come from exactly the backend's two production queries: `get_instance` verifies the reviewed immutable instance configuration/profile, and `get_pricing` supplies authoritative admission pricing. Neither query is inserted into the frontend's static certificate tree, and the frontend has no update or administrative access to backend state.

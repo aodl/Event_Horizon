@@ -1,8 +1,13 @@
-#![allow(dead_code)]
 use std::cell::RefCell;
 
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
 use ic_cdk::call::Call;
+#[cfg(feature = "generic_icrc3")]
+use icrc_ledger_types::icrc3::{
+    archive::QueryArchiveFn,
+    blocks::{ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResult, SupportedBlockType},
+};
+use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc1::account::Account as IcrcAccount};
 use sha2::{Digest, Sha224};
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -98,15 +103,41 @@ type LegacyTransferResult = Result<u64, LegacyTransferError>;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugAppendTransfer {
-    pub from: Vec<u8>,
-    pub to: Vec<u8>,
+    pub from: IcrcAccount,
+    pub to: IcrcAccount,
     pub amount_e8s: u64,
+    pub icrc1_memo: Option<Vec<u8>>,
+}
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugAppendNatTransfer {
+    pub from: IcrcAccount,
+    pub to: IcrcAccount,
+    pub amount: Nat,
     pub icrc1_memo: Option<Vec<u8>>,
 }
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugSetBalance {
     pub account: Account,
     pub e8s: u64,
+}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugProfile {
+    pub symbol: String,
+    pub decimals: u8,
+    pub supports_2xfer: bool,
+}
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugMintingAccount {
+    pub account: Option<IcrcAccount>,
+}
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugCapabilities {
+    pub advertises_icrc1: bool,
+    pub advertises_icrc3: bool,
+    pub advertises_1xfer: bool,
 }
 #[derive(Clone, Copy, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum DebugLegacyBehavior {
@@ -134,6 +165,7 @@ struct LegacyDedup {
 }
 struct State {
     blocks: Vec<Block>,
+    icrc_blocks: Vec<ICRC3Value>,
     first_local: u64,
     suppress_archive_info: bool,
     fee_e8s: u64,
@@ -142,11 +174,22 @@ struct State {
     legacy_behavior: DebugLegacyBehavior,
     surplus_legacy_behavior: DebugLegacyBehavior,
     accepted_legacy_transfers: u64,
+    #[cfg(feature = "generic_icrc3")]
+    profile_available: bool,
+    symbol: String,
+    decimals: u8,
+    #[cfg(feature = "generic_icrc3")]
+    supports_2xfer: bool,
+    #[cfg(feature = "generic_icrc3")]
+    capabilities: DebugCapabilities,
+    #[cfg(feature = "generic_icrc3")]
+    minting_account: Option<IcrcAccount>,
 }
 impl Default for State {
     fn default() -> Self {
         Self {
             blocks: vec![],
+            icrc_blocks: vec![],
             first_local: 0,
             suppress_archive_info: false,
             fee_e8s: 10_000,
@@ -155,6 +198,20 @@ impl Default for State {
             legacy_behavior: DebugLegacyBehavior::Normal,
             surplus_legacy_behavior: DebugLegacyBehavior::Normal,
             accepted_legacy_transfers: 0,
+            #[cfg(feature = "generic_icrc3")]
+            profile_available: true,
+            symbol: "ICP".into(),
+            decimals: 8,
+            #[cfg(feature = "generic_icrc3")]
+            supports_2xfer: true,
+            #[cfg(feature = "generic_icrc3")]
+            capabilities: DebugCapabilities {
+                advertises_icrc1: true,
+                advertises_icrc3: true,
+                advertises_1xfer: true,
+            },
+            #[cfg(feature = "generic_icrc3")]
+            minting_account: None,
         }
     }
 }
@@ -191,8 +248,8 @@ fn set_balance(state: &mut State, account: Account, value: u64) {
 }
 fn append_transfer(
     state: &mut State,
-    from: Vec<u8>,
-    to: Vec<u8>,
+    from: IcrcAccount,
+    to: IcrcAccount,
     amount: u64,
     fee: u64,
     memo: Option<Vec<u8>>,
@@ -200,14 +257,37 @@ fn append_transfer(
 ) -> u64 {
     let idx = state.blocks.len() as u64;
     let now = ic_cdk::api::time();
+    let from_id = account_identifier(from.owner, *from.effective_subaccount());
+    let to_id = account_identifier(to.owner, *to.effective_subaccount());
+    let account_value = |account: IcrcAccount| {
+        ICRC3Value::Array(vec![
+            ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+            ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+        ])
+    };
+    let mut tx = std::collections::BTreeMap::from([
+        ("op".into(), ICRC3Value::Text("xfer".into())),
+        ("from".into(), account_value(from)),
+        ("to".into(), account_value(to)),
+        ("amt".into(), ICRC3Value::Nat(amount.into())),
+    ]);
+    if let Some(value) = memo.clone() {
+        tx.insert("memo".into(), ICRC3Value::Blob(value.into()));
+    }
+    state
+        .icrc_blocks
+        .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+            ("btype".into(), ICRC3Value::Text("1xfer".into())),
+            ("tx".into(), ICRC3Value::Map(tx)),
+        ])));
     state.blocks.push(Block {
         parent_hash: None,
         transaction: Transaction {
             memo: legacy_memo,
             icrc1_memo: memo,
             operation: Some(Operation::Transfer {
-                from,
-                to,
+                from: from_id.to_vec(),
+                to: to_id.to_vec(),
                 amount: Tokens { e8s: amount },
                 fee: Tokens { e8s: fee },
                 spender: None,
@@ -221,6 +301,35 @@ fn append_transfer(
         },
     });
     idx
+}
+
+#[ic_cdk::update]
+fn debug_repair_last_transfer(arg: DebugAppendTransfer) {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let Some(last) = s.icrc_blocks.last_mut() else {
+            ic_cdk::trap("no block to repair")
+        };
+        let account_value = |account: IcrcAccount| {
+            ICRC3Value::Array(vec![
+                ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+            ])
+        };
+        let mut tx = std::collections::BTreeMap::from([
+            ("op".into(), ICRC3Value::Text("xfer".into())),
+            ("from".into(), account_value(arg.from)),
+            ("to".into(), account_value(arg.to)),
+            ("amt".into(), ICRC3Value::Nat(arg.amount_e8s.into())),
+        ]);
+        if let Some(memo) = arg.icrc1_memo {
+            tx.insert("memo".into(), ICRC3Value::Blob(memo.into()));
+        }
+        *last = ICRC3Value::Map(std::collections::BTreeMap::from([
+            ("btype".into(), ICRC3Value::Text("1xfer".into())),
+            ("tx".into(), ICRC3Value::Map(tx)),
+        ]));
+    })
 }
 
 #[ic_cdk::init]
@@ -334,11 +443,13 @@ async fn transfer(arg: LegacyTransferArg) -> LegacyTransferResult {
             });
         }
         set_balance(&mut s, source, balance - need);
-        let from_id = account_identifier(caller, arg.from_subaccount.unwrap_or([0; 32])).to_vec();
         let block = append_transfer(
             &mut s,
-            from_id,
-            arg.to.clone(),
+            IcrcAccount {
+                owner: caller,
+                subaccount: arg.from_subaccount,
+            },
+            IcrcAccount::from(Principal::management_canister()),
             arg.amount.e8s,
             arg.fee.e8s,
             None,
@@ -383,6 +494,326 @@ fn debug_append_transfer(arg: DebugAppendTransfer) -> u64 {
             0,
         )
     })
+}
+#[ic_cdk::update]
+fn debug_append_transfer_from(arg: DebugAppendTransfer) -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = append_transfer(
+            &mut s,
+            arg.from,
+            arg.to,
+            arg.amount_e8s,
+            10_000,
+            arg.icrc1_memo,
+            0,
+        );
+        if let ICRC3Value::Map(block) = &mut s.icrc_blocks[id as usize] {
+            block.insert("btype".into(), ICRC3Value::Text("2xfer".into()));
+        }
+        id
+    })
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_append_nat_transfer(arg: DebugAppendNatTransfer) -> u64 {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let id = state.icrc_blocks.len() as u64;
+        let account_value = |account: IcrcAccount| {
+            ICRC3Value::Array(vec![
+                ICRC3Value::Blob(account.owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(account.effective_subaccount().to_vec().into()),
+            ])
+        };
+        let mut tx = std::collections::BTreeMap::from([
+            ("op".into(), ICRC3Value::Text("xfer".into())),
+            ("from".into(), account_value(arg.from)),
+            ("to".into(), account_value(arg.to)),
+            ("amt".into(), ICRC3Value::Nat(arg.amount)),
+        ]);
+        if let Some(memo) = arg.icrc1_memo {
+            tx.insert("memo".into(), ICRC3Value::Blob(memo.into()));
+        }
+        state
+            .icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+                ("btype".into(), ICRC3Value::Text("1xfer".into())),
+                ("tx".into(), ICRC3Value::Map(tx)),
+            ])));
+        id
+    })
+}
+#[ic_cdk::update]
+fn debug_append_other(kind: String) -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = s.icrc_blocks.len() as u64;
+        s.icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([(
+                "btype".into(),
+                ICRC3Value::Text(kind),
+            )])));
+        s.blocks.push(Block {
+            parent_hash: None,
+            transaction: Transaction {
+                memo: 0,
+                icrc1_memo: None,
+                operation: None,
+                created_at_time: TimeStamp {
+                    timestamp_nanos: ic_cdk::api::time(),
+                },
+            },
+            timestamp: TimeStamp {
+                timestamp_nanos: ic_cdk::api::time(),
+            },
+        });
+        id
+    })
+}
+#[ic_cdk::update]
+fn debug_append_legacy_other(kind: String) -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = s.blocks.len() as u64;
+        let account = account_identifier(Principal::from_slice(&[9]), [0; 32]).to_vec();
+        let tokens = Tokens { e8s: 1 };
+        let operation = match kind.as_str() {
+            "mint" => Operation::Mint {
+                to: account,
+                amount: tokens,
+            },
+            "burn" => Operation::Burn {
+                from: account,
+                spender: None,
+                amount: tokens,
+            },
+            "approve" => Operation::Approve {
+                from: account.clone(),
+                spender: account,
+                allowance_e8s: Int::from(1),
+                allowance: tokens,
+                fee: Tokens { e8s: 10_000 },
+                expires_at: None,
+                expected_allowance: None,
+            },
+            _ => ic_cdk::trap("unknown legacy operation"),
+        };
+        s.icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([(
+                "btype".into(),
+                ICRC3Value::Text(kind),
+            )])));
+        let now = ic_cdk::api::time();
+        s.blocks.push(Block {
+            parent_hash: None,
+            transaction: Transaction {
+                memo: 0,
+                icrc1_memo: None,
+                operation: Some(operation),
+                created_at_time: TimeStamp {
+                    timestamp_nanos: now,
+                },
+            },
+            timestamp: TimeStamp {
+                timestamp_nanos: now,
+            },
+        });
+        id
+    })
+}
+#[ic_cdk::update]
+fn debug_append_malformed_transfer() -> u64 {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let id = s.icrc_blocks.len() as u64;
+        s.icrc_blocks
+            .push(ICRC3Value::Map(std::collections::BTreeMap::from([
+                ("btype".into(), ICRC3Value::Text("1xfer".into())),
+                (
+                    "tx".into(),
+                    ICRC3Value::Map(std::collections::BTreeMap::new()),
+                ),
+            ])));
+        s.blocks.push(Block {
+            parent_hash: None,
+            transaction: Transaction {
+                memo: 0,
+                icrc1_memo: None,
+                operation: None,
+                created_at_time: TimeStamp {
+                    timestamp_nanos: ic_cdk::api::time(),
+                },
+            },
+            timestamp: TimeStamp {
+                timestamp_nanos: ic_cdk::api::time(),
+            },
+        });
+        id
+    })
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct SupportedStandard {
+    name: String,
+    url: String,
+}
+
+#[ic_cdk::query]
+fn icrc1_supported_standards() -> Vec<SupportedStandard> {
+    #[cfg(feature = "generic_icrc3")]
+    STATE.with(|s| {
+        if !s.borrow().profile_available {
+            ic_cdk::trap("forced profile unavailable")
+        }
+    });
+    #[allow(unused_mut)]
+    let mut standards = Vec::new();
+    #[cfg(not(feature = "generic_icrc3"))]
+    standards.extend([
+        SupportedStandard {
+            name: "ICRC-1".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        },
+        SupportedStandard {
+            name: "ICRC-2".into(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".into(),
+        },
+    ]);
+    #[cfg(feature = "generic_icrc3")]
+    STATE.with(|s| {
+        let capabilities = &s.borrow().capabilities;
+        if capabilities.advertises_icrc1 {
+            standards.push(SupportedStandard {
+                name: "ICRC-1".into(),
+                url: "https://github.com/dfinity/ICRC-1".into(),
+            });
+        }
+        if capabilities.advertises_icrc3 {
+            standards.push(SupportedStandard {
+                name: "ICRC-3".into(),
+                url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".into(),
+            });
+        }
+    });
+    standards
+}
+#[ic_cdk::query]
+fn icrc1_symbol() -> String {
+    #[cfg(feature = "generic_icrc3")]
+    STATE.with(|s| {
+        if !s.borrow().profile_available {
+            ic_cdk::trap("forced profile unavailable")
+        }
+    });
+    STATE.with(|s| s.borrow().symbol.clone())
+}
+#[ic_cdk::query]
+fn icrc1_decimals() -> u8 {
+    #[cfg(feature = "generic_icrc3")]
+    STATE.with(|s| {
+        if !s.borrow().profile_available {
+            ic_cdk::trap("forced profile unavailable")
+        }
+    });
+    STATE.with(|s| s.borrow().decimals)
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
+fn icrc1_minting_account() -> Option<IcrcAccount> {
+    STATE.with(|s| s.borrow().minting_account)
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
+fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
+    STATE.with(|s| {
+        if !s.borrow().profile_available {
+            ic_cdk::trap("forced profile unavailable")
+        }
+    });
+    let mut types = Vec::new();
+    if STATE.with(|s| s.borrow().capabilities.advertises_1xfer) {
+        types.push(SupportedBlockType {
+            block_type: "1xfer".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        });
+    }
+    if STATE.with(|s| s.borrow().supports_2xfer) {
+        types.push(SupportedBlockType {
+            block_type: "2xfer".into(),
+            url: "https://github.com/dfinity/ICRC-1".into(),
+        });
+    }
+    types
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
+fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    STATE.with(|state| {
+        let state = state.borrow();
+        let mut blocks = Vec::new();
+        let mut archived_blocks = Vec::new();
+        for request in args {
+            let (start, length) = request.as_start_and_length().unwrap();
+            let end = start
+                .saturating_add(length)
+                .min(state.icrc_blocks.len() as u64);
+            let archive_end = state.first_local.min(end);
+            if start < archive_end && !state.suppress_archive_info {
+                archived_blocks.push(ArchivedBlocks {
+                    args: vec![GetBlocksRequest {
+                        start: start.into(),
+                        length: (archive_end - start).into(),
+                    }],
+                    callback: QueryArchiveFn::new(
+                        ic_cdk::api::canister_self(),
+                        "forbidden_archive_callback",
+                    ),
+                });
+            }
+            for id in start.max(state.first_local)..end {
+                blocks.push(BlockWithId {
+                    id: id.into(),
+                    block: state.icrc_blocks[id as usize].clone(),
+                });
+            }
+        }
+        GetBlocksResult {
+            log_length: (state.icrc_blocks.len() as u64).into(),
+            blocks,
+            archived_blocks,
+        }
+    })
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_profile_available(value: bool) {
+    STATE.with(|s| s.borrow_mut().profile_available = value);
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_profile(value: DebugProfile) {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.symbol = value.symbol;
+        s.decimals = value.decimals;
+        s.supports_2xfer = value.supports_2xfer;
+    });
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_minting_account(value: DebugMintingAccount) {
+    STATE.with(|s| s.borrow_mut().minting_account = value.account);
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_capabilities(value: DebugCapabilities) {
+    STATE.with(|s| s.borrow_mut().capabilities = value);
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
+fn forbidden_archive_callback(_: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    ic_cdk::trap("archive callback must not be called")
 }
 #[ic_cdk::update]
 fn debug_set_first_local_block(index: u64) {

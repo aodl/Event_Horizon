@@ -110,10 +110,10 @@ pub fn schedule_from_balance() {
     let mut meta = state::read_metadata();
     let mode = next_mode(meta.polling_mode, balance);
     if mode != meta.polling_mode {
+        logging::poll_mode_change(meta.polling_mode, mode, balance);
         meta.polling_mode = mode;
         state::write_metadata(meta);
     }
-    logging::reserve_mode(mode == PollingMode::ReserveProtection, balance);
     let delay = match mode.delay_seconds() {
         Some(seconds) => Duration::from_secs(seconds),
         None => Duration::from_secs(config::RESERVE_RECHECK_SECONDS),
@@ -126,10 +126,10 @@ pub fn start() {
     let mut meta = state::read_metadata();
     let mode = next_mode(meta.polling_mode, balance);
     if mode != meta.polling_mode {
+        logging::poll_mode_change(meta.polling_mode, mode, balance);
         meta.polling_mode = mode;
         state::write_metadata(meta);
     }
-    logging::reserve_mode(mode == PollingMode::ReserveProtection, balance);
     if mode == PollingMode::ReserveProtection {
         schedule_poll(Duration::from_secs(config::RESERVE_RECHECK_SECONDS));
     } else {

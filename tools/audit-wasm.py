@@ -71,7 +71,7 @@ def main() -> None:
         and n != internal_timer
     ]
     if args.backend:
-        expected = ["canister_query get_pricing"]
+        expected = ["canister_query get_instance", "canister_query get_pricing"]
         if app_methods != expected:
             raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")
         # The IC system import `debug_print` is used for exceptional logs.

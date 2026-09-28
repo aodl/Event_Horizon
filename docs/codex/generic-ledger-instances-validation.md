@@ -1,0 +1,289 @@
+# Generic ledger instances corrective validation
+
+## Target-aware u64 and nervous-system extension
+
+The final schema uses canonical decimal `u64` numeric targets encoded as `24 zero bytes || N.to_be_bytes()`. Inclusive ranges may begin anywhere and expand to at most 256 watched accounts. `n<N>` uses the shared SHA-256 `neuron-stake` controller/nonce derivation. ICP resolves those accounts under fixed NNS Governance; an SNS-aware generic instance stores immutable `sns_root`, verifies Root's Ledger/Governance tuple and the Ledger's Governance-default minting account, then caches Governance in the observed profile. Non-SNS generic instances retain `neuron_governance = null`.
+
+The callback reports deterministic `{ target; max_amount : Nat }` matches. Maxima are per individual qualifying transfer in raw observed-token atomic units; specific vectors take precedence over global `poke([])` and retain at most 256 targets per subscriber/poll. Generic `Nat` never narrows through `u64`. The same canonical backend Wasm is configured for ICP/NNS, generic non-SNS, and verified generic SNS modes; SNS-WASM is review evidence only, never a runtime dependency.
+
+## Revision information
+
+- Original baseline: `c0afddded408bb1c9963b235d91b32478963bb79`
+- Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
+- Branch: `codex/generic-ledger-instances`
+- Canonical artifact source revision:
+  `15b2bc591f449937de3073e3279d047cee5e2682`
+- Final source/evidence revision:
+  `f1e8eb023e99b206de9926430ded6159667e7a6e`
+
+No migration from the acceptance deployment or an intermediate generic schema
+was added. A deliberate reinstall remains the accepted transition.
+
+## Canonical ICP protocol
+
+Operator-supplied read-only mainnet evidence from 2026-09-26 establishes that
+canonical ICP Ledger `ryjl3-tyaaa-aaaaa-aaaba-cai` advertises exactly ICRC-1,
+ICRC-2, and ICRC-21. A query-mode `icrc3_supported_block_types` call was
+rejected with `IC0536`: `Canister has no query method
+'icrc3_supported_block_types'`. Codex did not generate that live evidence; it
+was supplied from the operator's network-enabled environment. Pinned official
+DFINITY source/Candid evidence is retained in
+`decision-required-canonical-icp-ledger-contract.md`.
+
+Canonical ICP uses the fixed legacy `query_blocks` adapter. One physical page
+read supplies Faucet admission and ICP-instance observation in ledger order.
+`icp_instance_uses_one_page_read_for_both_roles` instruments legacy page calls.
+`shared_icp_scan_applies_admission_in_legacy_block_order` proves that admission
+starts matching only later blocks in the same authoritative stream.
+Global ordering is proved separately: `shared_global_admission_block_does_not_self_wake`,
+`shared_global_admission_matches_later_same_poll_activity`, and
+`shared_global_activity_before_admission_is_not_retroactive` cover the admission
+boundary, while `existing_shared_global_many_blocks_coalesce_to_one_poke`
+proves existing-global activity and one-poke coalescing. Static checks also
+prove `legacy_page` does not enumerate the global registry per live block.
+
+## Generic non-ICP protocol
+
+Every non-ICP Observed Ledger must advertise ICRC-1 and ICRC-3 and expose
+`1xfer`; `2xfer` is optional. The profile caches bounded symbol, decimals, and
+transfer-from capability. The narrow decoder recognizes `1xfer`, advertised
+`2xfer`, and the reviewed absent-`btype`/`tx.op=xfer` legacy form. Identified
+malformed transfers fail closed; unknown valid types are global activity only.
+
+`generic_profile_requires_icrc1_icrc3_and_1xfer_but_not_2xfer` proves each
+mandatory capability and optional `2xfer`. `transfer_from_global_other_and_
+malformed_retry_semantics` proves transfer-from, unknown-block, global, and
+malformed retry behavior.
+
+## Same-Wasm proof
+
+One backend Wasm contains both adapters. Equality with the compiled canonical
+ICP principal selects the shared legacy reader; every other principal selects
+ICRC-3 observation plus legacy ICP admission. There is no fallback, mutable
+reader choice, or arbitrary legacy-ledger support.
+
+`same_wasm_supports_icp_generic_and_verified_sns_modes` uses the same cached
+debug backend bytes for ICP/NNS, generic non-SNS, and verified generic SNS
+configurations, checks their SHA-256 equality, proves mode-specific behavior,
+and proves that funding still calls only the Protocol ICP Ledger. The
+production artifact remains a single `event_horizon.wasm`.
+
+SNS relationship discovery fails closed. Root/Ledger mismatch,
+Root-Governance/Ledger-minting-owner mismatch, and non-default minting
+subaccounts all leave the profile unresolved and observed processing parked.
+`sns_root_ledger_mismatch_fails_closed_then_recovers` proves correction can
+recover normally. `sns_profile_failures_log_once_per_episode_and_recover`
+proves repeated Root transport failure emits one `SNS_ROOT_UNAVAILABLE`,
+repeated semantic mismatch emits one `SNS_RELATION_INVALID`, and successful
+verification clears the transient failure state. These flags are not stable.
+
+## Stream and stable-state semantics
+
+Fresh cursors are prospective: legacy streams use `chain_length`; generic
+streams use `log_length`. Both shared and distinct modes establish the Protocol
+ICP starting cursor before profile discovery. In distinct mode, observed
+scanning uses subscriptions present at poll start, then admission runs, then the
+already-determined match set is delivered.
+
+Only explicit contiguous archive ranges may advance a cursor and archive
+callbacks are never called. Archive-only progress is not live activity. A live
+page publishes its admission mutations and corresponding cursor together only
+after all required page processing. Historian-verified admissions remain in a
+page-local staging overlay and are not durable ahead of that cursor. Later
+shared-page blocks can match the staged account overlay, while the admission
+block and earlier activity remain non-matching. An unexplained hole or malformed
+required transfer preserves its live cursor. Reserve Protection is local
+suppression, does not mutate cursors, and does not emit a remote-outage
+transition.
+
+Shared cursor flags and values must agree. Divergence logs one exceptional
+diagnostic and fails closed without a fetch, rewind, mutation, or poke.
+
+The final ID 1 watched-account keys are:
+
+```text
+0x00 || 32-byte ICP AccountIdentifier
+0x01 || principal-length byte || principal || effective 32-byte ICRC subaccount
+```
+
+This collision-separates the irreversible legacy ICP representation from ICRC
+Account semantics while retaining one direct stable-map lookup. There is no
+abandoned-key migration. Threshold values remain arbitrary-precision `Nat`;
+ICP uses eight decimals and generic precision comes from `icrc1_decimals`.
+
+Evidence includes:
+
+- `fresh_profile_failure_preserves_prospective_icp_admission_start`
+- `distinct_ledger_admission_is_not_retroactive_within_a_poll`
+- `distinct_stream_failures_do_not_suppress_the_other_stream`
+- `archive_only_progress_does_not_poke_a_global_subscriber`
+- `unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives`
+- `live_page_cursor_is_atomic_across_a_late_malformed_block`
+- `staged_account_admission_is_not_durable_before_shared_cursor_commit`
+- `staged_global_admission_is_not_durable_before_shared_cursor_commit`
+- `staged_distinct_admission_is_not_durable_before_admission_cursor_commit`
+- `reserve_protection_does_not_mutate_cursors_or_log_remote_outages`
+- `shared_cursor_divergence_fails_closed_without_rewind_or_fetch`
+- `subscription_and_cursor_survive_upgrade`
+- `sns_current_schema_profile_subscription_and_cursor_survive_upgrade`
+- `ordinary_u64_target_256_matches_only_big_endian_account`
+- `nns_neuron_range_is_prospective_and_reports_deterministic_maxima`
+- `sns_neuron_range_uses_verified_governance_owner`
+- `generic_nat_amount_survives_end_to_end_poke`
+- `outbound_poke_retains_first_256_specific_targets`
+- `loosened_threshold_reports_largest_transfer_for_local_prefilter`
+
+## Frontend
+
+The registry is static: ICP is live/canonical with alias `X`; IO is
+planned/canonical with intended alias `I` and unset principals/hash. A live
+entry must match `get_instance.observed_ledger` and `get_instance.sns_root`,
+and have an observed profile before memo construction is enabled. The UI shows
+SNS Root and verified neuron Governance, changes labels between numeric
+subaccounts and neuron nonces, disables unsupported neuron modes, and returns
+an invalid selection to ordinary account mode when instances change.
+
+The UI uses the official `@icp-sdk/core` Principal parser, trims UI whitespace,
+rejects malformed checksum/encoding plus anonymous and management principals,
+emits the compact representation already accepted by the backend, and applies
+the 32-byte limit to the final memo. Runtime ledger/error text uses
+`textContent` through `renderRuntimeError`.
+
+Frontend cases `official Principal parsing matches backend subscriber rules`,
+`memo limit applies after validated Principal normalization`, and `runtime
+error rendering uses a text sink` cover validation parity, exact/over-limit
+memos, and malicious-looking runtime text.
+
+## Validation results
+
+Target-aware extension completed on 2026-09-27:
+
+- Static/source checks: passed.
+- Rust formatting and Clippy: passed.
+- Backend unit tests: 56 passed.
+- Frontend tests: 11 passed.
+- PocketIC integration: 72 passed in the final complete current-tree run.
+- Security gate: passed. `cargo audit` reported the four documented allowed
+  maintenance warnings; cargo-deny advisories/bans/licenses/sources passed;
+  npm audit reported zero vulnerabilities; OSV reported no unfiltered issues.
+- Production backend export audit: passed in
+  `production_wasm_exposes_only_instance_and_pricing_queries` and static checks.
+- Production frontend export audit: passed in static checks.
+- `DFX_IDENTITY=codex_local icp build -e local`: passed.
+- Full `xtask validate` passed without retry: tests, security, two no-cache
+  reproducibility builds, and the final canonical build all completed.
+- Two independent `docker build --no-cache` artifact sets: byte-identical.
+- Canonical backend SHA-256:
+  `91a12fe2f63edb5f7a3bab311a34294195a45bdde8df6eae3f83d3694387ad77`.
+- Canonical frontend SHA-256:
+  `9028449c0caccd1358dd29b5055484d0e5fef9e3a498fe4a11fb2289b0a26187`.
+- Deterministic canonical-artifact archive SHA-256:
+  `8c39c2b16078eebbb70c06b49e122882755d00bb9502966d6c2010bce3395439`.
+- Canonical artifact manifest: all three entries verified.
+- Source manifest: regenerated after final evidence and verified before the
+  final evidence commit.
+
+The static ICP registry pins the exact canonical backend hash above. The
+backend export audit passed with ten total Wasm exports and exactly
+`canister_query get_instance` and `canister_query get_pricing` as application
+methods. The frontend audit passed with seven total exports and exactly
+`canister_query http_request` as its application method.
+
+## Documentation-hardening validation
+
+The live protocol documentation was hardened on 2026-09-28 without changing
+backend source, frontend runtime assets, Candid, or stable state. The pass added
+the documentation index and explicit multi-ledger subscriber guidance, made
+the target-aware `SPEC.md` normative wording complete, corrected the canonical
+backend reinstall and conditional frontend install/upgrade runbook, and added
+targeted documentation-drift checks. Source-manifest verification now rejects
+missing, unexpected, and duplicate paths before checking every file hash;
+`docs/README.md` is included in the manifest.
+
+Validation from clean revision
+`15b2bc591f449937de3073e3279d047cee5e2682` produced:
+
+- static/source checks, formatting, and Clippy: passed;
+- backend unit tests: 56 passed;
+- frontend tests: 11 passed;
+- PocketIC integration: 72 passed in the successful complete validation run;
+- security gate: passed with the same four reviewed maintenance warnings and
+  no unfiltered cargo-audit, cargo-deny, npm-audit, or OSV issue;
+- two independent no-cache Docker builds: byte-identical;
+- backend and frontend export audits: passed;
+- canonical artifact manifest: all three entries verified;
+- `DFX_IDENTITY=codex_local icp build -e local`: passed.
+
+The local `icp build` compatibility check intentionally produced
+local-toolchain artifacts; the canonical Docker build was rerun afterward and
+restored the reviewed canonical set. Executable Wasm bytes remained identical
+to the preceding release:
+
+- backend SHA-256:
+  `91a12fe2f63edb5f7a3bab311a34294195a45bdde8df6eae3f83d3694387ad77`;
+- frontend SHA-256:
+  `9028449c0caccd1358dd29b5055484d0e5fef9e3a498fe4a11fb2289b0a26187`.
+
+The deterministic canonical-artifact archive SHA-256 is
+`2f85243a86f7a238ff369877f269b2df1b9ebe433a3e354704d3e03cc669d650`.
+Its hash changed because the normative `SPEC.md` hash changed the canonical
+`build-info.json` and artifact manifest; the executable Wasms did not change.
+
+## Required evidence checklist
+
+- [x] Live canonical contract recorded — resolved-contract report.
+- [x] ICP mock has no successful ICRC-3 endpoint —
+  `canonical_icp_mock_does_not_expose_icrc3`.
+- [x] Generic mock is a separate package/artifact — `mock-icrc3-ledger`.
+- [x] Same Wasm runs ICP and non-ICP modes — `same_wasm_supports_...`.
+- [x] ICP uses one legacy page fetch — `icp_instance_uses_one_page_read_...`.
+- [x] Non-ICP uses ICRC-3 observation plus legacy admission — same-Wasm and
+  distinct-order tests.
+- [x] Observed asset never funds Event Horizon — same-Wasm funding assertion.
+- [x] Profile outage cannot skip later payout — `fresh_profile_failure_...`.
+- [x] Distinct failures are independent — `distinct_stream_failures_...`.
+- [x] Shared order controls matching — `shared_icp_scan_applies_...`.
+- [x] Distinct admission is non-retroactive — `distinct_ledger_admission_...`.
+- [x] Archive-only progress never wakes global — `archive_only_progress_...`.
+- [x] Unexplained gap preserves cursor — `unexplained_ledger_hole_...`.
+- [x] Malformed transfer preserves cursor — `live_page_cursor_is_atomic_...`.
+- [x] Verified admission never becomes durable ahead of its legacy cursor —
+  `staged_account_admission_is_not_durable_before_shared_cursor_commit`,
+  `staged_global_admission_is_not_durable_before_shared_cursor_commit`, and
+  `staged_distinct_admission_is_not_durable_before_admission_cursor_commit`.
+- [x] Reserve Protection logs no false outage — `reserve_protection_...`.
+- [x] Shared divergence fails closed/no rewind — `shared_cursor_divergence_...`.
+- [x] Final-schema upgrade causes no duplicate poke —
+  `subscription_and_cursor_survive_upgrade`.
+- [x] ICP default/numbered/range watched accounts — admission, multi-account,
+  maximum-range, and range-overlap tests.
+- [x] Generic ICRC Account and zero normalization — transfer test plus
+  `absent_and_zero_icrc_subaccounts_have_the_same_key`.
+- [x] Arbitrary-precision thresholds and precision sources — backend decimal
+  tests and generic readiness test; ICP integration uses eight decimals.
+- [x] `1xfer`, optional `2xfer`, and unknown activity — generic readiness and
+  transfer/global/malformed test.
+- [x] ICP mint/burn/approve global-only behavior —
+  `icp_mint_burn_and_approve_are_global_only_activity`.
+- [x] Specific/global precedence and maximum one poke — global precedence and
+  coalescing tests.
+- [x] Real frontend Principal parsing/parity/special-principal rejection —
+  frontend Principal and memo-limit cases plus backend memo unit tests.
+- [x] Unsafe runtime text stays text — runtime text-sink frontend case.
+- [x] `SURPLUS_CANISTER=None`, exact production surfaces, and unset IO IDs —
+  static checks and production export regression.
+- [x] Final registry contains new canonical backend hash — frontend registry
+  and canonical frontend artifact.
+- [x] Two canonical builds are byte-identical — `xtask validate` reproducibility
+  stage compared every emitted artifact from two `--no-cache` Docker builds.
+- [x] Full-width numeric and neuron derivations — numeric encoding/parser unit
+  cases, DFINITY staking vectors, `nns_neuron_nonce_...`, and
+  `verified_sns_neuron_uses_governance_owner`.
+- [x] Target-aware maximum/bound behavior — exact ICP/SNS poke assertions plus
+  `maxima_order_and_arbitrary_precision_are_preserved` and
+  `specific_target_bound_keeps_updates_for_retained_targets`.
+
+## Safety
+
+No deployment, reinstall, upgrade, transfer, top-up, controller change,
+blackholing, alias publication, or other mainnet mutation was performed.

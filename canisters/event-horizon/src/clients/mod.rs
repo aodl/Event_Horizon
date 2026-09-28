@@ -1,4 +1,5 @@
 pub mod cmc;
 pub mod historian;
-pub mod ledger;
+pub mod icp_ledger;
+pub mod icrc3;
 pub mod subscriber;

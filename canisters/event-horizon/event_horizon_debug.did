@@ -8,30 +8,45 @@ type Pricing = record {
   next_carried_forward_due_to_stale_rate : bool;
 };
 type DebugInitArgs = record {
-  ledger_canister : principal; cmc_canister : principal;
+  observed_ledger : principal; icp_ledger : principal; cmc_canister : principal;
   historian_canister : principal; faucet_canister : principal;
   surplus_canister : opt principal;
+  sns_root : opt principal;
 };
 type DebugState = record {
-  bootstrapped : bool; next_block : nat64; polling_mode : PollingMode;
+  admission_bootstrapped : bool; admission_next_block : nat64;
+  observed_bootstrapped : bool; observed_next_block : nat64; polling_mode : PollingMode;
   subscriptions : nat64; global_subscriptions : nat64; cmc_state : text;
   surplus_policy : text; surplus_destination : opt principal;
   pricing : Pricing;
 };
-type Subscription = record {
-  subscriber : principal; numbered_subaccount : nat8; minimum_e8s : nat64;
-};
+type WatchTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type Subscription = record { subscriber : principal; target : WatchTarget; minimum_units : nat };
 service : (DebugInitArgs) -> {
+  get_instance : () -> (record {
+    observed_ledger : principal;
+    observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool; neuron_governance : opt principal };
+    sns_root : opt principal;
+    icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
+    jupiter_historian : principal; surplus_canister : opt principal;
+  }) query;
   get_pricing : () -> (Pricing) query;
   debug_state : () -> (DebugState) query;
   debug_poll_once : () -> ();
   debug_funding_once : () -> ();
   debug_pricing_once : () -> ();
   debug_set_surplus_level : (nat8) -> ();
+  debug_set_surplus_canister : (opt principal) -> ();
   debug_set_liquid_cycles_override : (opt nat) -> ();
   debug_set_ledger_canister : (principal) -> ();
   debug_start_schedulers : () -> ();
   debug_timer_count : () -> (nat8) query;
-  debug_subscription : (record { subscriber : principal; subaccount : nat8 }) -> (opt Subscription) query;
+  debug_icrc3_get_blocks_calls : () -> (nat64) query;
+  debug_legacy_query_blocks_calls : () -> (nat64) query;
+  debug_set_cursors : (record {
+    admission_bootstrapped : bool; admission_next_block : nat64;
+    observed_bootstrapped : bool; observed_next_block : nat64;
+  }) -> ();
+  debug_subscription : (record { subscriber : principal; target : WatchTarget }) -> (opt Subscription) query;
   debug_global_subscription : (principal) -> (bool) query;
 }

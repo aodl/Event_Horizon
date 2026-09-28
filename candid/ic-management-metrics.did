@@ -1,0 +1,9 @@
+type canister_id = principal;
+type cycles_consumed = record {
+  memory : nat; compute_allocation : nat; ingress_induction : nat;
+  instructions : nat; request_and_response_transmission : nat;
+  uninstall : nat; canister_creation : nat; http_outcalls : nat; burned_cycles : nat;
+};
+service : {
+  canister_metrics : (record { canister_id : canister_id }) -> (record { cycles_consumed : cycles_consumed }) query;
+}

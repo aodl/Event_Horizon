@@ -14,7 +14,7 @@ global  = ceil(100 × F / C)
 
 All calculations use checked integer arithmetic. Range pricing is independently equivalent to the 20-ICP basis, not twice the rounded account price. The implementation uses the identity `ceil(20F/C) = ceil(ceil(100F/C)/5)` so no stable pricing migration is needed. Prices freeze seven 24-hour days before the next month's UTC boundary. Observations recorded at or after the exact freeze wait for a later epoch. If the latest eligible CMC timestamp is more than seven days old, the current prices carry forward.
 
-Event Horizon does not price ranges according to the number of subaccounts they contain. A single subaccount can generate more activity than a large range, and Event Horizon already reads every ICP Ledger transaction. Range subscriptions therefore use a simple 20-ICP reference basis—twice the standard account reference basis—while global Ledger subscriptions use a 100-ICP basis.
+Event Horizon does not price ranges according to the number of specific targets they contain. A single target can generate more activity than a large range, and Event Horizon already reads every observed-ledger transaction. Ordinary and neuron ranges therefore use a simple 20-ICP reference basis—twice the standard account-class reference basis—while global Ledger subscriptions use a 100-ICP basis.
 
 Admission compares the exact Historian route total with the current requirement at evaluation time. Existing admissions remain permanent. Larger endowments buy no additional service.
 

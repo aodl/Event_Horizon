@@ -6,6 +6,14 @@
 
 Run `cargo run -p xtask -- help` for concise command-line help.
 
+Mainnet acceptance snapshots are deliberately outside deterministic validation:
+
+```sh
+./tools/scripts/mainnet-observe [backend-id] [frontend-id]
+```
+
+This command is read-only and may use controller credentials solely to read cumulative `canister_metrics`. It performs no deployment or settings mutation.
+
 ## Prerequisites
 
 ### Normal development

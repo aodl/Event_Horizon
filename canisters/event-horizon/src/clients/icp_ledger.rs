@@ -1,7 +1,8 @@
+use crate::config::RESERVE_PROTECTION_CYCLES;
+#[cfg(feature = "debug_api")]
+thread_local! { static QUERY_BLOCKS_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
 use ic_cdk::call::{Call, CallErrorExt};
-
-use crate::config::RESERVE_PROTECTION_CYCLES;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct Tokens {
@@ -56,27 +57,47 @@ pub struct Block {
     pub transaction: Transaction,
     pub timestamp: TimeStamp,
 }
-
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct GetBlocksArgs {
     pub start: u64,
     pub length: u64,
 }
-
-/// Event Horizon intentionally does not decode or call archive callbacks. Candid record
-/// subtyping permits this narrow range representation containing only the location.
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct ArchivedBlocksRange {
     pub start: u64,
     pub length: u64,
 }
-
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct QueryBlocksResponse {
     pub chain_length: u64,
     pub blocks: Vec<Block>,
     pub first_block_index: u64,
     pub archived_blocks: Vec<ArchivedBlocksRange>,
+}
+
+pub async fn query_blocks(
+    ledger: Principal,
+    start: u64,
+    length: u64,
+) -> Result<QueryBlocksResponse, String> {
+    #[cfg(feature = "debug_api")]
+    QUERY_BLOCKS_CALLS.with(|calls| calls.set(calls.get() + 1));
+    let call =
+        Call::bounded_wait(ledger, "query_blocks").with_arg(&GetBlocksArgs { start, length });
+    if ic_cdk::api::canister_liquid_cycle_balance()
+        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
+    {
+        return Err(crate::config::RESERVE_PROTECTION_ERROR.into());
+    }
+    call.await
+        .map_err(|e| format!("query_blocks transport: {e:?}"))?
+        .candid()
+        .map_err(|e| format!("query_blocks decode: {e:?}"))
+}
+
+#[cfg(feature = "debug_api")]
+pub fn debug_query_blocks_calls() -> u64 {
+    QUERY_BLOCKS_CALLS.with(std::cell::Cell::get)
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -110,24 +131,6 @@ pub type LegacyTransferResult = Result<u64, LegacyTransferError>;
 
 fn nat_to_u64(n: &Nat) -> Result<u64, String> {
     u64::try_from(n.0.clone()).map_err(|_| format!("Nat does not fit u64: {n}"))
-}
-
-pub async fn query_blocks(
-    ledger: Principal,
-    start: u64,
-    length: u64,
-) -> Result<QueryBlocksResponse, String> {
-    let args = GetBlocksArgs { start, length };
-    let call = Call::bounded_wait(ledger, "query_blocks").with_arg(&args);
-    if ic_cdk::api::canister_liquid_cycle_balance()
-        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
-    {
-        return Err("reserve_protection".to_string());
-    }
-    call.await
-        .map_err(|e| format!("query_blocks transport: {e:?}"))?
-        .candid::<QueryBlocksResponse>()
-        .map_err(|e| format!("query_blocks decode: {e:?}"))
 }
 
 pub async fn icrc1_balance_of(ledger: Principal, account: Account) -> Result<u64, String> {

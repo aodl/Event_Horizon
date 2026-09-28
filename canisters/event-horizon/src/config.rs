@@ -10,10 +10,10 @@ pub const ICP_LEDGER_CANISTER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub const CMC_CANISTER: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const JUPITER_HISTORIAN_CANISTER: &str = "j5gs6-uiaaa-aaaar-qb5cq-cai";
 pub const JUPITER_FAUCET_CANISTER: &str = "acjuz-liaaa-aaaar-qb4qq-cai";
+pub const NNS_GOVERNANCE_CANISTER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 /// Immutable production surplus destination. `None` keeps diversion disabled.
 pub const SURPLUS_CANISTER: Option<&str> = None;
 
-pub const MIN_TRIGGER_E8S: u64 = 1_000_000; // 0.01 ICP
 pub const LEDGER_PAGE_SIZE: u64 = 256;
 pub const FUNDING_MAINTENANCE_SECONDS: u64 = 60 * 60;
 pub const RESERVE_RECHECK_SECONDS: u64 = 60 * 60;
@@ -23,6 +23,24 @@ pub const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
 
 pub const TRILLION: u128 = 1_000_000_000_000;
 pub const RESERVE_PROTECTION_CYCLES: u128 = TRILLION;
+pub const RESERVE_PROTECTION_ERROR: &str = "reserve_protection";
+pub fn is_reserve_protection(error: &str) -> bool {
+    error == RESERVE_PROTECTION_ERROR
+}
+
+#[cfg(test)]
+mod reserve_tests {
+    #[test]
+    fn reserve_protection_is_classified_separately_from_remote_failures() {
+        assert!(super::is_reserve_protection(
+            super::RESERVE_PROTECTION_ERROR
+        ));
+        assert!(!super::is_reserve_protection(
+            "query_blocks transport: reject"
+        ));
+        assert!(!super::is_reserve_protection("icrc3_get_blocks decode"));
+    }
+}
 pub const ECONOMY_ENTER: u128 = 2 * TRILLION;
 pub const ECONOMY_EXIT: u128 = TRILLION;
 pub const STANDARD_ENTER: u128 = 5 * TRILLION;
@@ -43,7 +61,8 @@ pub const SURPLUS_MAX_LEVEL: u8 = SURPLUS_MAX_PERCENT / SURPLUS_STEP_PERCENT;
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RuntimeConfig {
-    pub ledger_canister: Principal,
+    pub observed_ledger: Principal,
+    pub icp_ledger: Principal,
     pub cmc_canister: Principal,
     pub historian_canister: Principal,
     pub faucet_canister: Principal,
@@ -51,9 +70,10 @@ pub struct RuntimeConfig {
 }
 
 impl RuntimeConfig {
-    pub fn production() -> Self {
+    pub fn production(observed_ledger: Principal) -> Self {
         Self {
-            ledger_canister: Principal::from_text(ICP_LEDGER_CANISTER)
+            observed_ledger,
+            icp_ledger: Principal::from_text(ICP_LEDGER_CANISTER)
                 .expect("valid ICP Ledger principal"),
             cmc_canister: Principal::from_text(CMC_CANISTER).expect("valid CMC principal"),
             historian_canister: Principal::from_text(JUPITER_HISTORIAN_CANISTER)
@@ -69,7 +89,7 @@ impl RuntimeConfig {
 
 #[cfg(not(feature = "debug_api"))]
 pub fn runtime() -> RuntimeConfig {
-    RuntimeConfig::production()
+    RuntimeConfig::production(crate::state::read_instance_config().observed_ledger)
 }
 
 #[cfg(feature = "debug_api")]

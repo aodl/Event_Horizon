@@ -1,5 +1,7 @@
 # Event Horizon repository status
 
+The current target-aware release extends immutable instance configuration with optional `sns_root`, uses full-width numeric and neuron-nonce targets, and replaces the legacy callback with target plus raw `Nat` maximums. Its canonical hashes and full 2026-09-27 validation evidence are recorded in `docs/codex/generic-ledger-instances-validation.md`; historical reports below remain provenance only.
+
 `SPEC.md` is the normative protocol. Repository evidence is divided into three stages so historical claims are not confused with checks executed later.
 
 ## Checkpoint 03 historical import
@@ -38,4 +40,20 @@ The narrowly scoped follow-up from `4d21a35822d0b9ce04fd097a5e99abb39ccb23d3` is
 
 ## First-deployment schema cleanup
 
-The final pre-deployment cleanup from `419cf8bd5fde877f7f6ac250aa267f1e2992948b` is recorded in [`docs/codex/predeployment-schema-cleanup.md`](docs/codex/predeployment-schema-cleanup.md). Because Event Horizon had never been deployed, development-only compatibility with the checkpoint Wasms was removed rather than made part of the product contract. ID 2 is unused; ID 7 initializes directly to the canonical `FundingState::Idle`; and `Option<PlannedSurplus>` makes every planned split structurally complete. Historical fixtures and reports remain inert provenance, while current-schema upgrade and recovery coverage remains active.
+The final pre-deployment cleanup from `419cf8bd5fde877f7f6ac250aa267f1e2992948b` is recorded in [`docs/codex/predeployment-schema-cleanup.md`](docs/codex/predeployment-schema-cleanup.md). Because Event Horizon had never been deployed, development-only compatibility with the checkpoint Wasms was removed rather than made part of the product contract. At that historical checkpoint ID 2 was unused; later generic-ledger development intentionally assigned that previously-unused ID to immutable instance configuration and profile state. ID 7 initializes directly to the canonical `FundingState::Idle`; and `Option<PlannedSurplus>` makes every planned split structurally complete. Historical fixtures and reports remain inert provenance, while current-schema upgrade and recovery coverage remains active.
+
+## Generic ledger instances
+
+Development on `codex/generic-ledger-instances` added the immutable
+`observed_ledger` constructor and assigned stable ID 2 to its configuration and
+discovered profile. Operator-supplied live evidence established that canonical
+ICP does not expose the required ICRC-3 endpoint. The approved architecture
+therefore combines a fixed canonical-ICP legacy `query_blocks` adapter with an
+ICRC-1/ICRC-3/`1xfer` adapter for non-ICP Observed Ledgers, while the Protocol
+ICP Ledger remains the admission and funding anchor.
+
+[`docs/codex/generic-ledger-instances-validation.md`](docs/codex/generic-ledger-instances-validation.md)
+records the current validation. PocketIC installs identical backend Wasm bytes
+as both a shared legacy-ICP instance and a distinct generic ICRC-3 instance,
+proving the same-Wasm multi-ledger design without adding mutable reader
+selection or arbitrary legacy-ledger support.

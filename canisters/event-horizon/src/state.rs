@@ -8,20 +8,24 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::account::account_identifier_bytes;
 #[cfg(feature = "debug_api")]
 use crate::config::RuntimeConfig;
+use crate::instance::InstanceConfig;
 use crate::{
     cadence::PollingMode,
     pricing::{Observation, PricingState},
-    subscription::Subscription,
+    subscription::{Subscription, WatchTarget},
     surplus::SurplusPolicyState,
 };
+use icrc_ledger_types::icrc1::account::Account;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 // Stable-memory IDs are part of the long-lived storage contract. Never reuse them.
 const META_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(1);
+const INSTANCE_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(2);
 #[cfg(feature = "debug_api")]
 const DEBUG_CONFIG_MEMORY_ID: MemoryId = MemoryId::new(3);
 const GLOBAL_SUBSCRIBERS_MEMORY_ID: MemoryId = MemoryId::new(4);
@@ -32,17 +36,23 @@ const SURPLUS_POLICY_MEMORY_ID: MemoryId = MemoryId::new(8);
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
-    pub bootstrapped: bool,
-    pub next_block: u64,
+    pub admission_bootstrapped: bool,
+    pub admission_next_block: u64,
+    pub observed_bootstrapped: bool,
+    pub observed_next_block: u64,
     pub polling_mode: PollingMode,
+    pub last_health_log_day: Option<u64>,
 }
 
 impl Default for Metadata {
     fn default() -> Self {
         Self {
-            bootstrapped: false,
-            next_block: 0,
+            admission_bootstrapped: false,
+            admission_next_block: 0,
+            observed_bootstrapped: false,
+            observed_next_block: 0,
             polling_mode: PollingMode::ReserveProtection,
+            last_health_log_day: None,
         }
     }
 }
@@ -79,7 +89,7 @@ pub enum FundingState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct AccountKey([u8; 32]);
+struct AccountKey(Vec<u8>);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct PrincipalKey(Vec<u8>);
@@ -106,9 +116,24 @@ impl Storable for PrincipalKey {
     };
 }
 
-impl From<[u8; 32]> for AccountKey {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
+impl From<Account> for AccountKey {
+    fn from(value: Account) -> Self {
+        let owner = value.owner.as_slice();
+        let mut bytes = Vec::with_capacity(1 + owner.len() + 32);
+        bytes.push(1); // ICRC account protocol tag
+        bytes.push(owner.len() as u8);
+        bytes.extend_from_slice(owner);
+        bytes.extend_from_slice(value.effective_subaccount());
+        Self(bytes)
+    }
+}
+
+impl AccountKey {
+    fn icp(account_identifier: [u8; 32]) -> Self {
+        let mut bytes = Vec::with_capacity(33);
+        bytes.push(0); // canonical legacy ICP account protocol tag
+        bytes.extend_from_slice(&account_identifier);
+        Self(bytes)
     }
 }
 
@@ -117,16 +142,14 @@ impl Storable for AccountKey {
         Cow::Borrowed(&self.0)
     }
     fn into_bytes(self) -> Vec<u8> {
-        self.0.to_vec()
+        self.0
     }
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let mut out = [0u8; 32];
-        out.copy_from_slice(bytes.as_ref());
-        Self(out)
+        Self(bytes.into_owned())
     }
     const BOUND: Bound = Bound::Bounded {
-        max_size: 32,
-        is_fixed_size: true,
+        max_size: 63,
+        is_fixed_size: false,
     };
 }
 
@@ -152,7 +175,8 @@ macro_rules! candid_value {
     };
 }
 
-candid_value!(SubscriptionValue, Subscription, 128);
+candid_value!(SubscriptionValue, Subscription, 256);
+candid_value!(InstanceConfigValue, Option<InstanceConfig>, 256);
 candid_value!(MetadataValue, Metadata, 256);
 candid_value!(ObservationValue, Observation, 128);
 candid_value!(PricingStateValue, PricingState, 512);
@@ -166,6 +190,7 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static META: RefCell<Option<StableCell<MetadataValue, Memory>>> = const { RefCell::new(None) };
     static SUBSCRIPTIONS: RefCell<Option<StableBTreeMap<AccountKey, SubscriptionValue, Memory>>> = const { RefCell::new(None) };
+    static INSTANCE_CONFIG: RefCell<Option<StableCell<InstanceConfigValue, Memory>>> = const { RefCell::new(None) };
     static GLOBAL_SUBSCRIBERS: RefCell<Option<StableBTreeMap<PrincipalKey, u8, Memory>>> = const { RefCell::new(None) };
     static PRICE_OBSERVATIONS: RefCell<Option<StableBTreeMap<u64, ObservationValue, Memory>>> = const { RefCell::new(None) };
     static PRICING_STATE: RefCell<Option<StableCell<PricingStateValue, Memory>>> = const { RefCell::new(None) };
@@ -173,6 +198,17 @@ thread_local! {
     static SURPLUS_POLICY_STATE: RefCell<Option<StableCell<SurplusPolicyStateValue, Memory>>> = const { RefCell::new(None) };
     #[cfg(feature = "debug_api")]
     static DEBUG_CONFIG: RefCell<Option<StableCell<DebugConfigValue, Memory>>> = const { RefCell::new(None) };
+}
+
+fn with_instance_config<R>(f: impl FnOnce(&mut StableCell<InstanceConfigValue, Memory>) -> R) -> R {
+    INSTANCE_CONFIG.with_borrow_mut(|slot| {
+        let cell = slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(m.get(INSTANCE_CONFIG_MEMORY_ID), InstanceConfigValue(None))
+            })
+        });
+        f(cell)
+    })
 }
 
 fn with_meta<R>(f: impl FnOnce(&mut StableCell<MetadataValue, Memory>) -> R) -> R {
@@ -268,6 +304,7 @@ fn with_surplus_policy<R>(
 pub fn initialize_if_needed() {
     with_meta(|_| ());
     with_subscriptions(|_| ());
+    with_instance_config(|_| ());
     with_global_subscribers(|_| ());
     with_price_observations(|_| ());
     with_pricing_state(|_| ());
@@ -275,6 +312,29 @@ pub fn initialize_if_needed() {
     with_surplus_policy(|_| ());
     #[cfg(feature = "debug_api")]
     with_debug_config(|_| ());
+}
+
+pub fn initialize_instance_config(config: InstanceConfig) {
+    with_instance_config(|cell| {
+        assert!(
+            cell.get().0.is_none(),
+            "instance configuration already initialized"
+        );
+        cell.set(InstanceConfigValue(Some(config)));
+    });
+}
+
+pub fn read_instance_config() -> InstanceConfig {
+    with_instance_config(|cell| cell.get().0.clone())
+        .expect("instance configuration is not initialized")
+}
+
+pub fn write_observed_profile(profile: crate::instance::ObservedLedgerProfile) {
+    let mut config = read_instance_config();
+    if config.observed_profile.is_none() {
+        config.observed_profile = Some(profile);
+        with_instance_config(|cell| cell.set(InstanceConfigValue(Some(config))));
+    }
 }
 
 pub fn read_metadata() -> Metadata {
@@ -293,7 +353,21 @@ pub fn modify_metadata(f: impl FnOnce(&mut Metadata)) {
 }
 
 pub fn put_subscription(subscription: Subscription) {
-    let key = AccountKey(subscription.account_identifier());
+    let runtime = crate::config::runtime();
+    let governance = read_instance_config()
+        .observed_profile
+        .and_then(|p| p.neuron_governance);
+    let account = subscription
+        .account(governance)
+        .expect("neuron subscription requires verified governance");
+    let key = if runtime.observed_ledger == runtime.icp_ledger {
+        AccountKey::icp(account_identifier_bytes(
+            account.owner,
+            *account.effective_subaccount(),
+        ))
+    } else {
+        AccountKey::from(account)
+    };
     with_subscriptions(|map| {
         let merged =
             crate::subscription::merge_subscription(map.get(&key).map(|v| v.0), subscription);
@@ -301,11 +375,38 @@ pub fn put_subscription(subscription: Subscription) {
     });
 }
 
-pub fn get_subscription(account_identifier: [u8; 32]) -> Option<Subscription> {
-    with_subscriptions(|map| map.get(&AccountKey(account_identifier)).map(|v| v.0))
+pub fn get_subscription(account: Account) -> Option<Subscription> {
+    with_subscriptions(|map| map.get(&AccountKey::from(account)).map(|v| v.0))
 }
 
-#[cfg(feature = "debug_api")]
+pub fn get_icp_subscription(account_identifier: [u8; 32]) -> Option<Subscription> {
+    with_subscriptions(|map| map.get(&AccountKey::icp(account_identifier)).map(|v| v.0))
+}
+
+pub fn get_target_subscription(
+    subscriber: candid::Principal,
+    target: WatchTarget,
+) -> Option<Subscription> {
+    let runtime = crate::config::runtime();
+    let governance = read_instance_config()
+        .observed_profile
+        .and_then(|p| p.neuron_governance);
+    let account = Subscription {
+        subscriber,
+        target,
+        minimum_units: 0u8.into(),
+    }
+    .account(governance)?;
+    if runtime.observed_ledger == runtime.icp_ledger {
+        get_icp_subscription(account_identifier_bytes(
+            account.owner,
+            *account.effective_subaccount(),
+        ))
+    } else {
+        get_subscription(account)
+    }
+}
+
 pub fn subscription_count() -> u64 {
     with_subscriptions(|map| map.len())
 }
@@ -398,7 +499,10 @@ fn with_debug_config<R>(f: impl FnOnce(&mut StableCell<DebugConfigValue, Memory>
             MEMORY_MANAGER.with_borrow(|m| {
                 StableCell::init(
                     m.get(DEBUG_CONFIG_MEMORY_ID),
-                    DebugConfigValue(RuntimeConfig::production()),
+                    DebugConfigValue(RuntimeConfig::production(
+                        candid::Principal::from_text(crate::config::ICP_LEDGER_CANISTER)
+                            .expect("valid ICP Ledger principal"),
+                    )),
                 )
             })
         });
@@ -416,4 +520,41 @@ pub fn write_debug_config(config: RuntimeConfig) {
 #[cfg(feature = "debug_api")]
 pub fn read_debug_config() -> RuntimeConfig {
     with_debug_config(|cell| cell.get().0.clone())
+}
+
+#[cfg(test)]
+mod account_key_tests {
+    use super::*;
+    use crate::numbered_subaccount;
+
+    #[test]
+    fn protocol_tags_separate_icp_and_icrc_keys() {
+        let owner = candid::Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        let subaccount = numbered_subaccount(7);
+        let icp = AccountKey::icp(account_identifier_bytes(owner, subaccount));
+        let icrc = AccountKey::from(Account {
+            owner,
+            subaccount: Some(subaccount),
+        });
+        assert_eq!(icp.0[0], 0);
+        assert_eq!(icp.0.len(), 33);
+        assert_eq!(icrc.0[0], 1);
+        assert_eq!(icrc.0.len(), 2 + owner.as_slice().len() + 32);
+        assert_ne!(icp, icrc);
+    }
+
+    #[test]
+    fn absent_and_zero_icrc_subaccounts_have_the_same_key() {
+        let owner = candid::Principal::from_text("r5m5y-diaaa-aaaaa-qanaa-cai").unwrap();
+        assert_eq!(
+            AccountKey::from(Account {
+                owner,
+                subaccount: None
+            }),
+            AccountKey::from(Account {
+                owner,
+                subaccount: Some([0; 32])
+            })
+        );
+    }
 }

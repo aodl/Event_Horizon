@@ -1,18 +1,26 @@
 # Event Horizon
 
-Event Horizon is a low-latency, best-effort ICP Ledger wake-up service funded by perpetual Jupiter Faucet endowments. It reads the live ICP Ledger directly and calls a subscriber's `poke(vec nat8)` endpoint. Subscribers keep authoritative Ledger or Index cursors and an independent reconciliation timer; a missed poke affects latency rather than correctness.
+Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. Its target-aware poke reports each matching numeric subaccount or neuron nonce and the largest qualifying raw transfer amount. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
 
-It supports five exact Jupiter Faucet memo forms:
+Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger` and optional `sns_root`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
+
+The five declaration classes use these Jupiter Faucet memo forms. Canonical ICP
+uses alias `X` only as an example; every instance uses its reviewed alias:
 
 ```text
-X.<subscriber>                         # global Ledger activity
-X.<subscriber>.<subaccount>            # every incoming account transfer
-X.<subscriber>.<subaccount>:<amount>   # inclusive account threshold
-X.<subscriber>.<start>-<end>           # every transfer in an inclusive range
-X.<subscriber>.<start>-<end>:<amount>  # inclusive threshold throughout a range
+<alias>.<subscriber>
+<alias>.<subscriber>.<number>[:<amount>]
+<alias>.<subscriber>.<start>-<end>[:<amount>]
+<alias>.<subscriber>.n<nonce>[:<amount>]
+<alias>.<subscriber>.n<start>-<end>[:<amount>]
 ```
 
-Ranges satisfy `0 <= start < end <= 255` and expand at admission into the existing watched-account map. Overlaps retain the lowest permanent threshold. `poke([])` signals global activity without a more-specific match; one sorted unique non-empty vector of actual matched subaccounts takes precedence.
+The planned IO alias `I` is intended, not published. The full memo—including
+alias, dot, subscriber, scope or range, and optional threshold—must fit
+Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
+Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand at admission into the existing watched-account map. `n<nonce>` selects a subscriber-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. `poke([])` signals global-only activity; a non-empty vector of target/max-amount matches takes precedence and is capped at 256 targets.
+
+A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 
 ## Dynamic admission pricing
 
@@ -24,7 +32,9 @@ range price   = ceil(20 × F / C) ICP
 global price  = ceil(100 × F / C) ICP
 ```
 
-Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. The backend's only production application method is the read-only `get_pricing` query; the certified frontend calls that query directly from its bundled browser client.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes exactly the read-only `get_instance` and `get_pricing` queries; the certified frontend verifies the first against its reviewed static registry.
+
+See [deploying an instance](docs/deploying-an-instance.md), [acceptance observation](docs/acceptance-observation.md), and the [subscriber guide](docs/subscriber-guide.md).
 
 ## Adaptive surplus funding
 
@@ -76,6 +86,7 @@ This verifies the artifact manifest and prints the exact uncompressed Wasm hashe
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/subscriber-guide.md`](docs/subscriber-guide.md)
 - [`docs/economics-pricing.md`](docs/economics-pricing.md)

@@ -1,22 +1,37 @@
 # Architecture
 
+```text
+                         ┌─────────────────────┐
+Jupiter Faucet ICP ─────►│ Admission / funding │
+Canonical ICP Ledger ───►│                     │
+Historian ───────────────►│   Event Horizon     │
+CMC ─────────────────────►│                     │
+                         │                     │
+Observed Ledger ─────────►│ Trigger reader      │
+                         └─────────┬───────────┘
+                                   ▼
+                              subscriber.poke
+```
+
+The observed asset can differ per immutable instance; the funding asset never does. Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index.
+
 Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
 ## Poll lane
 
-Each poll captures the first Ledger response's exclusive `chain_length` and never processes beyond it. Account transfers accumulate sorted subaccount hints per subscriber. The backend records whether any transaction was processed and, only after the boundary completes, incorporates the stable global-subscriber set once. Each subscriber receives at most one poke: a non-empty account hint wins over a global empty hint.
+Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Qualifying transfers accumulate per-target maximum `Nat` amounts, capped at 256 distinct targets per subscriber. Only decoded live blocks count as activity; archive-only progress never wakes global subscribers. Each subscriber receives at most one poke: a non-empty specific vector wins over a global empty hint.
 
 The reader uses no Index or archive traversal. A proven archived prefix is logged and skipped. Subscribers own authoritative reconciliation.
 
 ## Admission and storage
 
-A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted range expands to at most 256 ordinary entries in the existing watched-account map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
+A Faucet-origin payout memo is parsed as a global declaration or an ordinary/neuron single/range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted ordinary or neuron range expands to at most 256 individual watched-account entries in the existing map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
 
 | ID | Contents |
 |---:|---|
 | 0 | existing metadata and Ledger cursor |
-| 1 | existing account subscriptions |
-| 2 | existing CMC conversion state |
+| 1 | watched-account subscriptions with semantic `WatchTarget` values |
+| 2 | immutable instance configuration and discovered observed profile |
 | 3 | debug configuration in debug Wasm only |
 | 4 | global subscriber set |
 | 5 | daily pricing observations keyed by UTC day |
@@ -24,7 +39,7 @@ A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-
 | 7 | authoritative funding state V2 for retained transfer, CMC notify, and surplus transfer |
 | 8 | adaptive surplus epoch, observed minimum, and diversion level |
 
-The first production schema uses IDs 0–1 and 3–8; ID 2 is intentionally unused. ID 7 contains the canonical `FundingState` and initializes directly to `Idle`. ID 8 defaults to disabled/uninitialized level zero because that initialization is part of the live surplus policy. Pricing continues storing account/global values internally; the exact range value is derived for admission and public reads.
+The final generic schema uses IDs 0–8. ID 1 keys are protocol-tagged: `0x00 || AccountIdentifier` for canonical ICP and `0x01 || principal_length || principal || effective_subaccount` for ICRC accounts. This permits one bounded stable map without reversing ICP AccountIdentifiers. ID 7 contains the canonical `FundingState` and initializes directly to `Idle`. ID 8 defaults to disabled/uninitialized level zero because that initialization is part of the live surplus policy.
 
 ## Independent timer lanes
 
@@ -34,6 +49,6 @@ The hourly lane also takes one liquid-cycles observation for the surplus control
 
 ## Frontend
 
-Certified assets remain embedded in the Rust frontend Wasm. The bundled browser client contains the permanent backend principal `eo6ei-gaaaa-aaaar-qchra-cai` and directly invokes its read-only `get_pricing` query through the mainnet ICP API gateway. No runtime cookie or canister environment supplies the backend principal, and the certified document response adds no discovery configuration. The certified content security policy narrowly permits the gateway. The frontend exports only the certified `http_request` query, so ordinary page views cannot trigger a frontend update or an inter-canister pricing call.
+Certified assets remain embedded in the Rust frontend Wasm. Its reviewed static registry contains ICP live and IO planned. A selected live backend supplies `get_instance` and ICP-denominated `get_pricing`; configuration must match before memo construction. No cookie, environment, URL, local storage, mutable service, or automatic discovery supplies principals. The frontend exports only certified `http_request`.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.

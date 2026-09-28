@@ -1,14 +1,16 @@
 //! Event Horizon backend.
 //!
-//! Production intentionally exposes no application methods. Autonomous timers drive the
-//! Ledger reader and ICP-to-cycles maintenance. The `debug_api` feature exists only for
-//! local/PocketIC validation and must not be present in the canonical production Wasm.
+//! Production exposes only the bounded `get_instance` and `get_pricing` queries.
+//! Autonomous timers drive the ledger readers and ICP-to-cycles maintenance. The
+//! `debug_api` feature exists only for local/PocketIC validation and must not be present
+//! in the canonical production Wasm.
 
 mod account;
 mod cadence;
 mod clients;
 mod config;
 mod funding;
+mod instance;
 mod logging;
 mod memo;
 mod polling;
@@ -22,18 +24,30 @@ mod surplus;
 use candid::Principal;
 
 #[cfg(feature = "debug_api")]
-use debug::{DebugInitArgs, DebugState, DebugSubscriptionArgs};
+use debug::{DebugCursorArgs, DebugInitArgs, DebugState, DebugSubscriptionArgs};
 
-pub use account::{account_identifier_bytes, numbered_subaccount};
+pub use account::{account_identifier_bytes, neuron_staking_subaccount, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
+pub use instance::{InitArgs, InstanceInfo, ObservedLedgerProfile};
 pub use memo::{parse_subscription_memo, MemoParseError, SubscriptionDeclaration};
 pub use pricing::{Price, Pricing, PublicPrice};
-pub use subscription::{merge_subscription, Subscription};
+pub use subscription::{merge_subscription, Subscription, WatchTarget};
 
 #[cfg(not(feature = "debug_api"))]
 #[ic_cdk::init]
-fn init() {
+fn init(args: InitArgs) {
+    instance::validate_init(
+        args.observed_ledger,
+        args.sns_root,
+        config::RuntimeConfig::production(args.observed_ledger).icp_ledger,
+    );
     state::initialize_if_needed();
+    state::initialize_instance_config(instance::InstanceConfig {
+        observed_ledger: args.observed_ledger,
+        observed_profile: None,
+        sns_root: args.sns_root,
+    });
+    instance::log_config();
     scheduler::start();
 }
 
@@ -49,6 +63,11 @@ fn get_pricing() -> Pricing {
     pricing::get_pricing()
 }
 
+#[ic_cdk::query]
+fn get_instance() -> InstanceInfo {
+    instance::get_instance()
+}
+
 #[cfg(feature = "debug_api")]
 mod debug {
     use super::*;
@@ -57,17 +76,20 @@ mod debug {
 
     #[derive(CandidType, Deserialize)]
     pub struct DebugInitArgs {
-        pub ledger_canister: Principal,
+        pub observed_ledger: Principal,
+        pub icp_ledger: Principal,
         pub cmc_canister: Principal,
         pub historian_canister: Principal,
         pub faucet_canister: Principal,
         pub surplus_canister: Option<Principal>,
+        pub sns_root: Option<Principal>,
     }
 
     impl From<DebugInitArgs> for config::RuntimeConfig {
         fn from(value: DebugInitArgs) -> Self {
             Self {
-                ledger_canister: value.ledger_canister,
+                observed_ledger: value.observed_ledger,
+                icp_ledger: value.icp_ledger,
                 cmc_canister: value.cmc_canister,
                 historian_canister: value.historian_canister,
                 faucet_canister: value.faucet_canister,
@@ -79,6 +101,12 @@ mod debug {
     #[ic_cdk::init]
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
+        instance::validate_init(args.observed_ledger, args.sns_root, args.icp_ledger);
+        state::initialize_instance_config(instance::InstanceConfig {
+            observed_ledger: args.observed_ledger,
+            observed_profile: None,
+            sns_root: args.sns_root,
+        });
         state::write_debug_config(args.into());
         // Debug builds are manually driven to keep PocketIC tests deterministic.
     }
@@ -90,8 +118,10 @@ mod debug {
 
     #[derive(CandidType, Deserialize)]
     pub struct DebugState {
-        pub bootstrapped: bool,
-        pub next_block: u64,
+        pub admission_bootstrapped: bool,
+        pub admission_next_block: u64,
+        pub observed_bootstrapped: bool,
+        pub observed_next_block: u64,
         pub polling_mode: PollingMode,
         pub subscriptions: u64,
         pub global_subscriptions: u64,
@@ -105,8 +135,10 @@ mod debug {
     fn debug_state() -> DebugState {
         let meta = state::read_metadata();
         DebugState {
-            bootstrapped: meta.bootstrapped,
-            next_block: meta.next_block,
+            admission_bootstrapped: meta.admission_bootstrapped,
+            admission_next_block: meta.admission_next_block,
+            observed_bootstrapped: meta.observed_bootstrapped,
+            observed_next_block: meta.observed_next_block,
             polling_mode: meta.polling_mode,
             subscriptions: state::subscription_count(),
             global_subscriptions: state::global_subscription_count(),
@@ -120,6 +152,11 @@ mod debug {
     #[ic_cdk::update]
     async fn debug_poll_once() {
         scheduler::debug_poll_once().await;
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_abort_after_staged_admission(enabled: bool) {
+        polling::debug_set_abort_after_staged_admission(enabled);
     }
 
     #[ic_cdk::update]
@@ -158,7 +195,7 @@ mod debug {
     #[ic_cdk::update]
     fn debug_set_ledger_canister(ledger_canister: Principal) {
         let mut runtime = config::runtime();
-        runtime.ledger_canister = ledger_canister;
+        runtime.icp_ledger = ledger_canister;
         state::write_debug_config(runtime);
     }
 
@@ -172,17 +209,43 @@ mod debug {
         scheduler::debug_timer_count()
     }
 
+    #[ic_cdk::query]
+    fn debug_icrc3_get_blocks_calls() -> u64 {
+        clients::icrc3::debug_get_blocks_calls()
+    }
+
+    #[ic_cdk::query]
+    fn debug_legacy_query_blocks_calls() -> u64 {
+        clients::icp_ledger::debug_query_blocks_calls()
+    }
+
     #[derive(CandidType, Deserialize)]
     pub struct DebugSubscriptionArgs {
         subscriber: Principal,
-        subaccount: u8,
+        target: WatchTarget,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    pub struct DebugCursorArgs {
+        admission_bootstrapped: bool,
+        admission_next_block: u64,
+        observed_bootstrapped: bool,
+        observed_next_block: u64,
+    }
+
+    #[ic_cdk::update]
+    fn debug_set_cursors(args: DebugCursorArgs) {
+        state::modify_metadata(|m| {
+            m.admission_bootstrapped = args.admission_bootstrapped;
+            m.admission_next_block = args.admission_next_block;
+            m.observed_bootstrapped = args.observed_bootstrapped;
+            m.observed_next_block = args.observed_next_block;
+        });
     }
 
     #[ic_cdk::query]
     fn debug_subscription(args: DebugSubscriptionArgs) -> Option<Subscription> {
-        let account =
-            account_identifier_bytes(args.subscriber, numbered_subaccount(args.subaccount));
-        state::get_subscription(account)
+        state::get_target_subscription(args.subscriber, args.target)
     }
 
     #[ic_cdk::query]

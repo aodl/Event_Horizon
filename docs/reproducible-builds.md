@@ -72,15 +72,20 @@ This intentionally expensive gate runs all source/behavior tests, dependency-sec
 
 ## Production-surface audit
 
-`tools/audit-wasm.py` parses the Wasm export section directly. The release build fails unless the backend's sole production application query is `get_pricing`; it also fails if debug markers occur in the production module. The frontend must expose exactly `canister_query http_request` as its application method and must not expose `http_request_update`, pricing proxies, or debug methods. The canonical build runs the pinned JavaScript bundle step before compiling the embedded frontend Wasm.
+`tools/audit-wasm.py` parses the Wasm export section directly. The release build fails unless backend queries are exactly `get_instance` and `get_pricing`; it also rejects debug markers and all update methods. The frontend must expose exactly `canister_query http_request`. The canonical build runs the pinned bundle step before compiling the embedded frontend Wasm.
 
-This supplements, rather than replaces, the checked-in production DID, whose sole application method is:
+This supplements, rather than replaces, the checked-in production DID. The
+backend has exactly two application methods, both queries:
 
 ```candid
 service : {
+  get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
 }
 ```
+
+The frontend has exactly `http_request` as a query and no update application
+method.
 
 ## Mainnet verification
 

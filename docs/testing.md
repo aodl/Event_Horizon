@@ -42,7 +42,7 @@ This is the normal pre-commit gate: repository static invariants, Rust formattin
 cargo run -p xtask -- pocketic
 ```
 
-PocketIC scenarios are intentionally `#[ignore]` so ordinary `cargo test --workspace` stays suitable for the normal source gate. The command explicitly selects ignored tests, preserves their output, and serializes them for deterministic canister/failure-state behavior. At the reviewed starting revision there are 37 scenarios; this count may grow.
+PocketIC scenarios are intentionally `#[ignore]` so ordinary `cargo test --workspace` stays suitable for the normal source gate. The command explicitly selects ignored tests, preserves their output, and serializes them for deterministic canister/failure-state behavior. The count may grow as protocol regressions are added.
 
 To run one scenario directly:
 
@@ -100,12 +100,16 @@ The current integration suite builds purpose-specific mock Wasms and exercises:
 
 - prospective first-install bootstrap;
 - exact 10 ICP account and 20 ICP range Historian admission;
-- maximum `0-255` expansion, resource reporting, ordinary matching, and upgrade health;
+- maximum 256-target range expansion, including ranges whose endpoints begin above 255, resource reporting, ordinary matching, and upgrade health;
 - range threshold, overlap-order, unfiltered overlap, sorted/deduplicated coalescing, and global precedence;
 - incomplete/faulted Historian rejection and later natural admission on another Faucet payout;
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;
-- one poke carrying sorted unique subaccounts per subscriber per poll;
+- one poke carrying deterministic target/max-amount matches per subscriber per poll, bounded to 256 specific targets;
+- NNS and verified-SNS neuron ownership/nonce derivation and exact raw amounts;
+- SNS Root transport and relationship failures remain fail-closed and log once per uninterrupted failure episode;
+- ordinary `u64` target 256, NNS/SNS neuron ranges, end-to-end arbitrary-precision `Nat` callbacks, and the outbound 256-target bound;
+- threshold loosening with per-target `max_amount` coalescing for subscriber-side local policy;
 - subscriber trap isolation;
 - archive-gap skip-and-continue behavior;
 - legacy ICP CMC top-up transfer;

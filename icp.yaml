@@ -3,7 +3,7 @@ canisters:
     settings:
       status_visibility: public
       log_visibility: public
-      log_memory_limit: 4096
+      log_memory_limit: 16384
     build:
       steps:
         - type: script

@@ -4,9 +4,9 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 ## 1. Purpose
 
-Event Horizon improves the responsiveness of canisters that react to incoming ICP without becoming part of their correctness path.
+Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads the live ICP Ledger and makes a best-effort call to `poke : (vec nat8) -> ()` on subscribed canisters when relevant transfers are observed. A non-empty poke contains the distinct numbered subaccounts that matched during that poll. An empty poke signals activity for a global Ledger subscription. Neither form contains transaction identifiers, amounts, memos, senders, or other transaction data. Each subscriber owns its authoritative reconciliation cursor and must retain independent periodic reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets and per-target maximum qualifying raw transfer amounts; an empty poke signals global-only observed-ledger activity. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -16,7 +16,7 @@ Event Horizon is a standalone downstream product powered by Jupiter Faucet endow
 
 The Event Horizon backend:
 
-- has exactly one production application query, `get_pricing`, containing no subscription or administrative data;
+- has exactly two production application queries, `get_instance` and `get_pricing`, containing no subscription or administrative data;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -25,25 +25,42 @@ Jupiter Historian is used for admission verification. Jupiter Faucet and Disburs
 
 ## 3. Subscription declaration
 
-A Jupiter Faucet endowment uses exactly one of these full memo forms:
+A routed declaration is `<alias>.<suffix>`. The suffix has five declaration
+classes—global, ordinary single, ordinary range, neuron single, and neuron
+range—and every specific class may optionally include a threshold:
 
 ```text
-X.<compact-subscriber-principal>
-X.<compact-subscriber-principal>.<numbered-subaccount>
-X.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-ICP>
-X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>
-X.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>:<minimum-ICP>
+<subscriber>
+
+<subscriber>.<number>
+<subscriber>.<number>:<amount>
+
+<subscriber>.<start>-<end>
+<subscriber>.<start>-<end>:<amount>
+
+<subscriber>.n<nonce>
+<subscriber>.n<nonce>:<amount>
+
+<subscriber>.n<start>-<end>
+<subscriber>.n<start>-<end>:<amount>
 ```
 
-Examples:
+Canonical ICP examples use alias `X`:
 
 ```text
 X.r5m5ydiaaaaaaaaqanaacai
 X.r5m5ydiaaaaaaaaqanaacai.7
 X.r5m5ydiaaaaaaaaqanaacai.7:0.01
+X.r5m5ydiaaaaaaaaqanaacai.7-18
+X.r5m5ydiaaaaaaaaqanaacai.n42
+X.r5m5ydiaaaaaaaaqanaacai.n0-2
 ```
 
-`X` is a Jupiter Faucet runtime alias whose mapping is owned by Jupiter Historian. Event Horizon itself receives only the outgoing suffix, for example:
+The planned canonical IO instance has intended alias `I`; that alias is not
+claimed to be published. Aliases are reviewed Jupiter Faucet runtime aliases
+whose mappings are owned by Jupiter Historian. Future aliases are not assumed
+to be one byte or one character. Event Horizon itself receives only the
+outgoing suffix, for example:
 
 ```text
 r5m5ydiaaaaaaaaqanaacai
@@ -51,45 +68,45 @@ r5m5ydiaaaaaaaaqanaacai.7
 r5m5ydiaaaaaaaaqanaacai.7:0.01
 r5m5ydiaaaaaaaaqanaacai.7-18
 r5m5ydiaaaaaaaaqanaacai.7-18:0.01
-```
-
-The suffix grammar is:
-
-```text
-<principal>
-<principal> "." ( <subaccount> | <start> "-" <end> ) [ ":" <amount> ]
+r5m5ydiaaaaaaaaqanaacai.n42
+r5m5ydiaaaaaaaaqanaacai.n42:0.01
+r5m5ydiaaaaaaaaqanaacai.n0-2
+r5m5ydiaaaaaaaaqanaacai.n0-2:0.01
 ```
 
 Rules:
 
 - principals may be the canonical hyphenated representation or the compact representation with group separators removed;
 - a principal alone declares a global Ledger subscription: any transaction processed in a completed poll is relevant;
-- a global declaration does not represent all 256 subaccounts of the subscriber;
+- a global declaration is semantically distinct from any finite set of specific targets;
 - anonymous and management principals are invalid;
-- subaccount is a decimal integer `0..255`;
+- an ordinary numeric target and a neuron nonce are each a canonical decimal `u64`; the neuron discriminator is exactly lowercase `n`;
 - integer spelling is canonical decimal: `0` or a nonzero digit followed by decimal digits; signs and leading zeroes are invalid;
-- range endpoints are inclusive and must satisfy `0 <= start < end <= 255`;
+- range endpoints are inclusive canonical `u64`, satisfy `start < end`, and satisfy `end - start + 1 <= 256` (equivalently, after proving order, `end - start <= 255`); endpoint values themselves are not capped at 255;
 - reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
-- when present, amount is decimal ICP with one or two fractional digits, or an integer amount;
+- when present, amount is decimal observed-token value with at most its verified `icrc1_decimals`, or an integer;
 - fractional amounts require a leading zero (`0.1`, not `.1`);
 - no sign, exponent or comparison operator is accepted;
 - explicit threshold matching semantics are always `transfer amount >= declared amount`;
-- the smallest valid explicit amount is `0.01 ICP`;
+- the smallest valid explicit amount is one raw observed-token unit;
 - a colon with no amount is invalid; omission means omitting the colon and amount together;
-- the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit.
+- the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit,
+  including the alias, dot, subscriber, scope or range, and optional threshold.
 
-Internally all values are integer e8s. Floating-point arithmetic is forbidden. The implementation may use `0 e8s` as an internal sentinel for an omitted threshold because an explicitly declared threshold can never be below `0.01 ICP`.
+Observed amounts are arbitrary-precision integer raw token units. Floating-point arithmetic is forbidden. Zero is the omitted-threshold sentinel; explicit thresholds must exceed zero.
 
 ## 4. Watched account
 
-The numbered subaccount convention is 32 zero bytes with the integer stored in the last byte. Subaccount `0` is therefore the default all-zero subaccount.
+For `Subaccount(N)`, the owner is the subscriber and the subaccount is `24 zero bytes || N.to_be_bytes()`. Values `0..255` therefore retain their former bytes. Subaccount `0` is the default all-zero subaccount.
 
-The watched legacy ICP account identifier is derived from the subscriber principal and that 32-byte subaccount using the standard `\x0Aaccount-id` SHA-224 + CRC-32 construction.
+For `NeuronNonce(N)`, the subscriber is the controller and the staking subaccount is `SHA256(0x0c || "neuron-stake" || subscriber principal bytes || N.to_be_bytes())`. The owner is fixed NNS Governance for the ICP instance or verified SNS Governance for a verified SNS instance. Neuron targets are unavailable without verified neuron Governance context. Hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts are not supported.
+
+Canonical ICP converts the resolved owner and subaccount to a legacy AccountIdentifier. A non-ICP instance uses the resolved ICRC Account directly. Absent and explicit all-zero ICRC subaccounts normalize to the same effective account.
 
 At most one effective subscription is required for a watched account. If another admitted declaration for the same account has a less restrictive threshold, the stored threshold becomes the less restrictive value. An unfiltered declaration (no threshold) therefore subsumes every thresholded declaration for that same account.
 
-An admitted range is expanded once into the existing watched-account map, deriving one account identifier for every inclusive endpoint value. Expansion is bounded to 256 entries. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
+Ordinary and neuron ranges are inclusive, contain 2 through 256 targets, and may start anywhere in the `u64` domain. Each admitted range expands once into individual entries in the existing watched-account map. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
 
 ## 5. Admission
 
@@ -102,33 +119,38 @@ The approved mainnet Faucet payout source is fixed in the production Wasm.
 
 Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
 
-Global, range, and account declarations are distinct exact routes with class-specific prices. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
+Global, range, and single-target declarations are distinct exact routes with class-specific prices. Ordinary and neuron singles use the account price; ordinary and neuron ranges use the range price. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
 If Historian is unavailable/incomplete for one payout, Event Horizon does not persist an admission-retry queue. A later perpetual Faucet payout carrying the same declaration provides a natural later admission opportunity.
 
 ## 6. Ledger reader
 
-Event Horizon reads the ICP Ledger directly; it does not depend on the ICP Index.
+Event Horizon does not depend on an Index. If the Observed Ledger is canonical ICP, one legacy `query_blocks` scan supplies both Faucet admission and observed activity in ledger order. Otherwise the fixed Protocol ICP Ledger is scanned through `query_blocks` for admission while the configured non-ICP Observed Ledger is scanned through `icrc3_get_blocks`. ICP remains the only funding asset.
 
 A fresh installation is prospective. On first successful Ledger observation it records the current chain tip and processes future activity only.
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon inserts that account's numbered subaccount into a transient sorted set keyed by the subscriber principal. It separately records whether the poll processed any transaction. After the fixed boundary has been completely processed, it incorporates admitted global subscribers once when that flag is true. It does not enumerate global subscribers per transaction.
+For each relevant transfer to an admitted watched account, Event Horizon records the maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still update their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
-Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty sorted unique account set takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
+Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
 
 ## 7. Archives and history gaps
 
 Event Horizon does not traverse Ledger archives.
 
-If the next required block is no longer locally available, Event Horizon:
+Event Horizon may skip a prefix only when the Ledger response itself explicitly
+proves that the contiguous required interval is archived. For such a proved
+archived interval Event Horizon:
 
 1. writes one concise public `HISTORY_GAP` exceptional log for the skipped interval;
-2. advances its cursor to the first locally available block;
+2. advances its cursor past exactly that archived interval;
 3. continues normal operation.
 
-It does not halt, reconstruct the gap, or create administrative recovery work.
+Archive-only progress is not global activity. Archive callbacks are never
+called. An unexplained live hole does not advance the cursor and is retried
+later; Event Horizon does not infer archival merely from the first live block
+returned.
 
 This is acceptable because subscribers retain authoritative reconciliation.
 
@@ -137,25 +159,38 @@ This is acceptable because subscribers retain authoritative reconciliation.
 Subscriber contract:
 
 ```candid
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+
+type PokeMatch = record {
+  target : PokeTarget;
+  max_amount : nat;
+};
+
 service : {
-  poke : (vec nat8) -> ();
+  poke : (vec PokeMatch) -> ();
 }
 ```
 
-The vector contains the distinct numbered subaccounts on that subscriber canister that saw relevant activity in the completed poll. Event Horizon sends at most one poke per subscriber per completed poll, and a non-empty vector is deterministically sorted and deduplicated. For an admitted global subscriber, `poke([])` means that the poll processed Ledger activity without a more-specific account match. Any poke tells a global subscriber to advance its global authoritative cursor. A non-empty vector additionally identifies account declarations that matched.
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
-The subaccount list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
+Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.
+
+The specific-target list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for authoritative Ledger/Index reconciliation state and cursors for each observed ledger, plus independent periodic reconciliation.
 
 There is:
 
-- no block index, transaction amount, memo, sender, or transaction payload;
+- no block index, complete transaction record, sender, memo, or transaction list;
+- no proof of payment or proof that no other Ledger activity occurred;
 - no acknowledgement processing;
 - no retry;
 - no durable notification queue;
 - no delivery journal;
 - no ordering or delivery guarantee.
 
-Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied subaccount numbers, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path.
+The target identity and per-target maximum are aggregate prefilter hints, not authoritative transaction data. Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied specific targets within that caller's ledger context, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path. Reconciliation cursors/state are maintained independently per observed ledger.
 
 Because Event Horizon reads the Ledger directly, a poke may arrive before the ICP Index exposes the triggering transaction. The subscriber owns any Index retry/backoff policy.
 
@@ -220,7 +255,13 @@ Continuous means no deliberately inserted delay after one complete poll; polls n
 
 ## 12. Production observability and immutability
 
-The production backend exposes only the `get_pricing` application query. The release audit rejects every other application query, composite query, or update.
+The production install configuration is immutable `observed_ledger` plus optional `sns_root`. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
+
+Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
+
+Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
+
+The production backend exposes only `get_instance` and `get_pricing`. The release audit rejects every other application query, composite query, or update.
 
 Before controller removal:
 
@@ -236,4 +277,4 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The certified frontend embeds the permanent Event Horizon backend principal `eo6ei-gaaaa-aaaar-qchra-cai` in its JavaScript asset and therefore in the frontend Wasm. Browser pricing queries use that fixed principal directly. No frontend update call is involved. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, single-account, and inclusive-range modes, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
+The certified frontend embeds a reviewed static instance registry in its JavaScript asset and therefore in the frontend Wasm. Browser queries use each selected backend principal directly. No frontend update call is involved. It uses `get_instance` to verify immutable configuration/profile and `get_pricing` for authoritative admission prices. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, ordinary single/range, and neuron single/range modes when supported, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.

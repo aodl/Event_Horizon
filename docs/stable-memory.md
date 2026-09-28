@@ -4,9 +4,9 @@ Stable-memory IDs are permanent protocol identifiers and are never reused.
 
 | ID | Meaning |
 |---:|---|
-| 0 | Metadata: bootstrap, Ledger cursor, polling mode |
+| 0 | Metadata: admission/observed bootstrap flags and cursors, polling mode, health-log day |
 | 1 | Watched-account subscription map |
-| 2 | Unused by the first production schema |
+| 2 | Immutable instance configuration and once-discovered observed profile |
 | 3 | Debug-only runtime configuration |
 | 4 | Global subscriber set keyed directly by principal |
 | 5 | Pricing observations keyed by UTC day |
@@ -14,7 +14,7 @@ Stable-memory IDs are permanent protocol identifiers and are never reused.
 | 7 | `FundingState`: the complete authoritative retained/CMC/surplus operation |
 | 8 | `SurplusPolicyState`: initialization, epoch start, hourly observed minimum, and level `0..19` |
 
-Event Horizon had not been deployed when this schema was finalized; development-only migration paths were therefore removed before first deployment. Current production code neither initializes nor reads ID 2. IDs remain intentionally non-contiguous to avoid unnecessary renumbering.
+No migration from the pre-generic acceptance deployment or intermediate development schemas is supported. The accepted transition is a deliberate reinstall because there are no subscribers.
 
 ID 7 initializes directly to `FundingState::Idle`. Its only states are `Idle`, `CmcTransferPending`, `CmcNotifyPending`, and `SurplusTransferPending`. One cell always determines the next money-moving action, so no crash boundary exists between an authoritative split plan and its execution state.
 
@@ -22,7 +22,9 @@ Every new split freezes one `PlannedSurplus { destination, memo, amount_e8s, fee
 
 ID 8 defaults to an uninitialized level-zero policy. This is live protocol state, not schema migration: destination-disabled operation accrues no entitlement, and enabling begins a fresh epoch. Levels above 19 or backwards-time state fail closed to a new level-zero epoch. Current-Wasm upgrades cover every pending funding phase and policy persistence.
 
-Account `minimum_e8s = 0` remains the unambiguous omitted-threshold sentinel. Each admitted range is expanded into the existing ID 1 map; no range registry or new memory ID exists. Overlapping declarations merge to the lowest threshold, which is safe because admissions are permanent and thresholds never become more restrictive. Global declarations have no synthetic account or subaccount record.
+Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands once into the ID 1 map. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
+
+ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from the prior `u8` subscription or pre-`sns_root` configuration; the acceptance backend is reinstalled. Current-schema upgrades only preserve this final representation.
 
 The stable pricing `Price` is `{ account_icp, global_icp }`. Public `get_pricing` values derive `range_icp = ceil(global_icp / 5)` with quotient/remainder arithmetic, exactly equal to `ceil(20F/C)`.
 
