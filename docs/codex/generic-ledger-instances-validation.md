@@ -12,9 +12,9 @@ The callback reports deterministic `{ target; max_amount : Nat }` matches. Maxim
 - Corrective starting HEAD: `bd0a8898fcee611625a12579a07c74e0783a1899`
 - Branch: `codex/generic-ledger-instances`
 - Canonical artifact source revision:
-  `83d5167143098611108296afc946bf79fd435b2e`
+  `15b2bc591f449937de3073e3279d047cee5e2682`
 - Final source/evidence revision:
-  `e0e680772d0eb385f47fe178edbd44f5ee452212`
+  recorded after the validation-evidence commit
 
 No migration from the acceptance deployment or an intermediate generic schema
 was added. A deliberate reinstall remains the accepted transition.
@@ -188,6 +188,46 @@ backend export audit passed with ten total Wasm exports and exactly
 `canister_query get_instance` and `canister_query get_pricing` as application
 methods. The frontend audit passed with seven total exports and exactly
 `canister_query http_request` as its application method.
+
+## Documentation-hardening validation
+
+The live protocol documentation was hardened on 2026-09-28 without changing
+backend source, frontend runtime assets, Candid, or stable state. The pass added
+the documentation index and explicit multi-ledger subscriber guidance, made
+the target-aware `SPEC.md` normative wording complete, corrected the canonical
+backend reinstall and conditional frontend install/upgrade runbook, and added
+targeted documentation-drift checks. Source-manifest verification now rejects
+missing, unexpected, and duplicate paths before checking every file hash;
+`docs/README.md` is included in the manifest.
+
+Validation from clean revision
+`15b2bc591f449937de3073e3279d047cee5e2682` produced:
+
+- static/source checks, formatting, and Clippy: passed;
+- backend unit tests: 56 passed;
+- frontend tests: 11 passed;
+- PocketIC integration: 72 passed in the successful complete validation run;
+- security gate: passed with the same four reviewed maintenance warnings and
+  no unfiltered cargo-audit, cargo-deny, npm-audit, or OSV issue;
+- two independent no-cache Docker builds: byte-identical;
+- backend and frontend export audits: passed;
+- canonical artifact manifest: all three entries verified;
+- `DFX_IDENTITY=codex_local icp build -e local`: passed.
+
+The local `icp build` compatibility check intentionally produced
+local-toolchain artifacts; the canonical Docker build was rerun afterward and
+restored the reviewed canonical set. Executable Wasm bytes remained identical
+to the preceding release:
+
+- backend SHA-256:
+  `91a12fe2f63edb5f7a3bab311a34294195a45bdde8df6eae3f83d3694387ad77`;
+- frontend SHA-256:
+  `9028449c0caccd1358dd29b5055484d0e5fef9e3a498fe4a11fb2289b0a26187`.
+
+The deterministic canonical-artifact archive SHA-256 is
+`2f85243a86f7a238ff369877f269b2df1b9ebe433a3e354704d3e03cc669d650`.
+Its hash changed because the normative `SPEC.md` hash changed the canonical
+`build-info.json` and artifact manifest; the executable Wasms did not change.
 
 ## Required evidence checklist
 
