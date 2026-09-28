@@ -12,6 +12,7 @@ Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 - Range declarations are protocol-bounded to 256 admission-time watched-account merges; they add no per-transfer scan, per-range scheduler, or additional poke allowance.
 - NNS Governance is a fixed ICP trust anchor. SNS neuron support additionally trusts immutable `sns_root`, its bounded Root response, and the observed Ledger's Governance-default minting account; Root and Governance are not polling dependencies after profile verification.
 - Poke targets and `max_amount` are non-authoritative prefilter hints. Subscriber caller authentication, local thresholds, and authoritative reconciliation remain mandatory.
+- For a subscriber trusting multiple Event Horizon instances, the authenticated caller defines the observed-ledger context of every poke.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets are certified; backend admission remains authoritative.
 

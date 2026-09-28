@@ -25,12 +25,12 @@ The reader uses no Index or archive traversal. A proven archived prefix is logge
 
 ## Admission and storage
 
-A Faucet-origin payout memo is parsed as a global, single-account, or inclusive-range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted range expands to at most 256 ordinary entries in the existing watched-account map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
+A Faucet-origin payout memo is parsed as a global declaration or an ordinary/neuron single/range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted ordinary or neuron range expands to at most 256 individual watched-account entries in the existing map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
 
 | ID | Contents |
 |---:|---|
 | 0 | existing metadata and Ledger cursor |
-| 1 | existing account subscriptions |
+| 1 | watched-account subscriptions with semantic `WatchTarget` values |
 | 2 | immutable instance configuration and discovered observed profile |
 | 3 | debug configuration in debug Wasm only |
 | 4 | global subscriber set |

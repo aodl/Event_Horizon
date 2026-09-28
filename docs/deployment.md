@@ -1,5 +1,7 @@
 # Deployment
 
+This is the operator runbook for the canonical Event Horizon mainnet deployment.
+
 Event Horizon has two independently controlled canisters:
 
 - `event_horizon`: `eo6ei-gaaaa-aaaar-qchra-cai`, the autonomous trigger backend, intended eventually to have **no controllers**.
@@ -19,10 +21,12 @@ This mapping is local deployment state and must not be committed as application 
 
 > **Do not run a mainnet deploy until the mapping has been checked. Otherwise a deployment tool may create new canisters rather than use the permanent Event Horizon canisters.**
 
-Both canisters are newly created and empty. Their first deployment must use explicit install mode,
-`--mode install`, never reinstall. Install the backend first, verify its module and application surface, and
-only then install the frontend. The operator performs these mainnet actions manually; the repository does not
-provide an automatic deployment script.
+The canonical ICP acceptance backend already exists. Because it has no
+subscribers and this final schema deliberately has no migration decoder, its
+current transition is an explicit reinstall. This is a one-time accepted reset,
+not the normal lifecycle of an immutable production instance. A genuinely new
+additional instance uses install mode. The operator performs every mainnet
+action manually; the repository provides no automatic deployment script.
 
 ## Operator pre-deployment gate
 
@@ -46,19 +50,41 @@ Review the hashes before continuing. Do not deploy a locally compiled replacemen
 
 Canonical-artifact mode verifies `release-artifacts/release-artifacts.sha256`, does not rebuild, prints the exact artifact hash being handed to `icp deploy`, and copies that Wasm to the CLI-requested output path.
 
-Install and verify the backend first:
+Deliberately reinstall and verify the current zero-subscriber canonical backend
+first, using the checked-in final constructor arguments:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon -e ic --mode install
+  icp deploy event_horizon -e ic --mode reinstall \
+  --args-file canisters/event-horizon/mainnet-icp-install-args.did
 ```
 
-After checking its live module hash and production application surface, install the frontend:
+After checking its live module hash, configuration, and production application
+surface, inspect the permanent frontend canister immediately before acting. Use
+the existing `event_horizon_frontend` mapping and check whether the canister has
+an installed module. If it does, deliberately select upgrade:
+
+```bash
+EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
+  icp deploy event_horizon_frontend -e ic --mode upgrade
+```
+
+If the permanent frontend canister exists but has no installed module,
+deliberately select install instead:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
   icp deploy event_horizon_frontend -e ic --mode install
 ```
+
+Do not assume either frontend state and do not automate this choice. The
+canonical backend instruction above remains a deliberate reinstall because it
+already exists, has no subscribers, and the final schema intentionally has no
+migration machinery.
+
+For a fresh additional instance, use `--mode install` and follow
+[Deploying an immutable instance](deploying-an-instance.md). For an SNS-aware
+instance, that guide owns the Root/Ledger/Governance verification procedure.
 
 The recommended lifecycle is:
 
@@ -66,10 +92,11 @@ The recommended lifecycle is:
 validate
 → review printed hashes
 → inspect canister mapping/settings
-→ install backend
+→ deliberately reinstall zero-subscriber canonical backend
 → compare live module hash
 → verify backend
-→ install frontend
+→ inspect frontend installed-module state
+→ install or upgrade frontend as applicable
 → compare live module hash
 ```
 
@@ -77,7 +104,20 @@ Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by `v
 
 ## Required backend settings
 
-The production constructor is exactly `record { observed_ledger : principal }`. Canonical ICP selects the fixed legacy `query_blocks` adapter; any other principal selects the generic ICRC-3 adapter and must pass ICRC-1/ICRC-3/`1xfer` readiness. This is immutable dispatch, not fallback.
+The production constructor is:
+
+```candid
+record {
+  observed_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  sns_root = null;
+}
+```
+
+Canonical ICP requires `sns_root = null` and selects the fixed legacy
+`query_blocks` adapter. Any other principal selects the generic ICRC-3 adapter
+and must pass ICRC-1/ICRC-3/`1xfer` readiness. This is immutable dispatch, not
+fallback. SNS-aware instance deployment is covered by
+[Deploying an immutable instance](deploying-an-instance.md).
 
 `icp.yaml` declares the production observability settings:
 
@@ -176,13 +216,13 @@ Controller removal is a separate operational decision. During the controlled obs
 2. no unexplained `HISTORY_GAP` appears under normal operation;
 3. ICP-to-cycles conversion regularly returns to `Idle` without operator intervention;
 4. the expected polling mode follows the public cycles balance;
-5. public logs remain sparse enough to be useful in a 4 KiB rolling buffer;
+5. public logs remain sparse enough to be useful in the configured 16 KiB (`16384` byte) rolling buffer;
 6. honest subscribers receive prompt pokes while their independent reconciliation remains sufficient when pokes are absent;
 7. actual cycle burn is compatible with the starting threshold table;
 8. the installed backend module hash matches the canonical reproducible artifact.
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
 10. the production export audit reports exactly `get_instance` and `get_pricing` as application methods;
-11. global and range subscription poke volume is sustainable at the observed registry size, including a validated 256-account maximum range.
+11. global and specific-target poke volume is sustainable at the observed registry size, including validated 256-target range-expansion and callback bounds.
 12. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
@@ -206,8 +246,12 @@ The Jupiter Faucet `X` alias must resolve to the actual deployed Event Horizon b
 
 ## Frontend backend binding
 
-The certified frontend embeds `eo6ei-gaaaa-aaaar-qchra-cai` directly in its JavaScript asset and therefore in
-the frontend Wasm. Its no-argument production pricing path uses `https://icp-api.io` and the mainnet root key
-embedded by the JavaScript agent. It does not discover the backend from cookies, canister environment values,
-URL parameters, local storage, HTTP configuration, init arguments, or mutable canister state. The frontend's
-own principal is deployment identity only and is not compiled into executable code.
+The certified frontend embeds a reviewed static instance registry, including
+canonical backend `eo6ei-gaaaa-aaaar-qchra-cai`, in its JavaScript asset and
+therefore in the frontend Wasm. Its production query path uses
+`https://icp-api.io` and the mainnet root key embedded by the JavaScript agent.
+It calls `get_instance` to verify the selected registry entry and `get_pricing`
+for authoritative prices. It does not discover principals from cookies,
+canister environment values, URL parameters, local storage, HTTP configuration,
+init arguments, or mutable canister state. The frontend's own principal is
+deployment identity only and is not compiled into executable code.

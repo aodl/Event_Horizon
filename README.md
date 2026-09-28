@@ -4,21 +4,23 @@ Event Horizon is a ledger-generic low-latency wake-up service, funded through Ju
 
 Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger` and optional `sns_root`. Trigger thresholds use that token's decimals, while prices and cycles funding always use ICP.
 
-It supports five exact Jupiter Faucet memo forms. Canonical ICP uses alias `X`
-in these examples; the grammar itself uses the reviewed per-instance alias:
+The five declaration classes use these Jupiter Faucet memo forms. Canonical ICP
+uses alias `X` only as an example; every instance uses its reviewed alias:
 
 ```text
-<alias>.<subscriber>                         # global Ledger activity
-<alias>.<subscriber>.<subaccount>            # every incoming account transfer
-<alias>.<subscriber>.<subaccount>:<amount>   # inclusive observed-token threshold
-<alias>.<subscriber>.<start>-<end>           # every transfer in an inclusive range
-<alias>.<subscriber>.<start>-<end>:<amount>  # inclusive observed-token range threshold
+<alias>.<subscriber>
+<alias>.<subscriber>.<number>[:<amount>]
+<alias>.<subscriber>.<start>-<end>[:<amount>]
+<alias>.<subscriber>.n<nonce>[:<amount>]
+<alias>.<subscriber>.n<start>-<end>[:<amount>]
 ```
 
 The planned IO alias `I` is intended, not published. The full memo—including
 alias, dot, subscriber, scope or range, and optional threshold—must fit
 Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
 Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand at admission into the existing watched-account map. `n<nonce>` selects a subscriber-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. `poke([])` signals global-only activity; a non-empty vector of target/max-amount matches takes precedence and is capped at 256 targets.
+
+A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 
 ## Dynamic admission pricing
 
@@ -84,6 +86,7 @@ This verifies the artifact manifest and prints the exact uncompressed Wasm hashe
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/subscriber-guide.md`](docs/subscriber-guide.md)
 - [`docs/economics-pricing.md`](docs/economics-pricing.md)

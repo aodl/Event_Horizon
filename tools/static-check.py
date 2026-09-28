@@ -20,6 +20,9 @@ assert ' -> ();' not in backend_did
 subscriber_did=(root/'candid/subscriber.did').read_text()
 assert 'target : PokeTarget' in subscriber_did and 'max_amount : nat' in subscriber_did
 assert 'vec nat8' not in subscriber_did
+install_args=(root/'canisters/event-horizon/mainnet-icp-install-args.did').read_text()
+assert 'observed_ledger = principal' in install_args
+assert 'sns_root = null' in install_args
 thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
 unfiltered='X.r5m5ydiaaaaaaaaqanaacai.7'
 assert len(thresholded.encode()) == 32
@@ -107,6 +110,15 @@ for forbidden in [
     'no application methods',
 ]:
     assert forbidden not in live_text, f'live documentation contains stale marker {forbidden}'
+for forbidden in [
+    'Both canisters are newly created and empty',
+    'first deployment must use explicit install mode',
+    'global declaration does not represent all 256 subaccounts',
+]:
+    assert forbidden not in live_text, f'live documentation contains stale protocol statement {forbidden}'
+reproducible_builds=(root/'docs/reproducible-builds.md').read_text()
+assert 'get_pricing is the backend\'s sole application method' not in reproducible_builds
+assert 'sole backend application method is `get_pricing`' not in reproducible_builds
 for required in [
     'cargo run -p xtask -- test-all',
     'cargo run -p xtask -- canonical',
@@ -114,6 +126,25 @@ for required in [
     'tools/xtask/README.md',
 ]:
     assert required in live_text, f'live documentation is missing developer command {required}'
+
+subscriber_guide=(root/'docs/subscriber-guide.md').read_text()
+for marker in ['## Subscribing to multiple ledgers', 'caller', 'max_amount', 'neuron_nonce']:
+    assert marker in subscriber_guide, f'subscriber guide missing current guidance {marker}'
+
+spec=(root/'SPEC.md').read_text()
+assert 'contain 2 through 256 targets' in spec
+for stale in ['range endpoints are limited to 0..255', 'range endpoints must be <=255']:
+    assert stale not in spec.lower(), f'normative specification contains stale range rule {stale}'
+
+deployment=(root/'docs/deployment.md').read_text()
+assert 'sns_root' in deployment, 'canonical deployment documentation omits final constructor'
+assert 'log_memory_limit: 16384' in deployment
+assert '16 KiB (`16384` byte) rolling buffer' in deployment
+assert '4 KiB rolling buffer' not in deployment
+
+frontend_index=(root/'canisters/frontend/public/index.html').read_text()
+assert 'Canonical ICP is read through its legacy block log' in frontend_index
+assert 'compatible non-ICP ledgers are read through ICRC-3' in frontend_index
 
 backend_src='\n'.join(p.read_text(errors='ignore') for p in (root/'canisters/event-horizon/src').rglob('*.rs'))
 assert 'eo6ei-gaaaa-aaaar-qchra-cai' not in backend_src

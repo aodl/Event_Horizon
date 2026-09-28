@@ -25,14 +25,24 @@ Jupiter Historian is used for admission verification. Jupiter Faucet and Disburs
 
 ## 3. Subscription declaration
 
-A Jupiter Faucet endowment uses exactly one of these full memo forms:
+A routed declaration is `<alias>.<suffix>`. The suffix has five declaration
+classes—global, ordinary single, ordinary range, neuron single, and neuron
+range—and every specific class may optionally include a threshold:
 
 ```text
-<alias>.<compact-subscriber-principal>
-<alias>.<compact-subscriber-principal>.<numbered-subaccount>
-<alias>.<compact-subscriber-principal>.<numbered-subaccount>:<minimum-observed-amount>
-<alias>.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>
-<alias>.<compact-subscriber-principal>.<start-subaccount>-<end-subaccount>:<minimum-observed-amount>
+<subscriber>
+
+<subscriber>.<number>
+<subscriber>.<number>:<amount>
+
+<subscriber>.<start>-<end>
+<subscriber>.<start>-<end>:<amount>
+
+<subscriber>.n<nonce>
+<subscriber>.n<nonce>:<amount>
+
+<subscriber>.n<start>-<end>
+<subscriber>.n<start>-<end>:<amount>
 ```
 
 Canonical ICP examples use alias `X`:
@@ -41,6 +51,9 @@ Canonical ICP examples use alias `X`:
 X.r5m5ydiaaaaaaaaqanaacai
 X.r5m5ydiaaaaaaaaqanaacai.7
 X.r5m5ydiaaaaaaaaqanaacai.7:0.01
+X.r5m5ydiaaaaaaaaqanaacai.7-18
+X.r5m5ydiaaaaaaaaqanaacai.n42
+X.r5m5ydiaaaaaaaaqanaacai.n0-2
 ```
 
 The planned canonical IO instance has intended alias `I`; that alias is not
@@ -55,24 +68,21 @@ r5m5ydiaaaaaaaaqanaacai.7
 r5m5ydiaaaaaaaaqanaacai.7:0.01
 r5m5ydiaaaaaaaaqanaacai.7-18
 r5m5ydiaaaaaaaaqanaacai.7-18:0.01
-```
-
-The suffix grammar is:
-
-```text
-<principal>
-<principal> "." ( <subaccount> | <start> "-" <end> ) [ ":" <amount> ]
+r5m5ydiaaaaaaaaqanaacai.n42
+r5m5ydiaaaaaaaaqanaacai.n42:0.01
+r5m5ydiaaaaaaaaqanaacai.n0-2
+r5m5ydiaaaaaaaaqanaacai.n0-2:0.01
 ```
 
 Rules:
 
 - principals may be the canonical hyphenated representation or the compact representation with group separators removed;
 - a principal alone declares a global Ledger subscription: any transaction processed in a completed poll is relevant;
-- a global declaration does not represent all 256 subaccounts of the subscriber;
+- a global declaration is semantically distinct from any finite set of specific targets;
 - anonymous and management principals are invalid;
-- numeric subaccount is a canonical decimal `u64`, or `n` followed by a canonical decimal neuron nonce;
+- an ordinary numeric target and a neuron nonce are each a canonical decimal `u64`; the neuron discriminator is exactly lowercase `n`;
 - integer spelling is canonical decimal: `0` or a nonzero digit followed by decimal digits; signs and leading zeroes are invalid;
-- range endpoints are inclusive canonical `u64`, satisfy `start < end`, and span at most 256 targets;
+- range endpoints are inclusive canonical `u64`, satisfy `start < end`, and satisfy `end - start + 1 <= 256` (equivalently, after proving order, `end - start <= 255`); endpoint values themselves are not capped at 255;
 - reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
 - omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
 - when present, amount is decimal observed-token value with at most its verified `icrc1_decimals`, or an integer;
@@ -88,15 +98,15 @@ Observed amounts are arbitrary-precision integer raw token units. Floating-point
 
 ## 4. Watched account
 
-The numeric-subaccount convention is `24 zero bytes || N.to_be_bytes()`. Values `0..255` therefore retain their former bytes. Subaccount `0` is the default all-zero subaccount. Ranges require `start < end` and `end - start <= 255`; endpoint values are otherwise unrestricted `u64`.
+For `Subaccount(N)`, the owner is the subscriber and the subaccount is `24 zero bytes || N.to_be_bytes()`. Values `0..255` therefore retain their former bytes. Subaccount `0` is the default all-zero subaccount.
 
-A neuron target `n<N>` derives `SHA256(0x0c || "neuron-stake" || subscriber principal bytes || N.to_be_bytes())`. The controller is the subscriber principal. ICP uses fixed NNS Governance as owner. A non-ICP instance supports neuron targets only after its immutable SNS Root reports the configured Ledger and a valid SNS Governance and that Ledger reports Governance's default account as `icrc1_minting_account`. Hotkeys, permission holders, arbitrary governance owners, and arbitrary accounts are not supported.
+For `NeuronNonce(N)`, the subscriber is the controller and the staking subaccount is `SHA256(0x0c || "neuron-stake" || subscriber principal bytes || N.to_be_bytes())`. The owner is fixed NNS Governance for the ICP instance or verified SNS Governance for a verified SNS instance. Neuron targets are unavailable without verified neuron Governance context. Hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts are not supported.
 
-The watched ICRC Account contains the subscriber principal and numbered subaccount. Absent and explicit all-zero subaccounts normalize to the same effective account.
+Canonical ICP converts the resolved owner and subaccount to a legacy AccountIdentifier. A non-ICP instance uses the resolved ICRC Account directly. Absent and explicit all-zero ICRC subaccounts normalize to the same effective account.
 
 At most one effective subscription is required for a watched account. If another admitted declaration for the same account has a less restrictive threshold, the stored threshold becomes the less restrictive value. An unfiltered declaration (no threshold) therefore subsumes every thresholded declaration for that same account.
 
-An admitted range is expanded once into the existing watched-account map, deriving one account identifier for every inclusive endpoint value. Expansion is bounded to 256 entries. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
+Ordinary and neuron ranges are inclusive, contain 2 through 256 targets, and may start anywhere in the `u64` domain. Each admitted range expands once into individual entries in the existing watched-account map. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
 
 ## 5. Admission
 
@@ -109,7 +119,7 @@ The approved mainnet Faucet payout source is fixed in the production Wasm.
 
 Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
 
-Global, range, and account declarations are distinct exact routes with class-specific prices. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
+Global, range, and single-target declarations are distinct exact routes with class-specific prices. Ordinary and neuron singles use the account price; ordinary and neuron ranges use the range price. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
 If Historian is unavailable/incomplete for one payout, Event Horizon does not persist an admission-retry queue. A later perpetual Faucet payout carrying the same declaration provides a natural later admission opportunity.
 
@@ -149,25 +159,38 @@ This is acceptable because subscribers retain authoritative reconciliation.
 Subscriber contract:
 
 ```candid
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+
+type PokeMatch = record {
+  target : PokeTarget;
+  max_amount : nat;
+};
+
 service : {
-  poke : (vec record { target : variant { subaccount : nat64; neuron_nonce : nat64 }; max_amount : nat }) -> ();
+  poke : (vec PokeMatch) -> ();
 }
 ```
 
-The vector contains specific targets that saw relevant activity and each target's largest individual qualifying incoming transfer in observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. `max_amount` is a prefilter hint, never proof of payment.
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
-The specific-target list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for its own global and account Ledger/Index cursors and independent periodic reconciliation.
+Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.
+
+The specific-target list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for authoritative Ledger/Index reconciliation state and cursors for each observed ledger, plus independent periodic reconciliation.
 
 There is:
 
-- no block index, transaction amount, memo, sender, or transaction payload;
+- no block index, complete transaction record, sender, memo, or transaction list;
+- no proof of payment or proof that no other Ledger activity occurred;
 - no acknowledgement processing;
 - no retry;
 - no durable notification queue;
 - no delivery journal;
 - no ordering or delivery guarantee.
 
-Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied specific targets, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path.
+The target identity and per-target maximum are aggregate prefilter hints, not authoritative transaction data. Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied specific targets within that caller's ledger context, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path. Reconciliation cursors/state are maintained independently per observed ledger.
 
 Because Event Horizon reads the Ledger directly, a poke may arrive before the ICP Index exposes the triggering transaction. The subscriber owns any Index retry/backoff policy.
 
@@ -232,11 +255,11 @@ Continuous means no deliberately inserted delay after one complete poll; polls n
 
 ## 12. Production observability and immutability
 
-The Observed Ledger is the sole production install configuration. Canonical ICP is the single explicit protocol exception: it uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
+The production install configuration is immutable `observed_ledger` plus optional `sns_root`. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, Jupiter Historian, and disabled surplus destination remain compiled trust anchors.
 
 Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
 
-Global subscriptions match every processed block. Specific accounts match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers. Thresholds are observed-token units; subscription prices and endowments are ICP.
+Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
 
 The production backend exposes only `get_instance` and `get_pricing`. The release audit rejects every other application query, composite query, or update.
 
@@ -254,4 +277,4 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
-The certified frontend embeds the permanent Event Horizon backend principal `eo6ei-gaaaa-aaaar-qchra-cai` in its JavaScript asset and therefore in the frontend Wasm. Browser pricing queries use that fixed principal directly. No frontend update call is involved. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, single-account, and inclusive-range modes, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
+The certified frontend embeds a reviewed static instance registry in its JavaScript asset and therefore in the frontend Wasm. Browser queries use each selected backend principal directly. No frontend update call is involved. It uses `get_instance` to verify immutable configuration/profile and `get_pricing` for authoritative admission prices. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, ordinary single/range, and neuron single/range modes when supported, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.

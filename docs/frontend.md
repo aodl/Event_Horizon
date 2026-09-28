@@ -10,4 +10,4 @@ Static HTML, JavaScript, CSS, and SVG bytes remain embedded and certified. The p
 
 When a frozen next price is higher, the builder recommends that amount immediately and explains Faucet delivery delay. When it is lower, the builder continues recommending the current amount until activation. Backend evaluation remains authoritative.
 
-Static assets retain certified query responses. Pricing is obtained at runtime from the read-only backend query rather than inserted into the frontend's static certificate tree. No production backend method beyond `get_pricing` is used.
+Static assets retain certified query responses. Runtime values come from exactly the backend's two production queries: `get_instance` verifies the reviewed immutable instance configuration/profile, and `get_pricing` supplies authoritative admission pricing. Neither query is inserted into the frontend's static certificate tree, and the frontend has no update or administrative access to backend state.

@@ -14,6 +14,24 @@ case "${1:-}" in
     tracked_files | sort -z | xargs -0 sha256sum > "$manifest"
     ;;
   verify)
+    expected="$(mktemp)"
+    actual="$(mktemp)"
+    duplicates="$(mktemp)"
+    trap 'rm -f "$expected" "$actual" "$duplicates"' EXIT
+
+    tracked_files | sort -z | tr '\0' '\n' > "$expected"
+    sed -E 's/^[[:xdigit:]]{64}  //' "$manifest" | sort > "$actual"
+    sed -E 's/^[[:xdigit:]]{64}  //' "$manifest" | sort | uniq -d > "$duplicates"
+
+    if [[ -s "$duplicates" ]]; then
+      echo "duplicate paths in $manifest:" >&2
+      cat "$duplicates" >&2
+      exit 1
+    fi
+    if ! diff -u "$expected" "$actual"; then
+      echo "$manifest membership does not match tracked source files" >&2
+      exit 1
+    fi
     sha256sum -c "$manifest"
     ;;
   *)

@@ -1,5 +1,7 @@
 # Deploying an immutable instance
 
+This guide is for deploying an additional immutable Event Horizon instance for another observed ledger.
+
 The same reviewed `event_horizon.wasm` serves every compatible instance. Immutable install configuration supplies `observed_ledger` and optional `sns_root`; ICP Ledger, NNS Governance, CMC, Jupiter Faucet, Jupiter Historian, and `SURPLUS_CANISTER=None` are compiled trust anchors.
 
 For an SNS-aware instance, externally verify the observed token Ledger and SNS Root tuple against canonical SNS-WASM inventory or reviewed primary evidence. Confirm Root `list_sns_canisters` reports that Root, Ledger, and SNS Governance and that Ledger `icrc1_minting_account` is Governance's default account. Install with those immutable principals, wait for profile initialization, then verify `get_instance` reports the Ledger, SNS Root, neuron Governance, and expected Wasm hash. Perform controlled tests, remove all controllers, and only then propose frontend listing. Event Horizon never calls SNS-WASM and, after profile caching, does not call Root or Governance. ICP and non-SNS generic installs use `sns_root = null`.
