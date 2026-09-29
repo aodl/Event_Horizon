@@ -7,25 +7,25 @@ export TZ=UTC LC_ALL=C.UTF-8 LANG=C.UTF-8
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
 export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${ROOT}=/build --remap-path-prefix=${CARGO_HOME:-/root/.cargo}=/cargo"
 
-rm -rf release-artifacts
-mkdir -p release-artifacts
+artifacts="$(mktemp -d "$ROOT/.release-artifacts.XXXXXX")"
+trap 'rm -rf "$artifacts"' EXIT
 npm ci
 npm run build:frontend
 cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon -p event-horizon-frontend
 
 ic-wasm target/wasm32-unknown-unknown/release/event_horizon.wasm \
-  -o release-artifacts/event_horizon.wasm shrink
+  -o "$artifacts/event_horizon.wasm" shrink
 ic-wasm target/wasm32-unknown-unknown/release/event_horizon_frontend.wasm \
-  -o release-artifacts/event_horizon_frontend.wasm shrink
+  -o "$artifacts/event_horizon_frontend.wasm" shrink
 
-python3 tools/audit-wasm.py release-artifacts/event_horizon.wasm --backend
-python3 tools/audit-wasm.py release-artifacts/event_horizon_frontend.wasm --frontend
+python3 tools/audit-wasm.py "$artifacts/event_horizon.wasm" --backend
+python3 tools/audit-wasm.py "$artifacts/event_horizon_frontend.wasm" --frontend
 
 (
-  cd release-artifacts
+  cd "$artifacts"
   sha256sum event_horizon.wasm event_horizon_frontend.wasm > release-artifacts.sha256
 )
-python3 - <<'PY' > release-artifacts/build-info.json
+python3 - <<'PY' > "$artifacts/build-info.json"
 from pathlib import Path
 import hashlib, json, os, subprocess
 
@@ -38,15 +38,24 @@ print(json.dumps({
 }, sort_keys=True, indent=2))
 PY
 (
-  cd release-artifacts
+  cd "$artifacts"
   sha256sum build-info.json >> release-artifacts.sha256
   sha256sum -c release-artifacts.sha256
 )
 
+previous="$ROOT/.release-artifacts.previous"
+rm -rf "$previous"
+if [ -d "$ROOT/release-artifacts" ]; then
+  mv "$ROOT/release-artifacts" "$previous"
+fi
+mv "$artifacts" "$ROOT/release-artifacts"
+rm -rf "$previous"
+trap - EXIT
+
 echo
 echo "Local-toolchain release artifacts built in release-artifacts/"
 echo "This is not canonical reproducibility evidence."
-echo 'Use `cargo run -p xtask -- canonical` for the Docker-built production artifacts.'
+echo 'Use `./tools/scripts/docker-build` for the Docker-built production artifacts.'
 echo
 echo "Module SHA-256:"
 (cd release-artifacts && sha256sum event_horizon.wasm event_horizon_frontend.wasm)

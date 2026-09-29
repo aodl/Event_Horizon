@@ -2,11 +2,21 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
-rm -rf release-artifacts; mkdir -p release-artifacts
+staging="$(mktemp -d "$ROOT/.release-artifacts.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
 id="$(docker create "$(docker build --quiet --file Dockerfile.repro --target artifact .)" /bin/true)"
+trap 'docker rm -f "$id" >/dev/null 2>&1 || true; rm -rf "$staging"' EXIT
+docker cp "$id:/release-artifacts/." "$staging/"
+(cd "$staging" && sha256sum -c release-artifacts.sha256)
+
+previous="$ROOT/.release-artifacts.previous"
+rm -rf "$previous"
+if [ -d "$ROOT/release-artifacts" ]; then
+  mv "$ROOT/release-artifacts" "$previous"
+fi
+mv "$staging" "$ROOT/release-artifacts"
+rm -rf "$previous"
 trap 'docker rm -f "$id" >/dev/null 2>&1 || true' EXIT
-docker cp "$id:/release-artifacts/." release-artifacts/
-(cd release-artifacts && sha256sum -c release-artifacts.sha256)
 
 revision="$(git rev-parse HEAD)"
 if [ -z "$(git status --porcelain)" ]; then

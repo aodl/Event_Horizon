@@ -1,151 +1,199 @@
+mod test_runner;
+
 use std::{
-    env,
+    env, fs,
+    path::{Path, PathBuf},
     process::{exit, Command},
 };
 
-const HELP: &str = "Event Horizon developer commands
+use test_runner::{print_summary, run_suite, run_suites, Parser, SuiteSpec};
+
+const HELP: &str = "Event Horizon test orchestration
 
 Usage:
   cargo run -p xtask -- <command>
 
-Development:
-  unit       Fast backend + frontend unit tests
-  check      Source-quality gate: static checks, fmt, clippy, workspace tests
-  pocketic   Full deterministic PocketIC integration suite
-  test-all   check + pocketic
+Commands:
+  frontend_setup              Prepare locked frontend dependencies with npm ci
+  test_unit                   Repository, Rust workspace, xtask, and frontend tests
+  test_pocketic_integration   Intentionally ignored PocketIC integration tests
+  test_all                    test_unit + test_pocketic_integration
 
-Release:
-  security   Dependency/security policy checks
-  release    Local-toolchain release build; not canonical reproducibility proof
-  canonical  Canonical Docker build; leaves deployable Wasms in release-artifacts/
-  repro      Two clean Docker builds; proves same-environment determinism
-  validate   Full pre-deployment gate and canonical artifact build
+Release, security, formatting, and Clippy remain explicit script/tool commands.
+See tools/xtask/README.md.";
 
-Documentation:
-  tools/xtask/README.md";
-
-fn heading(name: &str) {
-    println!("\n==> {name}");
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("xtask must live under tools/xtask")
+        .to_path_buf()
 }
 
-fn run(program: &str, args: &[&str]) {
-    let status = Command::new(program)
-        .args(args)
-        .status()
-        .unwrap_or_else(|e| panic!("failed to run {program}: {e}"));
-    if !status.success() {
-        exit(status.code().unwrap_or(1));
+fn frontend_stamp_contents(root: &Path) -> Result<String, String> {
+    let package = fs::read_to_string(root.join("package.json"))
+        .map_err(|error| format!("failed to read package.json: {error}"))?;
+    let lock = fs::read_to_string(root.join("package-lock.json"))
+        .map_err(|error| format!("failed to read package-lock.json: {error}"))?;
+    Ok(format!(
+        "package.json\n{package}\n---\npackage-lock.json\n{lock}"
+    ))
+}
+
+fn ensure_frontend_dependencies() -> Result<(), String> {
+    let root = repo_root();
+    let marker = root.join("node_modules/@icp-sdk/core");
+    let stamp = root.join("node_modules/.frontend-deps-stamp");
+    let expected = frontend_stamp_contents(&root)?;
+
+    if marker.exists()
+        && fs::read_to_string(&stamp)
+            .ok()
+            .as_deref()
+            .is_some_and(|actual| actual == expected)
+    {
+        eprintln!("frontend dependencies are current");
+        return Ok(());
+    }
+
+    eprintln!("frontend dependencies are absent or stale; running locked npm setup");
+    let output = Command::new("npm")
+        .args(["run", "setup:frontend"])
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("failed to run npm: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.is_empty() {
+        eprint!("{stdout}");
+    }
+    if !stderr.is_empty() {
+        eprint!("{stderr}");
+    }
+    if !output.status.success() {
+        let details = format!("{stdout}{stderr}");
+        return Err(format!(
+            "npm run setup:frontend failed with {}{}",
+            output.status.code().map_or_else(
+                || "signal termination".to_string(),
+                |code| format!("exit {code}")
+            ),
+            if details.trim().is_empty() {
+                String::new()
+            } else {
+                format!("\n{}", details.trim_end())
+            }
+        ));
+    }
+    fs::write(&stamp, expected)
+        .map_err(|error| format!("failed to write {}: {error}", stamp.display()))?;
+    Ok(())
+}
+
+fn unit_specs() -> [SuiteSpec; 3] {
+    [
+        SuiteSpec::command(
+            "[repo] static validation",
+            "python3",
+            &["tools/static-check.py"],
+            Parser::Command,
+            "python3 tools/static-check.py",
+        ),
+        SuiteSpec::command(
+            "[repo] source manifest",
+            "./tools/scripts/source-manifest",
+            &["verify"],
+            Parser::Command,
+            "./tools/scripts/source-manifest verify",
+        ),
+        SuiteSpec::command(
+            "[unit] Rust workspace (including xtask)",
+            "cargo",
+            &["test", "--locked", "--workspace"],
+            Parser::Rust,
+            "cargo test --locked --workspace",
+        ),
+    ]
+}
+
+fn run_unit(outcomes: &mut Vec<test_runner::SuiteOutcome>) {
+    let root = repo_root();
+    outcomes.extend(run_suites(&root, &unit_specs()));
+
+    match ensure_frontend_dependencies() {
+        Ok(()) => outcomes.push(run_suite(
+            &root,
+            &SuiteSpec::command(
+                "[unit] frontend",
+                "npm",
+                &["run", "test:frontend-unit"],
+                Parser::Node,
+                "npm run test:frontend-unit",
+            ),
+        )),
+        Err(error) => outcomes.push(test_runner::SuiteOutcome::setup_failure(
+            "[unit] frontend",
+            error,
+            "cargo run -p xtask -- frontend_setup",
+        )),
     }
 }
 
-fn script(path: &str) {
-    run(path, &[]);
+fn run_pocketic(outcomes: &mut Vec<test_runner::SuiteOutcome>) {
+    outcomes.push(run_suite(
+        &repo_root(),
+        &SuiteSpec::command_with_env(
+            "[pocketic] Event Horizon integration",
+            "cargo",
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "event-horizon-pocketic",
+                "--",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            &[("POCKET_IC_MUTE_SERVER", "1")],
+            Parser::Rust,
+            "cargo test --locked -p event-horizon-pocketic -- --ignored --nocapture --test-threads=1",
+        ),
+    ));
 }
 
-fn run_unit() {
-    heading("Backend unit tests");
-    run(
-        "cargo",
-        &["test", "--locked", "-p", "event-horizon", "--lib"],
-    );
-    heading("Frontend tests");
-    run("npm", &["test"]);
-}
-
-fn run_check() {
-    heading("Static/source checks");
-    run("python3", &["tools/static-check.py"]);
-    heading("Rust formatting");
-    run("cargo", &["fmt", "--all", "--", "--check"]);
-    heading("Rust Clippy");
-    run(
-        "cargo",
-        &[
-            "clippy",
-            "--locked",
-            "--workspace",
-            "--all-targets",
-            "--",
-            "-D",
-            "warnings",
-        ],
-    );
-    heading("Workspace tests");
-    run("cargo", &["test", "--locked", "--workspace"]);
-    heading("Frontend tests");
-    run("npm", &["test"]);
-}
-
-fn run_pocketic() {
-    heading("PocketIC integration suite");
-    run(
-        "cargo",
-        &[
-            "test",
-            "--locked",
-            "-p",
-            "event-horizon-pocketic",
-            "--",
-            "--ignored",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-    );
-}
-
-fn run_test_all() {
-    heading("Event Horizon test-all");
-    run_check();
-    run_pocketic();
-}
-
-fn run_security() {
-    heading("Event Horizon security gate");
-    script("./tools/scripts/security-scan");
-}
-
-fn run_release() {
-    heading("Event Horizon local-toolchain release build");
-    script("./tools/scripts/build-release");
-}
-
-fn run_canonical() {
-    heading("Event Horizon canonical build");
-    script("./tools/scripts/docker-build");
-}
-
-fn run_repro() {
-    heading("Event Horizon reproducibility check");
-    script("./tools/scripts/verify-reproducible-artifacts");
-}
-
-fn run_validate() {
-    heading("Event Horizon validation");
-    run_test_all();
-    run_security();
-    run_repro();
-    run_canonical();
-    println!(
-        "\nEvent Horizon validation passed.\n\n\
-         Canonical deployment artifacts:\n\
-         release-artifacts/event_horizon.wasm\n\
-         release-artifacts/event_horizon_frontend.wasm\n\n\
-         Review the module hashes printed above before deployment."
-    );
+fn finish(outcomes: Vec<test_runner::SuiteOutcome>) {
+    if !print_summary(&outcomes) {
+        exit(1);
+    }
 }
 
 fn main() {
     match env::args().nth(1).as_deref() {
         None | Some("help" | "--help" | "-h") => println!("{HELP}"),
-        Some("unit") => run_unit(),
-        Some("check") => run_check(),
-        Some("pocketic") => run_pocketic(),
-        Some("test-all") => run_test_all(),
-        Some("security") => run_security(),
-        Some("release") => run_release(),
-        Some("canonical") => run_canonical(),
-        Some("repro") => run_repro(),
-        Some("validate") => run_validate(),
+        Some("frontend_setup") => match ensure_frontend_dependencies() {
+            Ok(()) => println!("frontend_setup complete"),
+            Err(error) => {
+                eprintln!("frontend_setup failed: {error}");
+                exit(1);
+            }
+        },
+        Some("test_unit") => {
+            let mut outcomes = Vec::new();
+            run_unit(&mut outcomes);
+            finish(outcomes);
+        }
+        Some("test_pocketic_integration") => {
+            let mut outcomes = Vec::new();
+            run_pocketic(&mut outcomes);
+            finish(outcomes);
+        }
+        Some("test_all") => {
+            let mut outcomes = Vec::new();
+            run_unit(&mut outcomes);
+            run_pocketic(&mut outcomes);
+            finish(outcomes);
+        }
         Some(command) => {
             eprintln!("error: unknown command `{command}`\n\n{HELP}");
             exit(2);

@@ -2,6 +2,11 @@
 
 The current target-aware release extends immutable instance configuration with optional `sns_root`, uses full-width numeric and neuron-nonce targets, and replaces the legacy callback with target plus raw `Nat` maximums. Its canonical hashes and full 2026-09-27 validation evidence are recorded in `docs/codex/generic-ledger-instances-validation.md`; historical reports below remain provenance only.
 
+The 2026-09-29 developer/test/release workflow alignment with Jupiter Faucet,
+including the deterministic PocketIC callback harness, consolidated test
+runner, documentation/CI structure, and complete validation, is recorded in
+[`docs/codex/jupiter-workflow-alignment-validation.md`](docs/codex/jupiter-workflow-alignment-validation.md).
+
 `SPEC.md` is the normative protocol. Repository evidence is divided into three stages so historical claims are not confused with checks executed later.
 
 ## Checkpoint 03 historical import

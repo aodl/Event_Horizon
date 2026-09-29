@@ -34,7 +34,7 @@ global price  = ceil(100 × F / C) ICP
 
 Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes exactly the read-only `get_instance` and `get_pricing` queries; the certified frontend verifies the first against its reviewed static registry.
 
-See [deploying an instance](docs/deploying-an-instance.md), [acceptance observation](docs/acceptance-observation.md), and the [subscriber guide](docs/subscriber-guide.md).
+See [deploying an instance](docs/operations/deploying-an-instance.md), [acceptance observation](docs/operations/acceptance-observation.md), and the [subscriber guide](docs/subscriber-guide.md).
 
 ## Adaptive surplus funding
 
@@ -61,36 +61,48 @@ The values are added delays after completed polls, not exact wall-clock poll int
 
 Below 1 T liquid cycles, ordinary Ledger polling is suspended to protect protocol liveness. Funding and other recovery-oriented maintenance remain available. A canister already in Reserve Protection does not resume Economy until it reaches the 2 T Economy entry threshold.
 
-Polling thresholds and surplus thresholds are separate mechanisms. Continuous polling begins at 100 T; the 150 T surplus-health threshold is used only by the currently disabled adaptive surplus policy. See [Operational backend](docs/operational-backend.md) for timer and recovery details.
+Polling thresholds and surplus thresholds are separate mechanisms. Continuous polling begins at 100 T; the 150 T surplus-health threshold is used only by the currently disabled adaptive surplus policy. See [Operational backend](docs/operations/operational-backend.md) for timer and recovery details.
 
-## Development and validation
-
-```bash
-npm ci
-cargo run -p xtask -- check
-cargo run -p xtask -- test-all
-cargo run -p xtask -- validate
-```
-
-`check` is the normal source-quality gate. `test-all` adds every intentionally ignored PocketIC scenario. The intentionally expensive `validate` command runs source checks, all PocketIC scenarios, dependency-security checks, two clean reproducibility builds, and finally produces the canonical Docker-built Wasms under `release-artifacts/`.
-
-To rebuild only the exact production artifacts:
+## Development
 
 ```bash
-cargo run -p xtask -- canonical
+cargo run -p xtask -- test_unit
+cargo run -p xtask -- test_all
+npm run build:frontend
+npm run test:frontend-unit
 ```
 
-This verifies the artifact manifest and prints the exact uncompressed Wasm hashes for direct comparison with mainnet module hashes. See the [`xtask` command guide](tools/xtask/README.md) for the complete command matrix and [reproducible-build documentation](docs/reproducible-builds.md) for verification details.
+The xtask entry points refresh locked frontend dependencies with `npm ci` when needed. `test_unit` runs repository/static validation, source-manifest verification, ordinary Rust workspace tests (including xtask's runner tests), and frontend Node tests. `test_all` adds every intentionally ignored PocketIC scenario and prints one consolidated result.
+
+## Source quality
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+```
+
+## Release verification
+
+```bash
+./tools/scripts/security-scan
+npm run verify:reproducible-artifacts
+./tools/scripts/docker-build
+```
+
+The final command leaves canonical deployable Wasms in `release-artifacts/`, verifies their manifest, and prints their exact uncompressed hashes for direct comparison with installed module hashes. The optional host-toolchain build remains `./tools/scripts/build-release`.
+
+See the [`xtask` testing guide](tools/xtask/README.md), [testing documentation](docs/development/testing.md), and [reproducible-build documentation](docs/operations/reproducible-builds.md).
 
 `Dockerfile.repro` is the canonical production build environment. See [`SPEC.md`](SPEC.md) for the normative protocol and [`CHECKPOINT.md`](CHECKPOINT.md) for provenance stages.
 
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/subscriber-guide.md`](docs/subscriber-guide.md)
-- [`docs/economics-pricing.md`](docs/economics-pricing.md)
-- [`docs/trust-model.md`](docs/trust-model.md)
-- [`docs/frontend.md`](docs/frontend.md)
-- [`docs/deployment.md`](docs/deployment.md)
-- [`docs/controller-removal.md`](docs/controller-removal.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [Development and testing](docs/development/testing.md)
+- [Security](docs/security/dependency-scanning.md)
+- [Operations and deployment](docs/operations/deployment.md)
+- [Reproducible builds](docs/operations/reproducible-builds.md)
+- [Backend canister documentation](canisters/event-horizon/README.md)
+- [Frontend canister documentation](canisters/frontend/README.md)
+- [Subscriber guide](docs/subscriber-guide.md)

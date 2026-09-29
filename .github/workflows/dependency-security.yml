@@ -1,0 +1,62 @@
+name: Dependency Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-security:
+    name: Dependency security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
+          rustup toolchain install "$toolchain" \
+            --profile minimal \
+            --component rustfmt \
+            --component clippy \
+            --target wasm32-unknown-unknown
+          rustup default "$toolchain"
+
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install locked Node dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Install Rust security tools
+        run: |
+          cargo install cargo-audit --version 0.22.1 --locked
+          cargo install cargo-deny --version 0.19.8 --locked
+
+      - name: Install OSV Scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/osv-scanner_linux_amd64 https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
+          curl -fsSLo /tmp/osv-scanner_SHA256SUMS https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_SHA256SUMS
+          grep 'osv-scanner_linux_amd64$' /tmp/osv-scanner_SHA256SUMS | (cd /tmp && sha256sum -c -)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/osv-scanner_linux_amd64 "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run dependency security gate
+        run: ./tools/scripts/security-scan

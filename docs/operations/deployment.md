@@ -30,14 +30,18 @@ action manually; the repository provides no automatic deployment script.
 
 ## Operator pre-deployment gate
 
-Before any mainnet install, install the locked frontend dependencies and run the full, intentionally expensive gate:
+Before any mainnet install, run the behavioural, source-quality, security, reproducibility, and canonical artifact gates explicitly:
 
 ```bash
-npm ci
-cargo run -p xtask -- validate
+POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+./tools/scripts/security-scan
+npm run verify:reproducible-artifacts
+./tools/scripts/docker-build
 ```
 
-Successful validation ends with the canonical Docker build, prints both uncompressed Wasm hashes, and leaves:
+The test command prepares locked frontend dependencies automatically. The final canonical Docker build prints both uncompressed Wasm hashes and leaves:
 
 ```text
 release-artifacts/event_horizon.wasm
@@ -89,7 +93,8 @@ instance, that guide owns the Root/Ledger/Governance verification procedure.
 The recommended lifecycle is:
 
 ```text
-validate
+behavioural/source/security/reproducibility gates
+→ canonical Docker build
 → review printed hashes
 → inspect canister mapping/settings
 → deliberately reinstall zero-subscriber canonical backend
@@ -100,7 +105,7 @@ validate
 → compare live module hash
 ```
 
-Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by `validate` and the deployment build helper is intended for direct comparison with the corresponding installed mainnet module hash. See [Reproducible builds](reproducible-builds.md) for independent manifest verification.
+Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by the canonical build helper is intended for direct comparison with the corresponding installed mainnet module hash. See [Reproducible builds](reproducible-builds.md) for independent manifest verification.
 
 ## Required backend settings
 
@@ -228,7 +233,7 @@ Controller removal is a separate operational decision. During the controlled obs
 14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
 15. if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
 
-Only after that evidence is satisfactory should `docs/controller-removal.md` be followed.
+Only after that evidence is satisfactory should [controller removal](controller-removal.md) be followed.
 
 ## External dependencies
 

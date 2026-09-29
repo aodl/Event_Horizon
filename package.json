@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "scripts": {
     "build:frontend": "esbuild canisters/frontend/public/app.js --bundle --minify --format=iife --platform=browser --target=es2022 --legal-comments=none --outfile=canisters/frontend/public/app.bundle.js",
-    "test": "node --test canisters/frontend/test/*.test.mjs"
+    "setup:frontend": "npm ci --no-fund --no-audit",
+    "test:frontend-unit": "node --test canisters/frontend/test/*.test.mjs",
+    "test": "npm run test:frontend-unit",
+    "security:scan": "./tools/scripts/security-scan",
+    "verify:reproducible-artifacts": "./tools/scripts/verify-reproducible-artifacts"
   },
   "type": "module",
   "dependencies": {

@@ -22,4 +22,4 @@ echo "Matching Wasm SHA-256:"
 (cd "$work/a" && sha256sum event_horizon.wasm event_horizon_frontend.wasm)
 echo
 echo "This command uses temporary build outputs."
-echo 'Run `cargo run -p xtask -- canonical` to populate release-artifacts/.'
+echo 'Run `./tools/scripts/docker-build` to populate release-artifacts/.'
