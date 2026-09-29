@@ -35,5 +35,6 @@
 
 - [Subscriber guide](subscriber-guide.md)
 - [Checkpoint history](../CHECKPOINT.md)
+- [Jupiter workflow alignment validation](codex/jupiter-workflow-alignment-validation.md)
 - [`docs/codex/`](codex/)
 - [`docs/provenance/`](provenance/)
