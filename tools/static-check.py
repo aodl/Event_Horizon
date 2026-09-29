@@ -1,9 +1,5 @@
 from pathlib import Path
-import hashlib, json
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10 hosts
-    import tomli as tomllib
+import hashlib, json, re, subprocess
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
@@ -34,11 +30,21 @@ assert 'buildNeuronMemo' in (root/'canisters/frontend/public/memo.js').read_text
 assert 'BigInt(text)' in (root/'canisters/frontend/public/memo.js').read_text()
 assert 'range_icp: IDL.Nat64' in (root/'canisters/frontend/public/pricing-client.js').read_text()
 
-workspace=tomllib.loads((root/'Cargo.toml').read_text())
-for member in workspace['workspace']['members']:
-    assert (root/member/'Cargo.toml').exists(), f'missing workspace member {member}'
-for cargo in root.rglob('Cargo.toml'):
-    tomllib.loads(cargo.read_text())
+metadata = subprocess.run(
+    ['cargo', 'metadata', '--no-deps', '--format-version=1', '--locked'],
+    cwd=root,
+    check=True,
+    capture_output=True,
+    text=True,
+)
+workspace = json.loads(metadata.stdout)
+members = set(workspace['workspace_members'])
+packages = {package['id']: package for package in workspace['packages']}
+assert members, 'Cargo workspace has no members'
+assert members <= packages.keys(), 'Cargo metadata omitted a workspace member'
+for member in members:
+    manifest = Path(packages[member]['manifest_path'])
+    assert manifest.exists(), f'missing workspace manifest {manifest}'
 assert (root/'Cargo.lock').exists(), 'release checkpoint requires Cargo.lock'
 assert (root/'package-lock.json').exists(), 'release checkpoint requires package-lock.json'
 json.loads((root/'package-lock.json').read_text())
@@ -93,14 +99,13 @@ assert 'TOP_UP_CANISTER_MEMO' in funding
 icp= (root/'icp.yaml').read_text()
 for needle in ['status_visibility: public','log_visibility: public','log_memory_limit: 16384']:
     assert needle in icp, f'missing production setting {needle}'
-for path in ['Dockerfile.repro','tools/audit-wasm.py','tools/scripts/build-release','tools/scripts/verify-reproducible-artifacts','docs/deployment.md','docs/reproducible-builds.md','docs/controller-removal.md']:
+for path in ['Dockerfile.repro','tools/audit-wasm.py','tools/scripts/build-release','tools/scripts/verify-reproducible-artifacts','docs/operations/deployment.md','docs/operations/reproducible-builds.md','docs/operations/controller-removal.md']:
     assert (root/path).exists(), f'missing release-hardening file {path}'
 
 assert not (root/'tools/scripts/local-smoke').exists(), 'redundant local-smoke script still exists'
 live_docs = [root/'README.md']
-live_docs.extend(
-    path for path in (root/'docs').glob('*.md')
-)
+live_docs.extend(path for path in (root/'docs').rglob('*.md') if 'codex' not in path.parts and 'provenance' not in path.parts)
+live_docs.extend([root/'canisters/event-horizon/README.md', root/'canisters/frontend/README.md'])
 live_docs.append(root/'tools/xtask/README.md')
 live_text = '\n'.join(path.read_text() for path in live_docs)
 for forbidden in [
@@ -116,13 +121,25 @@ for forbidden in [
     'global declaration does not represent all 256 subaccounts',
 ]:
     assert forbidden not in live_text, f'live documentation contains stale protocol statement {forbidden}'
-reproducible_builds=(root/'docs/reproducible-builds.md').read_text()
+reproducible_builds=(root/'docs/operations/reproducible-builds.md').read_text()
 assert 'get_pricing is the backend\'s sole application method' not in reproducible_builds
 assert 'sole backend application method is `get_pricing`' not in reproducible_builds
-for required in [
+for forbidden in [
+    'cargo run -p xtask -- unit',
+    'cargo run -p xtask -- check',
+    'cargo run -p xtask -- pocketic',
     'cargo run -p xtask -- test-all',
+    'cargo run -p xtask -- security',
+    'cargo run -p xtask -- release',
     'cargo run -p xtask -- canonical',
+    'cargo run -p xtask -- repro',
     'cargo run -p xtask -- validate',
+]:
+    assert forbidden not in live_text, f'live documentation contains removed xtask command {forbidden}'
+for required in [
+    'cargo run -p xtask -- test_unit',
+    'cargo run -p xtask -- test_pocketic_integration',
+    'cargo run -p xtask -- test_all',
     'tools/xtask/README.md',
 ]:
     assert required in live_text, f'live documentation is missing developer command {required}'
@@ -136,7 +153,7 @@ assert 'contain 2 through 256 targets' in spec
 for stale in ['range endpoints are limited to 0..255', 'range endpoints must be <=255']:
     assert stale not in spec.lower(), f'normative specification contains stale range rule {stale}'
 
-deployment=(root/'docs/deployment.md').read_text()
+deployment=(root/'docs/operations/deployment.md').read_text()
 assert 'sns_root' in deployment, 'canonical deployment documentation omits final constructor'
 assert 'log_memory_limit: 16384' in deployment
 assert '16 KiB (`16384` byte) rolling buffer' in deployment
@@ -167,7 +184,7 @@ assert 'canister_liquid_cycle_balance()' in backend_src
 
 # Rust remains executable truth; this only prevents the primary operator document from
 # silently losing the reviewed cadence table and its hysteresis thresholds.
-operations_doc = (root/'docs/operational-backend.md').read_text()
+operations_doc = (root/'docs/operations/operational-backend.md').read_text()
 for marker in [
     'Reserve Protection',
     'Economy',
@@ -199,5 +216,17 @@ lock=(root/'Cargo.lock').read_text()
 for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-sns-root']:
     assert f'name = "{package}"' in lock, f'Cargo.lock missing workspace package {package}'
 
-print('workspace_members', len(workspace['workspace']['members']))
+link_docs = [root/'README.md', root/'SPEC.md', root/'tools/xtask/README.md']
+link_docs.extend((root/'docs').rglob('*.md'))
+link_docs.extend((root/'canisters').glob('*/README.md'))
+link_pattern = re.compile(r'(?<!!)\[[^]]*\]\(([^)]+)\)')
+for document in link_docs:
+    for target in link_pattern.findall(document.read_text()):
+        target = target.strip().split(maxsplit=1)[0].strip('<>')
+        if not target or target.startswith(('#', 'http://', 'https://', 'mailto:')):
+            continue
+        relative = target.split('#', 1)[0]
+        assert (document.parent/relative).resolve().exists(), f'broken link in {document.relative_to(root)}: {target}'
+
+print('workspace_members', len(members))
 print('static checkpoint checks passed')

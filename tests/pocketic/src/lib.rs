@@ -22,6 +22,10 @@ mod tests {
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static FRONTEND_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
+    // Success is driven by the observed subscriber condition, not by this number.
+    // The ceiling only bounds a failed PocketIC run and leaves enough deterministic
+    // rounds for the outbound one-way request and its callee execution.
+    const MAX_ONE_WAY_CALLBACK_TICKS: usize = 20;
 
     fn workspace_root() -> Result<PathBuf> {
         for dir in Path::new(env!("CARGO_MANIFEST_DIR")).ancestors() {
@@ -322,6 +326,13 @@ mod tests {
         faucet: Principal,
         sns_root: Option<Principal>,
     }
+
+    #[derive(Debug)]
+    struct SubscriberObservation {
+        pokes: u64,
+        matches: Vec<PokeMatch>,
+    }
+
     impl Env {
         fn new() -> Result<Self> {
             let env = Self::new_unpriced()?;
@@ -514,6 +525,50 @@ mod tests {
         }
         fn poll(&self) -> Result<()> {
             update::<_, ()>(&self.pic, self.event_horizon, "debug_poll_once", ())
+        }
+        fn subscriber_observation(&self) -> Result<SubscriberObservation> {
+            Ok(SubscriberObservation {
+                pokes: query(&self.pic, self.subscriber, "debug_pokes", ())?,
+                matches: query(&self.pic, self.subscriber, "debug_last_matches", ())?,
+            })
+        }
+        fn wait_for_subscriber<F>(
+            &self,
+            expected: &str,
+            mut ready: F,
+        ) -> Result<SubscriberObservation>
+        where
+            F: FnMut(&SubscriberObservation) -> bool,
+        {
+            let started = std::time::Instant::now();
+            let mut last = self.subscriber_observation()?;
+            for ticks in 0..=MAX_ONE_WAY_CALLBACK_TICKS {
+                if ready(&last) {
+                    return Ok(last);
+                }
+                if ticks == MAX_ONE_WAY_CALLBACK_TICKS {
+                    break;
+                }
+                self.pic.tick();
+                last = self.subscriber_observation()?;
+            }
+            bail!(
+                "one-way subscriber callback did not reach expected condition `{expected}`; \
+                 ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
+                 last observed subscriber state: {last:?}; Event Horizon state: {:?}",
+                started.elapsed(),
+                self.state()?
+            )
+        }
+        fn wait_for_pokes(&self, expected: u64) -> Result<SubscriberObservation> {
+            self.wait_for_subscriber(&format!("debug_pokes == {expected}"), |observed| {
+                observed.pokes == expected
+            })
+        }
+        fn wait_for_matches(&self, expected: &[PokeMatch]) -> Result<SubscriberObservation> {
+            self.wait_for_subscriber(&format!("debug_last_matches == {expected:?}"), |observed| {
+                observed.matches == expected
+            })
         }
         fn set_abort_after_staged_admission(&self, enabled: bool) -> Result<()> {
             update(
@@ -936,9 +991,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             1
@@ -972,9 +1025,10 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::NeuronNonce(nonce),
+            max_amount: candid::Nat::from(2_000_000u64),
+        }])?;
         let matches =
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?;
         assert_eq!(matches.len(), 1);
@@ -1009,9 +1063,10 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::NeuronNonce(nonce),
+            max_amount: candid::Nat::from(77u8),
+        }])?;
         let matches =
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?;
         assert_eq!(matches.len(), 1);
@@ -1179,9 +1234,10 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(256),
+            max_amount: candid::Nat::from(123_456u64),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
@@ -1227,9 +1283,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![
@@ -1252,6 +1306,21 @@ mod tests {
         let env = Env::new_sns()?;
         env.poll()?;
         env.admit_neuron_range(0, 2, 2_000_000_000)?;
+        let info: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(
+            info.observed_profile
+                .expect("verified SNS profile")
+                .neuron_governance,
+            Some(env.cmc)
+        );
+        let state = env.state()?;
+        assert!(state.admission_bootstrapped);
+        assert!(state.observed_bootstrapped);
+        for nonce in 0..=2 {
+            assert!(env
+                .target_subscription(WatchTarget::NeuronNonce(nonce))?
+                .is_some());
+        }
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
         for (nonce, amount) in [(0, 10), (1, 20), (2, 30)] {
             env.append_observed(
@@ -1268,25 +1337,24 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        let expected = vec![
+            PokeMatch {
+                target: WatchTarget::NeuronNonce(0),
+                max_amount: candid::Nat::from(10u8),
+            },
+            PokeMatch {
+                target: WatchTarget::NeuronNonce(1),
+                max_amount: candid::Nat::from(20u8),
+            },
+            PokeMatch {
+                target: WatchTarget::NeuronNonce(2),
+                max_amount: candid::Nat::from(30u8),
+            },
+        ];
+        let observed = env.wait_for_matches(&expected)?;
         assert_eq!(
-            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![
-                PokeMatch {
-                    target: WatchTarget::NeuronNonce(0),
-                    max_amount: candid::Nat::from(10u8)
-                },
-                PokeMatch {
-                    target: WatchTarget::NeuronNonce(1),
-                    max_amount: candid::Nat::from(20u8)
-                },
-                PokeMatch {
-                    target: WatchTarget::NeuronNonce(2),
-                    max_amount: candid::Nat::from(30u8)
-                },
-            ]
+            observed.matches, expected,
+            "only verified-governance-owned neuron transfers match"
         );
         Ok(())
     }
@@ -1305,9 +1373,10 @@ mod tests {
             amount.clone(),
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(256),
+            max_amount: amount.clone(),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
@@ -1336,9 +1405,7 @@ mod tests {
             )?;
         }
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             before + 1
@@ -1379,9 +1446,10 @@ mod tests {
             )?;
         }
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(2_000_000u64),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
@@ -1424,9 +1492,10 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(1u8),
+        }])?;
         assert_eq!(
             targets(&query::<_, Vec<PokeMatch>>(
                 &env.pic,
@@ -1673,9 +1742,10 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(1u8),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
@@ -1779,9 +1849,10 @@ mod tests {
             None,
         )?;
         later_transfer.poll()?;
-        for _ in 0..5 {
-            later_transfer.pic.tick();
-        }
+        later_transfer.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(1u8),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(
                 &later_transfer.pic,
@@ -1810,9 +1881,10 @@ mod tests {
             1,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(1u8),
+        }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
@@ -1826,10 +1898,9 @@ mod tests {
             "debug_append_other",
             "3approve".to_string(),
         )?;
+        let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
+        env.wait_for_pokes(pokes + 1)?;
         assert!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?
                 .is_empty()
@@ -1888,9 +1959,7 @@ mod tests {
             },
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
+        env.wait_for_pokes(pokes + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             pokes + 1
@@ -1973,9 +2042,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             1
@@ -2030,9 +2097,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             1
@@ -2220,9 +2285,7 @@ mod tests {
             )?;
         }
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![
@@ -2272,9 +2335,7 @@ mod tests {
             )?;
         }
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             before + 1
@@ -2301,9 +2362,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 2)?;
         assert!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?
                 .is_empty(),
@@ -2330,9 +2389,7 @@ mod tests {
         }
         let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(pokes_before + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             pokes_before + 1
@@ -2368,9 +2425,7 @@ mod tests {
             let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
             env.append_legacy_other(kind)?;
             env.poll()?;
-            for _ in 0..5 {
-                env.pic.tick();
-            }
+            env.wait_for_pokes(before + 1)?;
             assert_eq!(
                 query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
                 before + 1,
@@ -2419,9 +2474,7 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 1)?;
         assert!(env.global_subscription()?);
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
@@ -2476,9 +2529,7 @@ mod tests {
             )?;
         }
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             before + 1
@@ -2521,9 +2572,7 @@ mod tests {
 
         env.set_abort_after_staged_admission(false)?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(pokes_before + 1)?;
         assert!(env.subscription(7)?.is_some());
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
@@ -2567,9 +2616,7 @@ mod tests {
 
         env.set_abort_after_staged_admission(false)?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(pokes_before + 1)?;
         assert!(env.global_subscription()?);
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
@@ -2651,9 +2698,7 @@ mod tests {
         env.append(source.clone(), unrelated.clone(), 1, None)?;
         env.append(source.clone(), unrelated, 1, None)?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             before + 1,
@@ -2672,9 +2717,7 @@ mod tests {
         )?;
         env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(before + 2)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             before + 2
@@ -2865,9 +2908,7 @@ mod tests {
         update::<_, ()>(&env.pic, env.subscriber, "debug_set_trap", false)?;
         env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(1)?;
         assert!(
             env.state()?.observed_next_block > after_failed,
             "reader continues after disposable poke failure"
@@ -2966,9 +3007,7 @@ mod tests {
         );
 
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick();
-        }
+        env.wait_for_pokes(1)?;
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             1,

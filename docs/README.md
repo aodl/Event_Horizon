@@ -1,14 +1,39 @@
 # Documentation index
 
-[`SPEC.md`](../SPEC.md) is the normative protocol definition. Other current documents explain integration, architecture, operation, and release consequences without redefining it. Files under `docs/codex/` and `docs/provenance/` are historical evidence, not current protocol definitions.
+[`SPEC.md`](../SPEC.md) is the normative protocol. Current explanatory documentation is grouped by concern; `docs/codex/` and `docs/provenance/` are historical evidence rather than live protocol definitions.
 
-| Area | Documents |
-|---|---|
-| What is Event Horizon? | [Project introduction](../README.md) |
-| Normative protocol | [SPEC.md](../SPEC.md) |
-| Subscriber / integrator | [Subscriber guide](subscriber-guide.md) |
-| Architecture and reference | [Architecture](architecture.md), [operational backend](operational-backend.md), [trust model](trust-model.md), [economics and pricing](economics-pricing.md), [production surface](production-surface.md), [stable memory](stable-memory.md), [frontend](frontend.md) |
-| Canonical deployment / operation | [Deployment](deployment.md), [acceptance observation](acceptance-observation.md), [controller removal](controller-removal.md) |
-| Another immutable instance | [Deploying an instance](deploying-an-instance.md) |
-| Development / release | [Testing](testing.md), [reproducible builds](reproducible-builds.md), [xtask commands](../tools/xtask/README.md) |
-| Historical evidence | [Checkpoint history](../CHECKPOINT.md), [`docs/codex/`](codex/), [`docs/provenance/`](provenance/) |
+## Architecture
+
+- [Overview](architecture/overview.md)
+- [Trust model](architecture/trust-model.md)
+- [Stable memory](architecture/stable-memory.md)
+- [Production surface](architecture/production-surface.md)
+- [Economics and pricing](architecture/economics-pricing.md)
+
+## Development and testing
+
+- [Testing](development/testing.md)
+- [xtask commands](../tools/xtask/README.md)
+- [Backend canister README](../canisters/event-horizon/README.md)
+- [Frontend canister README](../canisters/frontend/README.md)
+
+## Security
+
+- [Dependency scanning](security/dependency-scanning.md)
+- [Trust model](architecture/trust-model.md)
+
+## Operations and deployment
+
+- [Deployment](operations/deployment.md)
+- [Deploying another immutable instance](operations/deploying-an-instance.md)
+- [Acceptance observation](operations/acceptance-observation.md)
+- [Controller removal](operations/controller-removal.md)
+- [Operational backend](operations/operational-backend.md)
+- [Reproducible builds](operations/reproducible-builds.md)
+
+## Integration and history
+
+- [Subscriber guide](subscriber-guide.md)
+- [Checkpoint history](../CHECKPOINT.md)
+- [`docs/codex/`](codex/)
+- [`docs/provenance/`](provenance/)
