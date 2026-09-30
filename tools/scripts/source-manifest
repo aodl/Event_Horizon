@@ -9,6 +9,14 @@ for path in sys.stdin.buffer.read().split(b"\0"):
     if path and path != b"MANIFEST.sha256" and not path.startswith(b"release-artifacts/"):
         sys.stdout.buffer.write(path + b"\0")'
 }
+archived_files() {
+  find . \( -type f -o -type l \) -print0 \
+    | sed -z 's#^\./##' \
+    | python3 -c 'import sys
+for path in sys.stdin.buffer.read().split(b"\0"):
+    if path and path != b"MANIFEST.sha256" and not path.startswith(b"release-artifacts/"):
+        sys.stdout.buffer.write(path + b"\0")'
+}
 case "${1:-}" in
   generate)
     tracked_files | sort -z | xargs -0 sha256sum > "$manifest"
@@ -19,7 +27,11 @@ case "${1:-}" in
     duplicates="$(mktemp)"
     trap 'rm -f "$expected" "$actual" "$duplicates"' EXIT
 
-    tracked_files | sort -z | tr '\0' '\n' > "$expected"
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      tracked_files | sort -z | tr '\0' '\n' > "$expected"
+    else
+      archived_files | sort -z | tr '\0' '\n' > "$expected"
+    fi
     sed -E 's/^[[:xdigit:]]{64}  //' "$manifest" | sort > "$actual"
     sed -E 's/^[[:xdigit:]]{64}  //' "$manifest" | sort | uniq -d > "$duplicates"
 

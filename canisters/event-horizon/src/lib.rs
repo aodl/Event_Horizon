@@ -24,7 +24,9 @@ mod surplus;
 use candid::Principal;
 
 #[cfg(feature = "debug_api")]
-use debug::{DebugCursorArgs, DebugInitArgs, DebugState, DebugSubscriptionArgs};
+use debug::{
+    DebugCursorArgs, DebugInitArgs, DebugSeedSubscribers, DebugState, DebugSubscriptionArgs,
+};
 
 pub use account::{account_identifier_bytes, neuron_staking_subaccount, numbered_subaccount};
 pub use cadence::{next_mode, PollingMode};
@@ -203,6 +205,11 @@ mod debug {
     }
 
     #[ic_cdk::update]
+    fn debug_set_scheduler_liquid_cycles_override(value: Option<u128>) {
+        scheduler::debug_set_liquid_cycles_override(value);
+    }
+
+    #[ic_cdk::update]
     fn debug_set_ledger_canister(ledger_canister: Principal) {
         let mut runtime = config::runtime();
         runtime.icp_ledger = ledger_canister;
@@ -217,6 +224,33 @@ mod debug {
     #[ic_cdk::query]
     fn debug_timer_count() -> u8 {
         scheduler::debug_timer_count()
+    }
+
+    #[ic_cdk::update]
+    fn debug_arm_scheduler_trap(lane: String) {
+        scheduler::debug_arm_post_await_trap(&lane)
+    }
+
+    #[ic_cdk::query]
+    fn debug_scheduler_lane_state(lane: String) -> Vec<bool> {
+        let (running, scheduled) = scheduler::debug_lane_state(&lane);
+        vec![running, scheduled]
+    }
+
+    #[ic_cdk::update]
+    fn debug_arm_scheduler_overlap(lane: String) {
+        scheduler::debug_arm_overlap(&lane)
+    }
+
+    #[ic_cdk::query]
+    fn debug_scheduler_lane_counts(lane: String) -> Vec<u64> {
+        let (starts, busy) = scheduler::debug_lane_counts(&lane);
+        vec![starts, busy]
+    }
+
+    #[ic_cdk::update]
+    async fn debug_scheduler_overlap(lane: String) {
+        scheduler::debug_run_lane(&lane).await
     }
 
     #[ic_cdk::query]
@@ -241,6 +275,24 @@ mod debug {
         admission_next_block: u64,
         observed_bootstrapped: bool,
         observed_next_block: u64,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    pub struct DebugSeedSubscribers {
+        kind: String,
+        start: u64,
+        count: u64,
+    }
+
+    #[ic_cdk::update]
+    fn debug_seed_subscribers(args: DebugSeedSubscribers) {
+        state::debug_seed_subscribers(&args.kind, args.start, args.count)
+    }
+
+    #[ic_cdk::query]
+    fn debug_poke_counts() -> Vec<u64> {
+        let (attempts, accepted) = clients::subscriber::debug_poke_counts();
+        vec![attempts, accepted]
     }
 
     #[ic_cdk::update]

@@ -108,6 +108,17 @@ pub struct DebugAppendTransfer {
     pub amount_e8s: u64,
     pub icrc1_memo: Option<Vec<u8>>,
 }
+#[derive(Clone, Copy, Debug, CandidType, Deserialize)]
+pub enum DebugBatchKind {
+    Specific,
+    Irrelevant,
+}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugAppendBatch {
+    pub kind: DebugBatchKind,
+    pub start: u64,
+    pub count: u64,
+}
 #[cfg(feature = "generic_icrc3")]
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugAppendNatTransfer {
@@ -227,6 +238,17 @@ fn account_identifier(owner: Principal, subaccount: [u8; 32]) -> [u8; 32] {
     out[..4].copy_from_slice(&crc32fast::hash(&hash).to_be_bytes());
     out[4..].copy_from_slice(&hash);
     out
+}
+fn numbered_subaccount(number: u64) -> [u8; 32] {
+    let mut subaccount = [0u8; 32];
+    subaccount[24..].copy_from_slice(&number.to_be_bytes());
+    subaccount
+}
+fn synthetic_subscriber(index: u64) -> Principal {
+    let mut bytes = [0u8; 9];
+    bytes[0] = 0x7f;
+    bytes[1..].copy_from_slice(&index.to_be_bytes());
+    Principal::from_slice(&bytes)
 }
 fn balance_of(state: &State, account: &Account) -> u64 {
     state
@@ -493,6 +515,41 @@ fn debug_append_transfer(arg: DebugAppendTransfer) -> u64 {
             arg.icrc1_memo,
             0,
         )
+    })
+}
+#[ic_cdk::update]
+fn debug_append_batch(arg: DebugAppendBatch) -> u64 {
+    assert!(
+        arg.count <= 128,
+        "debug append batches are limited to 128 blocks"
+    );
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        for index in arg.start..arg.start.saturating_add(arg.count) {
+            let to = match arg.kind {
+                DebugBatchKind::Specific => IcrcAccount {
+                    owner: synthetic_subscriber(index),
+                    subaccount: Some(numbered_subaccount(0)),
+                },
+                DebugBatchKind::Irrelevant => IcrcAccount {
+                    owner: Principal::from_slice(&[8]),
+                    subaccount: Some(numbered_subaccount(index)),
+                },
+            };
+            append_transfer(
+                &mut state,
+                IcrcAccount {
+                    owner: Principal::from_slice(&[9]),
+                    subaccount: Some([0; 32]),
+                },
+                to,
+                index.saturating_add(1),
+                10_000,
+                None,
+                0,
+            );
+        }
+        state.icrc_blocks.len() as u64
     })
 }
 #[ic_cdk::update]

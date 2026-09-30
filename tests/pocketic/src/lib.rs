@@ -4,6 +4,7 @@ mod tests {
     use std::{
         path::{Path, PathBuf},
         process::Command,
+        str::FromStr,
         sync::OnceLock,
     };
 
@@ -203,6 +204,23 @@ mod tests {
         observed_bootstrapped: bool,
         observed_next_block: u64,
     }
+    #[derive(CandidType, Deserialize)]
+    struct DebugSeedSubscribers {
+        kind: String,
+        start: u64,
+        count: u64,
+    }
+    #[derive(Clone, Copy, CandidType, Deserialize)]
+    enum DebugBatchKind {
+        Specific,
+        Irrelevant,
+    }
+    #[derive(CandidType, Deserialize)]
+    struct DebugAppendBatch {
+        kind: DebugBatchKind,
+        start: u64,
+        count: u64,
+    }
     #[derive(CandidType, Deserialize, Debug)]
     struct InstanceInfo {
         observed_ledger: Principal,
@@ -361,6 +379,17 @@ mod tests {
             let env = Self::with_event_horizon_wasm_and_surplus_mode(
                 wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
                 200_000_000_000_000,
+                true,
+                true,
+                false,
+            )?;
+            env.price_once()?;
+            Ok(env)
+        }
+        fn new_two_ledgers_for_capacity() -> Result<Self> {
+            let env = Self::with_event_horizon_wasm_and_surplus_mode(
+                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                2_000_000_000_000_000,
                 true,
                 true,
                 false,
@@ -723,6 +752,79 @@ mod tests {
                 "debug_set_liquid_cycles_override",
                 value,
             )
+        }
+        fn arm_scheduler_trap(&self, lane: &str) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_arm_scheduler_trap",
+                lane.to_string(),
+            )
+        }
+        fn set_scheduler_liquid_cycles_override(&self, value: Option<u128>) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_set_scheduler_liquid_cycles_override",
+                value,
+            )
+        }
+        fn scheduler_lane_state(&self, lane: &str) -> Result<Vec<bool>> {
+            query(
+                &self.pic,
+                self.event_horizon,
+                "debug_scheduler_lane_state",
+                lane.to_string(),
+            )
+        }
+        fn arm_scheduler_overlap(&self, lane: &str) -> Result<()> {
+            update(
+                &self.pic,
+                self.event_horizon,
+                "debug_arm_scheduler_overlap",
+                lane.to_string(),
+            )
+        }
+        fn scheduler_lane_counts(&self, lane: &str) -> Result<Vec<u64>> {
+            query(
+                &self.pic,
+                self.event_horizon,
+                "debug_scheduler_lane_counts",
+                lane.to_string(),
+            )
+        }
+        fn seed_subscribers(&self, kind: &str, total: u64) -> Result<()> {
+            for start in (0..total).step_by(128) {
+                update::<_, ()>(
+                    &self.pic,
+                    self.event_horizon,
+                    "debug_seed_subscribers",
+                    DebugSeedSubscribers {
+                        kind: kind.to_string(),
+                        start,
+                        count: (total - start).min(128),
+                    },
+                )?;
+            }
+            Ok(())
+        }
+        fn append_observed_batch(&self, kind: DebugBatchKind, total: u64) -> Result<()> {
+            for start in (0..total).step_by(128) {
+                update::<_, u64>(
+                    &self.pic,
+                    self.observed_ledger,
+                    "debug_append_batch",
+                    DebugAppendBatch {
+                        kind,
+                        start,
+                        count: (total - start).min(128),
+                    },
+                )?;
+            }
+            Ok(())
+        }
+        fn poke_counts(&self) -> Result<Vec<u64>> {
+            query(&self.pic, self.event_horizon, "debug_poke_counts", ())
         }
         fn accepted_with_memo(&self, memo: u64) -> Result<u64> {
             query(
@@ -2314,6 +2416,139 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn capacity_global_fanout_256_and_1024_records() -> Result<()> {
+        for subscribers in [256u64, 1_024] {
+            let env = Env::new_two_ledgers_for_capacity()?;
+            env.poll()?;
+            env.seed_subscribers("global", subscribers)?;
+            env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
+            let status_before = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|error| anyhow!("global capacity status before: {error:?}"))?;
+            let cycles_before = env.pic.cycle_balance(env.event_horizon);
+            env.poll()?;
+            let status_after = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|error| anyhow!("global capacity status after: {error:?}"))?;
+            let counts = env.poke_counts()?;
+            assert_eq!(env.state()?.observed_next_block, 1);
+            assert_eq!(counts[0], subscribers);
+            assert_eq!(env.state()?.global_subscriptions, subscribers);
+            println!(
+                "capacity_global subscribers={} attempted_callbacks={} accepted_oneway_calls={} cycles_consumed={} stable_memory_before={} stable_memory_after={} total_memory_before={} total_memory_after={} recipients=synthetic",
+                subscribers,
+                counts[0],
+                counts[1],
+                cycles_before.saturating_sub(env.pic.cycle_balance(env.event_horizon)),
+                status_before.memory_metrics.stable_memory_size,
+                status_after.memory_metrics.stable_memory_size,
+                status_before.memory_size,
+                status_after.memory_size,
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn capacity_specific_fanout_256_and_1024_records() -> Result<()> {
+        for subscribers in [256u64, 1_024] {
+            let env = Env::new_two_ledgers_for_capacity()?;
+            env.poll()?;
+            env.seed_subscribers("specific", subscribers)?;
+            env.append_observed_batch(DebugBatchKind::Specific, subscribers)?;
+            let status_before = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|error| anyhow!("specific capacity status before: {error:?}"))?;
+            let cycles_before = env.pic.cycle_balance(env.event_horizon);
+            env.poll()?;
+            let status_after = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|error| anyhow!("specific capacity status after: {error:?}"))?;
+            let counts = env.poke_counts()?;
+            assert_eq!(env.state()?.observed_next_block, subscribers);
+            assert_eq!(counts[0], subscribers);
+            assert_eq!(env.state()?.subscriptions, subscribers);
+            println!(
+                "capacity_specific subscribers={} blocks={} attempted_callbacks={} accepted_oneway_calls={} cycles_consumed={} stable_memory_before={} stable_memory_after={} total_memory_before={} total_memory_after={} recipients=synthetic",
+                subscribers,
+                subscribers,
+                counts[0],
+                counts[1],
+                cycles_before.saturating_sub(env.pic.cycle_balance(env.event_horizon)),
+                status_before.memory_metrics.stable_memory_size,
+                status_after.memory_metrics.stable_memory_size,
+                status_before.memory_size,
+                status_after.memory_size,
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn capacity_4096_block_backlog_completes_through_scheduler() -> Result<()> {
+        let env = Env::new_two_ledgers_for_capacity()?;
+        env.poll()?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 4_096)?;
+        let status_before = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|error| anyhow!("backlog status before: {error:?}"))?;
+        let cycles_before = env.pic.cycle_balance(env.event_horizon);
+        env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..100 {
+            env.pic.tick();
+            if env.state()?.observed_next_block == 4_096 {
+                break;
+            }
+        }
+        let status_after = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|error| anyhow!("backlog status after: {error:?}"))?;
+        assert_eq!(env.state()?.observed_next_block, 4_096);
+        assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        println!(
+            "capacity_backlog blocks=4096 pages=16 scheduler=true cycles_consumed={} stable_memory_before={} stable_memory_after={} total_memory_before={} total_memory_after={} note=cycles_include_concurrent_funding_and_pricing_scheduler_lanes",
+            cycles_before.saturating_sub(env.pic.cycle_balance(env.event_horizon)),
+            status_before.memory_metrics.stable_memory_size,
+            status_after.memory_metrics.stable_memory_size,
+            status_before.memory_size,
+            status_after.memory_size,
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn capacity_bounded_large_nat_encoding_survives_end_to_end() -> Result<()> {
+        let env = Env::new_two_ledgers_for_capacity()?;
+        env.poll()?;
+        env.admit(512, None, 1_000_000_000)?;
+        let amount = candid::Nat::from_str(&"9".repeat(2_048))?;
+        env.append_observed_nat(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(512)),
+            amount.clone(),
+        )?;
+        env.poll()?;
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(512),
+            max_amount: amount,
+        }])?;
+        assert_eq!(env.state()?.observed_next_block, 1);
+        println!("capacity_nat decimal_digits=2048 confirmed_mock_delivery=true");
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn range_matching_overlap_coalescing_and_global_precedence_hold() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
@@ -3809,6 +4044,307 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_poll_recovers_after_post_await_trap() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?.observed_next_block;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.arm_scheduler_trap("poll")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..20 {
+            env.pic.tick();
+            if env.scheduler_lane_state("poll")? == [false, true] {
+                break;
+            }
+        }
+        assert_eq!(
+            env.scheduler_lane_state("poll")?,
+            [false, true],
+            "cancellation must release ownership and install one delayed recovery timer"
+        );
+
+        env.pic
+            .advance_time(std::time::Duration::from_secs(60 * 60));
+        for _ in 0..30 {
+            env.pic.tick();
+            if env.state()?.observed_next_block > before {
+                return Ok(());
+            }
+        }
+        bail!(
+            "scheduled poll did not recover after post-await trap; lane={:?}; state={:?}",
+            env.scheduler_lane_state("poll")?,
+            env.state()?
+        )
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_pricing_recovers_after_post_await_trap_without_duplicate_daily_observation(
+    ) -> Result<()> {
+        let env = Env::new_unpriced()?;
+        env.arm_scheduler_trap("pricing")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..30 {
+            env.pic.tick();
+            if query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())? == 1
+                && env.scheduler_lane_state("pricing")? == [false, true]
+            {
+                break;
+            }
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            1
+        );
+        assert!(!env.pricing()?.initialized);
+
+        env.pic
+            .advance_time(std::time::Duration::from_secs(60 * 60));
+        for _ in 0..20 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            1,
+            "recovery in the same UTC day must not manufacture another observation"
+        );
+        assert_eq!(env.scheduler_lane_state("pricing")?, [false, true]);
+
+        env.pic
+            .advance_time(std::time::Duration::from_secs(24 * 60 * 60));
+        for _ in 0..30 {
+            env.pic.tick();
+            if env.pricing()?.initialized {
+                break;
+            }
+        }
+        assert!(env.pricing()?.initialized);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_pricing_calls", ())?,
+            2
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_funding_recovers_persisted_identity_after_post_await_trap() -> Result<()> {
+        let env = Env::new()?;
+        env.set_balance(100_000_000)?;
+        env.arm_scheduler_trap("funding")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.accepted_with_memo(1_347_768_404)? == 1
+                && env.scheduler_lane_state("funding")? == [false, true]
+            {
+                break;
+            }
+        }
+        let pending = env.state()?.cmc_state;
+        assert!(pending.contains("CmcNotifyPending"), "{pending}");
+        assert_eq!(env.accepted_with_memo(1_347_768_404)?, 1);
+
+        env.pic
+            .advance_time(std::time::Duration::from_secs(60 * 60));
+        for _ in 0..30 {
+            env.pic.tick();
+            if env.state()?.cmc_state.contains("Idle") {
+                break;
+            }
+        }
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(
+            env.accepted_with_memo(1_347_768_404)?,
+            1,
+            "recovery must not debit the retained transfer twice"
+        );
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.cmc, "debug_calls", ())?,
+            2,
+            "the persisted block identity is re-notified after callback rollback"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn overlapping_scheduled_poll_does_not_release_or_duplicate_the_active_worker() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?.observed_next_block;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
+        env.arm_scheduler_overlap("poll")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.state()?.observed_next_block > before
+                && env
+                    .scheduler_lane_counts("poll")?
+                    .get(1)
+                    .copied()
+                    .unwrap_or(0)
+                    > 0
+            {
+                break;
+            }
+        }
+        let counts = env.scheduler_lane_counts("poll")?;
+        assert_eq!(counts[0], 1, "only the owning poll worker may start");
+        assert!(
+            counts[1] >= 1,
+            "overlap fixture must exercise the busy path"
+        );
+        assert!(env.state()?.observed_next_block > before);
+        assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_reserve_entry_suspends_poll_without_remote_outage() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        env.set_scheduler_liquid_cycles_override(Some(1_500_000_000_000))?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..20 {
+            env.pic.tick();
+        }
+        let after = env.state()?;
+        assert_eq!(after.polling_mode, PollingMode::ReserveProtection);
+        assert_eq!(after.admission_next_block, before.admission_next_block);
+        assert_eq!(after.observed_next_block, before.observed_next_block);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )?,
+            calls_before
+        );
+        assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        let logs = env
+            .pic
+            .fetch_canister_logs(env.event_horizon, Principal::anonymous())
+            .map_err(|error| anyhow!("fetch canister logs: {error:?}"))?;
+        let text = logs
+            .iter()
+            .map(|record| String::from_utf8_lossy(&record.content))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!text.contains("LEDGER_UNAVAILABLE"), "{text}");
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_economy_hysteresis_allows_poll_at_one_and_a_half_trillion() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..20 {
+            env.pic.tick();
+        }
+        assert_eq!(env.state()?.polling_mode, PollingMode::Economy);
+        let before = env.state()?.observed_next_block;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.set_scheduler_liquid_cycles_override(Some(1_500_000_000_000))?;
+        env.pic
+            .advance_time(std::time::Duration::from_secs(60 * 60));
+        for _ in 0..30 {
+            env.pic.tick();
+            if env.state()?.observed_next_block > before {
+                break;
+            }
+        }
+        assert_eq!(env.state()?.polling_mode, PollingMode::Economy);
+        assert!(env.state()?.observed_next_block > before);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_poll_resumes_when_reserve_is_funded_above_entry_threshold() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?.observed_next_block;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.set_scheduler_liquid_cycles_override(Some(1_500_000_000_000))?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..15 {
+            env.pic.tick();
+        }
+        assert_eq!(env.state()?.observed_next_block, before);
+        env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
+        env.pic
+            .advance_time(std::time::Duration::from_secs(60 * 60));
+        for _ in 0..30 {
+            env.pic.tick();
+            if env.state()?.observed_next_block > before {
+                break;
+            }
+        }
+        assert_eq!(env.state()?.polling_mode, PollingMode::Economy);
+        assert!(env.state()?.observed_next_block > before);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn scheduled_funding_remains_available_below_one_trillion_while_poll_is_suspended() -> Result<()>
+    {
+        let env = Env::new()?;
+        env.poll()?;
+        let before = env.state()?.observed_next_block;
+        env.set_balance(100_000_000)?;
+        env.set_scheduler_liquid_cycles_override(Some(900_000_000_000))?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.accepted_with_memo(1_347_768_404)? == 1 {
+                break;
+            }
+        }
+        assert_eq!(env.state()?.polling_mode, PollingMode::ReserveProtection);
+        assert_eq!(env.state()?.observed_next_block, before);
+        assert_eq!(env.accepted_with_memo(1_347_768_404)?, 1);
+        assert_eq!(env.scheduler_lane_state("funding")?, [false, true]);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn diversion_does_not_affect_later_subscription_admission() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
@@ -4068,6 +4604,68 @@ mod tests {
             "the frontend must not expose the removed pricing update proxy"
         );
 
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn frontend_transition_urls_are_certified_and_require_revalidation() -> Result<()> {
+        let pic = PocketIcBuilder::new().with_application_subnet().build();
+        let id = pic.create_canister();
+        pic.add_cycles(id, 200_000_000_000_000);
+        pic.install_canister(
+            id,
+            wasm(&FRONTEND_WASM, "event-horizon-frontend", None)?,
+            vec![],
+            None,
+        );
+        let request = |url: &str| -> Result<HttpResponse> {
+            query(
+                &pic,
+                id,
+                "http_request",
+                HttpRequest {
+                    method: "GET".to_string(),
+                    url: url.to_string(),
+                    headers: vec![],
+                    body: vec![],
+                    certificate_version: Some(2),
+                },
+            )
+        };
+        let index = request("/")?;
+        assert_eq!(index.status_code, 200);
+        let html = String::from_utf8(index.body)?;
+        assert!(html.contains("styles.css?v=2"));
+        assert!(html.contains("app.bundle.js?v=2"));
+        assert!(!html.contains("href=\"styles.css\""));
+        assert!(!html.contains("src=\"app.bundle.js\""));
+
+        for (url, source) in [
+            (
+                "/styles.css?v=2",
+                workspace_root()?.join("canisters/frontend/public/styles.css"),
+            ),
+            (
+                "/app.bundle.js?v=2",
+                workspace_root()?.join("canisters/frontend/public/app.bundle.js"),
+            ),
+        ] {
+            let response = request(url)?;
+            assert_eq!(response.status_code, 200, "{url}");
+            assert_eq!(response.body, std::fs::read(source)?, "{url}");
+            assert!(response.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("cache-control") && value == "public, no-cache"
+            }));
+            assert!(response.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
+            }));
+        }
+
+        // The old URLs may still be present in an existing browser cache. New HTML no
+        // longer references them, while the transition URLs are certified and revalidated.
+        assert_eq!(request("/styles.css")?.status_code, 200);
+        assert_eq!(request("/app.bundle.js")?.status_code, 200);
         Ok(())
     }
 }

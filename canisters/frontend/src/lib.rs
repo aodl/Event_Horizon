@@ -14,7 +14,7 @@ thread_local! {
 
 static ASSETS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/public");
 const NO_CACHE: &str = "public, no-cache, no-store";
-const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+const REVALIDATE: &str = "public, no-cache";
 
 #[init]
 fn init() {
@@ -71,19 +71,19 @@ fn certify_all_assets() {
         AssetConfig::Pattern {
             pattern: "**/*.js".to_string(),
             content_type: Some("text/javascript".to_string()),
-            headers: headers(IMMUTABLE),
+            headers: headers(REVALIDATE),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.css".to_string(),
             content_type: Some("text/css".to_string()),
-            headers: headers(IMMUTABLE),
+            headers: headers(REVALIDATE),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.svg".to_string(),
             content_type: Some("image/svg+xml".to_string()),
-            headers: headers(IMMUTABLE),
+            headers: headers(REVALIDATE),
             encodings: vec![],
         },
     ];

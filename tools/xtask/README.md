@@ -33,6 +33,8 @@ Each logical suite has captured combined output, live progress, duration, parsed
 
 Each child command has a three-hour default ceiling covering execution and output collection. Set a positive integer `EVENT_HORIZON_TEST_COMMAND_TIMEOUT_SECS` to choose a different bound. Invalid values are rejected before the child starts. On Unix, stdout and stderr share one ordered capture stream; a timeout or a descendant retaining that stream after the direct child exits terminates the command's owned process group and performs only a bounded final drain.
 
+When Rust's normal structured failure block is available, the summary extracts it. If an exact invocation instead emits an inline `--nocapture` panic or otherwise has no recognized block, the final failure detail contains the complete captured transcript rather than a tail. Timeout, spawn, capture, and parser diagnostics are retained alongside available output, and the known exact test name/rerun remain present.
+
 ## Direct commands
 
 Source quality:

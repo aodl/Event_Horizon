@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
-command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+command -v "$DOCKER_BIN" >/dev/null || { echo "docker is required" >&2; exit 1; }
+. "$ROOT/tools/scripts/lib/canonical-context.sh"
+canonical_context_prepare "$ROOT"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"; canonical_context_cleanup' EXIT
 build_one() {
   local dest="$1" image container
-  image="$(docker build --no-cache --quiet --file Dockerfile.repro --target artifact .)"
-  container="$(docker create "$image" /bin/true)"
-  mkdir -p "$dest"; docker cp "$container:/release-artifacts/." "$dest/"
-  docker rm -f "$container" >/dev/null
+  image="$("$DOCKER_BIN" build --no-cache --quiet --file "$CANONICAL_CONTEXT/Dockerfile.repro" --target artifact "$CANONICAL_CONTEXT")"
+  container="$("$DOCKER_BIN" create "$image" /bin/true)"
+  mkdir -p "$dest"
+  if ! "$DOCKER_BIN" cp "$container:/release-artifacts/." "$dest/"; then
+    "$DOCKER_BIN" rm -f "$container" >/dev/null 2>&1 || true
+    "$DOCKER_BIN" image rm "$image" >/dev/null 2>&1 || true
+    return 1
+  fi
+  "$DOCKER_BIN" rm -f "$container" >/dev/null
+  "$DOCKER_BIN" image rm "$image" >/dev/null 2>&1 || true
 }
 build_one "$work/a"; build_one "$work/b"
 (cd "$work/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/a.sum"

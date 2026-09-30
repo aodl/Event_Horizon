@@ -90,7 +90,7 @@ fn ensure_frontend_dependencies() -> Result<(), String> {
     Ok(())
 }
 
-fn unit_specs() -> [SuiteSpec; 3] {
+fn unit_specs() -> [SuiteSpec; 4] {
     [
         SuiteSpec::command(
             "[repo] static validation",
@@ -105,6 +105,13 @@ fn unit_specs() -> [SuiteSpec; 3] {
             &["verify"],
             Parser::Command,
             "./tools/scripts/source-manifest verify",
+        ),
+        SuiteSpec::command(
+            "[repo] canonical build context",
+            "./tools/scripts/test-canonical-context",
+            &[],
+            Parser::Command,
+            "./tools/scripts/test-canonical-context",
         ),
         SuiteSpec::command(
             "[unit] Rust workspace (including xtask)",

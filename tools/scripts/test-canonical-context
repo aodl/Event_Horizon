@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT/tools/scripts/lib/canonical-context.sh"
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/event-horizon-context-test.XXXXXX")"
+trap 'canonical_context_cleanup; rm -rf "$work"' EXIT
+fixture="$work/repo"
+mkdir -p "$fixture/tools/scripts/lib" "$fixture/canisters/frontend/public"
+cp "$ROOT/tools/scripts/lib/canonical-context.sh" "$fixture/tools/scripts/lib/"
+cp "$ROOT/tools/scripts/source-manifest" "$fixture/tools/scripts/"
+cp "$ROOT/tools/scripts/docker-build" "$fixture/tools/scripts/"
+cp "$ROOT/tools/scripts/verify-reproducible-artifacts" "$fixture/tools/scripts/"
+cp "$ROOT/Dockerfile.repro" "$fixture/"
+printf '*.wasm\nrelease-artifacts/\n' > "$fixture/.gitignore"
+printf 'committed source\n' > "$fixture/source.txt"
+git -C "$fixture" init -q
+git -C "$fixture" config user.name 'Event Horizon fixture'
+git -C "$fixture" config user.email 'fixture@example.invalid'
+git -C "$fixture" add .
+(cd "$fixture" && ./tools/scripts/source-manifest generate)
+git -C "$fixture" add MANIFEST.sha256
+git -C "$fixture" commit -qm fixture
+
+canonical_context_prepare "$fixture"
+first_context="$CANONICAL_CONTEXT"
+first_revision="$CANONICAL_SOURCE_SHA"
+first_sum="$(cd "$first_context" && find . -type f -print0 | sort -z | xargs -0 sha256sum)"
+test ! -e "$first_context/canisters/frontend/public/audit-probe.wasm"
+canonical_context_cleanup
+
+printf 'ignored audit probe\n' > "$fixture/canisters/frontend/public/audit-probe.wasm"
+canonical_context_prepare "$fixture"
+second_sum="$(cd "$CANONICAL_CONTEXT" && find . -type f -print0 | sort -z | xargs -0 sha256sum)"
+test "$CANONICAL_SOURCE_SHA" = "$first_revision"
+test "$second_sum" = "$first_sum"
+test ! -e "$CANONICAL_CONTEXT/canisters/frontend/public/audit-probe.wasm"
+canonical_context_cleanup
+
+printf 'uncommitted change\n' >> "$fixture/source.txt"
+if canonical_context_prepare "$fixture" >"$work/dirty.out" 2>&1; then
+  echo 'dirty tracked source unexpectedly entered a canonical context' >&2
+  exit 1
+fi
+grep -q 'clean tracked source tree' "$work/dirty.out"
+git -C "$fixture" checkout -q -- source.txt
+
+mkdir -p "$fixture/release-artifacts"
+printf 'known-good\n' > "$fixture/release-artifacts/sentinel"
+fake_docker="$work/fake-docker"
+cat > "$fake_docker" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+command="$1"; shift
+case "$command" in
+  build)
+    context="${@: -1}"
+    printf '%s\n' "$context" >> "$FAKE_DOCKER_LOG"
+    [[ "${FAKE_DOCKER_MODE:-valid}" != build-fail ]] || exit 9
+    printf 'fixture-image\n'
+    ;;
+  create) printf 'fixture-container\n' ;;
+  cp)
+    destination="${@: -1}"
+    mkdir -p "$destination"
+    if [[ "${FAKE_DOCKER_MODE:-valid}" = invalid-manifest ]]; then
+      printf '%064d  missing.wasm\n' 0 > "$destination/release-artifacts.sha256"
+    else
+      printf 'backend\n' > "$destination/event_horizon.wasm"
+      printf 'frontend\n' > "$destination/event_horizon_frontend.wasm"
+      printf '{}\n' > "$destination/build-info.json"
+      (cd "$destination" && sha256sum event_horizon.wasm event_horizon_frontend.wasm build-info.json > release-artifacts.sha256)
+    fi
+    ;;
+  rm) ;;
+  image) ;;
+  *) echo "unexpected fake docker command: $command" >&2; exit 2 ;;
+esac
+FAKE
+chmod +x "$fake_docker"
+export FAKE_DOCKER_LOG="$work/docker-contexts.log"
+
+if DOCKER_BIN="$fake_docker" FAKE_DOCKER_MODE=build-fail "$fixture/tools/scripts/docker-build" >"$work/build-fail.out" 2>&1; then
+  echo 'failed Docker build unexpectedly succeeded' >&2
+  exit 1
+fi
+test "$(cat "$fixture/release-artifacts/sentinel")" = known-good
+
+if DOCKER_BIN="$fake_docker" FAKE_DOCKER_MODE=invalid-manifest "$fixture/tools/scripts/docker-build" >"$work/manifest-fail.out" 2>&1; then
+  echo 'invalid artifact manifest unexpectedly succeeded' >&2
+  exit 1
+fi
+test "$(cat "$fixture/release-artifacts/sentinel")" = known-good
+
+: > "$FAKE_DOCKER_LOG"
+DOCKER_BIN="$fake_docker" FAKE_DOCKER_MODE=valid "$fixture/tools/scripts/verify-reproducible-artifacts" >"$work/repro.out"
+mapfile -t contexts < "$FAKE_DOCKER_LOG"
+test "${#contexts[@]}" -eq 2
+test "${contexts[0]}" = "${contexts[1]}"
+grep -q "Canonical source revision: $first_revision" "$work/repro.out"
+
+echo 'canonical context fixture checks passed'

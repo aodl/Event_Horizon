@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "$ROOT"
-command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+command -v "$DOCKER_BIN" >/dev/null || { echo "docker is required" >&2; exit 1; }
+. "$ROOT/tools/scripts/lib/canonical-context.sh"
+canonical_context_prepare "$ROOT"
 staging="$(mktemp -d "$ROOT/.release-artifacts.XXXXXX")"
-trap 'rm -rf "$staging"' EXIT
-id="$(docker create "$(docker build --quiet --file Dockerfile.repro --target artifact .)" /bin/true)"
-trap 'docker rm -f "$id" >/dev/null 2>&1 || true; rm -rf "$staging"' EXIT
-docker cp "$id:/release-artifacts/." "$staging/"
+image=""; id=""
+cleanup() {
+  [[ -z "$id" ]] || "$DOCKER_BIN" rm -f "$id" >/dev/null 2>&1 || true
+  [[ -z "$image" ]] || "$DOCKER_BIN" image rm "$image" >/dev/null 2>&1 || true
+  rm -rf "$staging"
+  canonical_context_cleanup
+}
+trap cleanup EXIT
+image="$("$DOCKER_BIN" build --quiet --file "$CANONICAL_CONTEXT/Dockerfile.repro" --target artifact "$CANONICAL_CONTEXT")"
+id="$("$DOCKER_BIN" create "$image" /bin/true)"
+"$DOCKER_BIN" cp "$id:/release-artifacts/." "$staging/"
 (cd "$staging" && sha256sum -c release-artifacts.sha256)
 
 previous="$ROOT/.release-artifacts.previous"
@@ -16,23 +26,14 @@ if [ -d "$ROOT/release-artifacts" ]; then
 fi
 mv "$staging" "$ROOT/release-artifacts"
 rm -rf "$previous"
-trap 'docker rm -f "$id" >/dev/null 2>&1 || true' EXIT
-
-revision="$(git rev-parse HEAD)"
-if [ -z "$(git status --porcelain)" ]; then
-  tree_status="clean"
-else
-  tree_status="WARNING: working tree has uncommitted changes"
-fi
-
 echo
 echo "Built canonical artifacts in release-artifacts/"
 echo
 echo "Source revision:"
-echo "$revision"
+echo "$CANONICAL_SOURCE_SHA"
 echo
 echo "Working tree:"
-echo "$tree_status"
+echo "clean (build context exported from the commit above)"
 echo
 echo "Mainnet module-hash comparison targets (*.wasm):"
 echo

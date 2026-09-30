@@ -2,7 +2,7 @@
 
 For a finalized instance, verify the canister principal, empty controller list, public module hash, reproduced generic backend hash, `get_instance` values for the observed Ledger, SNS Root, and surplus recipient, recent public CONFIG/HEALTH logs, the Ledger principal independently, the Jupiter alias mapping, and the fixed protocol anchors in source/module. The complete tuple—not module hash alone—identifies the instance.
 
-Wasm-level fixed protocol anchors are the ICP Ledger, CMC, NNS Governance, Jupiter Faucet, and Jupiter Historian. Instance-level immutable configuration is `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. The module hash proves common implementation and policy; `get_instance` plus the initial CONFIG log proves which tuple was installed.
+Wasm-level fixed protocol anchors are the ICP Ledger, CMC, NNS Governance, Jupiter Faucet, and Jupiter Historian. Instance-level immutable configuration is `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. The module hash proves common implementation and policy. `get_instance` reports the canister's immutable configuration and the frontend compares that report with its registry; it does not independently prove which module is installed or whether controllers remain. Module hash and controller state are separate operator/reviewer checks. The initial CONFIG log supplies additional public evidence of the installed tuple.
 
 Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 
@@ -16,7 +16,7 @@ Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 - Poke targets and `max_amount` are non-authoritative prefilter hints. Subscriber caller authentication, local thresholds, and authoritative reconciliation remain mandatory.
 - For a subscriber trusting multiple Event Horizon instances, the authenticated caller defines the observed-ledger context of every poke.
 - Public native status and logs remain the operational interface.
-- The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets are certified; backend admission remains authoritative.
+- The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 

@@ -455,6 +455,34 @@ pub fn global_subscription_count() -> u64 {
     with_global_subscribers(|map| map.len())
 }
 
+#[cfg(feature = "debug_api")]
+fn synthetic_subscriber(index: u64) -> candid::Principal {
+    let mut bytes = [0u8; 9];
+    bytes[0] = 0x7f;
+    bytes[1..].copy_from_slice(&index.to_be_bytes());
+    candid::Principal::from_slice(&bytes)
+}
+
+#[cfg(feature = "debug_api")]
+pub fn debug_seed_subscribers(kind: &str, start: u64, count: u64) {
+    assert!(
+        count <= 128,
+        "debug seed batches are limited to 128 records"
+    );
+    for index in start..start.saturating_add(count) {
+        let subscriber = synthetic_subscriber(index);
+        match kind {
+            "global" => put_global_subscriber(subscriber),
+            "specific" => put_subscription(Subscription {
+                subscriber,
+                target: WatchTarget::Subaccount(0),
+                minimum_units: 0u8.into(),
+            }),
+            _ => ic_cdk::trap("unknown debug subscriber seed kind"),
+        }
+    }
+}
+
 pub fn read_pricing_state() -> PricingState {
     with_pricing_state(|cell| cell.get().0.clone())
 }

@@ -10,7 +10,7 @@ npm run verify:reproducible-artifacts
 ./tools/scripts/docker-build
 ```
 
-`verify:reproducible-artifacts` performs two independent `docker build --no-cache` builds, hashes every emitted file, and requires byte-identical outputs. It uses temporary outputs and does not populate `release-artifacts/`.
+Both canonical wrappers resolve `HEAD` once, reject tracked modifications and non-ignored untracked source, verify `MANIFEST.sha256`, export that exact revision with `git archive`, and verify the manifest again inside a temporary context outside the working tree. Ignored files, caches, credentials, `node_modules`, `target`, local ICP state, observations, and existing artifacts therefore cannot enter the build context. The resolved commit is printed. `verify:reproducible-artifacts` prepares one such frozen context and uses it for both independent `docker build --no-cache` builds, hashes every emitted file, and requires byte-identical outputs. It uses temporary outputs and does not populate `release-artifacts/`.
 
 `docker-build` builds once in the same pinned environment, replaces `release-artifacts/` with the deployable files, verifies `release-artifacts.sha256`, and prints the two module hashes. Verify the resulting manifest independently with:
 
@@ -30,7 +30,7 @@ release-artifacts/release-artifacts.sha256
 release-artifacts/build-info.json
 ```
 
-`Dockerfile.repro` pins the Debian base-image digest and snapshot, Rust toolchain, rustup installer digest, `ic-wasm`, `Cargo.lock`, and `package-lock.json`. Source paths are remapped and both modules pass through the pinned `ic-wasm shrink` step. Both build scripts stage output separately and replace an existing `release-artifacts/` only after a successful build and manifest verification.
+`Dockerfile.repro` pins the Debian base-image digest and snapshot, Rust toolchain, rustup installer digest, `ic-wasm`, `Cargo.lock`, and `package-lock.json`. It removes inherited APT source files, points APT's source-parts directory at an explicit empty directory, and uses only the signed Debian and Debian Security snapshot entries in `/etc/apt/sources.list`; package-signature verification remains enabled. Source paths are remapped and both modules pass through the pinned `ic-wasm shrink` step. Both build scripts stage output separately and replace an existing `release-artifacts/` only after a successful build and manifest verification. A failed Docker build or artifact-manifest check leaves a prior valid directory intact.
 
 Event Horizon releases uncompressed `.wasm` files. Therefore the SHA-256 values of `event_horizon.wasm` and `event_horizon_frontend.wasm` are compared directly with installed ICP module hashes; no `.wasm.gz` representation is involved.
 

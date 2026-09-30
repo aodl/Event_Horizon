@@ -56,7 +56,9 @@ frontend_app=(root/'canisters/frontend/public/app.js').read_text()
 frontend_client=(root/'canisters/frontend/public/pricing-client.js').read_text()
 assert 'http_request_update' not in frontend
 assert 'http_request_update' not in frontend_did
-assert 'queryBackendPricing({canisterId:selected.backendCanisterId})' in frontend_app
+assert 'queryBackend({ canisterId: requested.backendCanisterId })' in frontend_app
+assert 'const generation = ++loadGeneration' in frontend_app
+assert frontend_app.count('generation !== loadGeneration') >= 3
 assert "get_pricing: IDL.Func([], [Pricing], ['query'])" in frontend_client
 assert "fetch('/pricing.json'" not in frontend_app
 registry=(root/'canisters/frontend/public/instances.js').read_text()
@@ -74,6 +76,11 @@ assert 'Surplus recipient:' in frontend_instance_view
 for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env', 'IC_ROOT_KEY']:
     assert marker not in frontend_client, f'frontend client contains removed discovery marker {marker}'
     assert marker not in frontend, f'frontend canister contains removed discovery marker {marker}'
+assert 'public, max-age=31536000, immutable' not in frontend
+assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
+frontend_index=(root/'canisters/frontend/public/index.html').read_text()
+assert 'styles.css?v=2' in frontend_index
+assert 'app.bundle.js?v=2' in frontend_index
 
 memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src
@@ -109,6 +116,18 @@ for needle in ['status_visibility: public','log_visibility: public','log_memory_
     assert needle in icp, f'missing production setting {needle}'
 for path in ['Dockerfile.repro','tools/audit-wasm.py','tools/scripts/build-release','tools/scripts/verify-reproducible-artifacts','docs/operations/deployment.md','docs/operations/reproducible-builds.md','docs/operations/controller-removal.md']:
     assert (root/path).exists(), f'missing release-hardening file {path}'
+
+dockerfile=(root/'Dockerfile.repro').read_text()
+assert 'rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources' in dockerfile
+assert 'Dir::Etc::sourceparts "/etc/apt/event-horizon-empty-sources"' in dockerfile
+assert 'signed-by=/usr/share/keyrings/debian-archive-keyring.gpg' in dockerfile
+for build_script in ['tools/scripts/docker-build','tools/scripts/verify-reproducible-artifacts']:
+    build_text=(root/build_script).read_text()
+    assert 'canonical_context_prepare "$ROOT"' in build_text
+    assert '"$CANONICAL_CONTEXT"' in build_text
+context_helper=(root/'tools/scripts/lib/canonical-context.sh').read_text()
+assert 'git -C "$root" archive --format=tar "$CANONICAL_SOURCE_SHA"' in context_helper
+assert '--worktree-attributes' not in context_helper
 
 assert not (root/'tools/scripts/local-smoke').exists(), 'redundant local-smoke script still exists'
 live_docs = [root/'README.md']
@@ -167,7 +186,6 @@ assert 'log_memory_limit: 16384' in deployment
 assert '16 KiB (`16384` byte) rolling buffer' in deployment
 assert '4 KiB rolling buffer' not in deployment
 
-frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 assert 'Canonical ICP is read through its legacy block log' in frontend_index
 assert 'compatible non-ICP ledgers are read through ICRC-3' in frontend_index
 
@@ -206,6 +224,13 @@ for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
 # make Event Horizon believe it has more immediately spendable cycles than it does.
 assert 'canister_cycle_balance()' not in backend_src
 assert 'canister_liquid_cycle_balance()' in backend_src
+
+scheduler=(root/'canisters/event-horizon/src/scheduler.rs').read_text()
+assert 'struct LaneGuard' in scheduler
+assert 'impl Drop for LaneGuard' in scheduler
+assert 'config::RESERVE_RECHECK_SECONDS' in scheduler
+assert 'refresh_polling_mode() == PollingMode::ReserveProtection' in scheduler
+assert 'polling::run_poll().await' in scheduler
 
 # Rust remains executable truth; this only prevents the primary operator document from
 # silently losing the reviewed cadence table and its hysteresis thresholds.

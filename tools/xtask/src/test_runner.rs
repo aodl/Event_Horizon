@@ -636,55 +636,65 @@ fn rust_test_rerun(suite_rerun: &str, test: &str) -> String {
     }
 }
 
-fn useful_tail(output: &str) -> String {
-    let lines: Vec<_> = output.lines().collect();
-    lines[lines.len().saturating_sub(30)..].join("\n")
-}
-
 fn evaluate(spec: &SuiteSpec, captured: CapturedCommand, duration: Duration) -> SuiteOutcome {
+    let CapturedCommand {
+        success,
+        output,
+        spawn_error,
+    } = captured;
     let counts = match spec.parser {
         Parser::Command => None,
-        Parser::Rust => parse_rust_summaries(&captured.output),
-        Parser::Node => parse_node_summary(&captured.output),
+        Parser::Rust => parse_rust_summaries(&output),
+        Parser::Node => parse_node_summary(&output),
     };
     let parse_error = match spec.parser {
         Parser::Command => None,
-        Parser::Rust | Parser::Node if counts.is_none() && captured.success => {
+        Parser::Rust | Parser::Node if counts.is_none() && success => {
             Some("command exited successfully without a complete test summary".to_string())
         }
         Parser::Rust | Parser::Node
-            if captured.success
-                && counts.is_some_and(|counts| counts.passed == 0 && counts.failed == 0) =>
+            if success && counts.is_some_and(|counts| counts.passed == 0 && counts.failed == 0) =>
         {
             Some("command exited successfully but selected zero behavioural tests".to_string())
         }
         Parser::Rust | Parser::Node
-            if captured.success && counts.is_some_and(|counts| counts.failed != 0) =>
+            if success && counts.is_some_and(|counts| counts.failed != 0) =>
         {
             Some("command exited successfully despite reported failing tests".to_string())
         }
         _ => None,
     };
-    let passed = captured.success && parse_error.is_none();
+    let passed = success && parse_error.is_none();
     let mut failures = if !passed && spec.parser == Parser::Rust {
-        rust_failure_details(&captured.output, &spec.rerun)
+        rust_failure_details(&output, &spec.rerun)
     } else {
         Vec::new()
     };
+    let diagnostics = [spawn_error.as_deref(), parse_error.as_deref()]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
     if !passed && failures.is_empty() {
-        let detail = captured.spawn_error.or(parse_error).unwrap_or_else(|| {
-            let tail = useful_tail(&captured.output);
-            if tail.is_empty() {
-                "child command failed without output".to_string()
-            } else {
-                tail
-            }
-        });
+        let transcript = output.trim_end();
+        let detail = match (diagnostics.is_empty(), transcript.is_empty()) {
+            (true, true) => "child command failed without output".to_string(),
+            (false, true) => diagnostics,
+            (true, false) => transcript.to_string(),
+            (false, false) => format!("{diagnostics}\n\nCaptured transcript:\n{transcript}"),
+        };
+        let name = spec
+            .name
+            .strip_prefix("[pocketic] ")
+            .unwrap_or(&spec.name)
+            .to_string();
         failures.push(FailureDetail {
-            name: spec.name.to_string(),
+            name,
             detail,
             rerun: spec.rerun.clone(),
         });
+    } else if !passed && !diagnostics.is_empty() {
+        failures[0].detail = format!("{diagnostics}\n\n{}", failures[0].detail);
     }
     SuiteOutcome {
         name: spec.name.to_string(),
@@ -973,6 +983,37 @@ mod tests {
         let mut rendered = Vec::new();
         assert!(!write_summary(&mut rendered, &[outcome]).unwrap());
         let rendered = String::from_utf8(rendered).unwrap();
+        assert!(rendered.contains(&spec.rerun));
+    }
+
+    #[test]
+    fn unstructured_nocapture_failure_retains_complete_transcript() {
+        let spec = pocketic_test_spec("tests::inline_panic");
+        let mut output = String::from(
+            "running 1 test\ntest tests::inline_panic ... thread 'tests::inline_panic' panicked at src/lib.rs:9:4:\nassertion `left == right` failed\n  left: 41\n right: 42\n",
+        );
+        for line in 0..45 {
+            output.push_str(&format!("backtrace/teardown line {line}\n"));
+        }
+        output.push_str("test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 75 filtered out; finished in 0.01s\n");
+        let outcome = evaluate(
+            &spec,
+            CapturedCommand {
+                success: false,
+                output,
+                spawn_error: Some("child exited with status 101".to_string()),
+            },
+            Duration::ZERO,
+        );
+        let mut rendered = Vec::new();
+        assert!(!write_summary(&mut rendered, &[outcome]).unwrap());
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(rendered.contains("✗ tests::inline_panic"));
+        assert!(rendered.contains("assertion `left == right` failed"));
+        assert!(rendered.contains("left: 41"));
+        assert!(rendered.contains("right: 42"));
+        assert!(rendered.contains("backtrace/teardown line 44"));
+        assert!(rendered.contains("child exited with status 101"));
         assert!(rendered.contains(&spec.rerun));
     }
 

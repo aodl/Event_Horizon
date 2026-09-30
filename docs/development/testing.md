@@ -73,7 +73,13 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - destination-disabled equivalence and zero policy;
 - fresh-install `FundingState::Idle`, CMC-only `None`, split-plan `Some(PlannedSurplus)`, and current-Wasm upgrades of every pending funding phase;
 - subscription, cursor, verified SNS profile, and scheduler persistence across upgrade;
-- the certified frontend response and absence of debug application methods from production Wasm.
+- timer-wrapper recovery after real post-await continuation traps in polling, pricing, and funding, including preserved pending funding identity and non-overlapping ownership;
+- Reserve Protection checks at scheduled poll entry, including Economy hysteresis and resumption above 2 T;
+- the certified frontend response, transition asset URLs, revalidation headers, and absence of debug application methods from production Wasm;
+- deterministic stale-frontend-response rejection under reordered success, failure, planned-entry, same-profile/different-backend, and verification-failure cases;
+- a bounded capacity matrix: global and specific fan-out at 256 and 1,024 records, a 4,096-block/16-page backlog through the scheduler, the existing 256-target callback bound, values above `u64::MAX`, and a 2,048-decimal-digit `Nat` fixture.
+
+The capacity matrix uses batched debug-only fixture setup and the production polling path. Synthetic principals measure dispatch pressure as attempted/accepted one-way calls; they are not described as confirmed subscriber execution. The large-`Nat` case uses the real mock subscriber and confirms execution. PocketIC exposes cycle and memory deltas used in the validation report, but not a sound single aggregate instruction count across the poll's many asynchronous messages. The tested matrix is a finite envelope, not evidence of unlimited capacity.
 
 ## Source quality
 

@@ -12,9 +12,14 @@ ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_AUDIT=false
 ENV CARGO_TERM_COLOR=never
 
-RUN printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s bookworm main\n' "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
-    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s bookworm-security main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
-    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s bookworm-updates main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
+RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources \
+    && mkdir -p /etc/apt/event-horizon-empty-sources \
+    && printf 'Dir::Etc::sourcelist "/etc/apt/sources.list";\nDir::Etc::sourceparts "/etc/apt/event-horizon-empty-sources";\n' > /etc/apt/apt.conf.d/99event-horizon-snapshot \
+    && printf 'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://snapshot.debian.org/archive/debian/%s bookworm main\n' "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
+    && printf 'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://snapshot.debian.org/archive/debian-security/%s bookworm-security main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
+    && printf 'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://snapshot.debian.org/archive/debian/%s bookworm-updates main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list \
+    && test -z "$(find /etc/apt/sources.list.d -maxdepth 1 -type f -print -quit)" \
+    && test "$(apt-config shell sourceparts Dir::Etc::sourceparts | sed "s/^sourceparts='//;s/'$//")" = /etc/apt/event-horizon-empty-sources \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl git nodejs npm python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*

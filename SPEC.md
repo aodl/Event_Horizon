@@ -253,6 +253,10 @@ Hysteresis is stateful. A balance increase may jump directly to the fastest mode
 
 Continuous means no deliberately inserted delay after one complete poll; polls never overlap and execution must yield between bounded asynchronous operations.
 
+Every scheduled poll refreshes the mode from liquid cycles before entering ordinary Ledger work. Reserve Protection performs no ordinary poll and rearms the existing one-hour reserve recheck. Funding and pricing/recovery scheduling remain independent, and the Ledger clients retain their per-call reserve checks.
+
+Polling, funding, and pricing are independent one-shot, single-flight lanes. If the pinned async runtime cancels a lane after a post-await trap, synchronous cleanup releases only that lane and installs one delayed attempt at the existing reserve-recheck interval when no replacement timer exists. It does not resume work directly or rewrite durable financial state; the replacement invocation follows the ordinary state machine. This rule does not promise recovery from out-of-memory or invalid stable state.
+
 ## 12. Production observability and immutability
 
 The production install configuration is immutable `observed_ledger` plus optional `sns_root` and optional `surplus_canister`. `surplus_canister` is an independent canister principal and need not belong to the observed Ledger, SNS, or Jupiter; all diverted value remains ICP. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain Wasm-level compiled trust anchors. The same reviewed production Wasm serves every instance and contains no recipient-specific build input.

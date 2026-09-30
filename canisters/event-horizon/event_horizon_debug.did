@@ -38,15 +38,23 @@ service : (DebugInitArgs) -> {
   debug_set_surplus_level : (nat8) -> ();
   debug_set_surplus_canister : (opt principal) -> ();
   debug_set_liquid_cycles_override : (opt nat) -> ();
+  debug_set_scheduler_liquid_cycles_override : (opt nat) -> ();
   debug_set_ledger_canister : (principal) -> ();
   debug_start_schedulers : () -> ();
   debug_timer_count : () -> (nat8) query;
+  debug_arm_scheduler_trap : (text) -> ();
+  debug_scheduler_lane_state : (text) -> (vec bool) query;
+  debug_arm_scheduler_overlap : (text) -> ();
+  debug_scheduler_lane_counts : (text) -> (vec nat64) query;
+  debug_scheduler_overlap : (text) -> ();
   debug_icrc3_get_blocks_calls : () -> (nat64) query;
   debug_legacy_query_blocks_calls : () -> (nat64) query;
   debug_set_cursors : (record {
     admission_bootstrapped : bool; admission_next_block : nat64;
     observed_bootstrapped : bool; observed_next_block : nat64;
   }) -> ();
+  debug_seed_subscribers : (record { kind : text; start : nat64; count : nat64 }) -> ();
+  debug_poke_counts : () -> (vec nat64) query;
   debug_subscription : (record { subscriber : principal; target : WatchTarget }) -> (opt Subscription) query;
   debug_global_subscription : (principal) -> (bool) query;
 }
