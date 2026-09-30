@@ -15,11 +15,18 @@ The test commands automatically run `npm ci` when `node_modules` is absent or st
 
 `test_unit` runs repository/static protocol checks, source-manifest verification, ordinary locked Rust workspace tests (including xtask's parser/runner tests), and frontend Node unit tests. It excludes intentionally ignored PocketIC scenarios.
 
-`test_pocketic_integration` runs serially:
+`test_pocketic_integration` first discovers the ignored library tests with:
 
 ```bash
-cargo test --locked -p event-horizon-pocketic -- --ignored --nocapture --test-threads=1
+cargo test --locked -p event-horizon-pocketic --lib -- --list --ignored
 ```
+
+It then runs every discovered name serially in a separate Cargo test process,
+using `--exact --ignored --nocapture --test-threads=1`. This gives every
+scenario a fresh process and PocketIC lifecycle, reports each scenario
+precisely, and avoids accumulating shared-server state across one long
+integration process. The managed command sets `POCKET_IC_MUTE_SERVER=1` and
+`RUST_TEST_THREADS=1`; discovery returning no ignored tests is a failure.
 
 PocketIC is supplied by the Rust dependency and test harness; Event Horizon has no separately managed local-replica integration layer.
 
@@ -28,7 +35,8 @@ The runner streams child output, records suite durations and parsed Cargo/libtes
 To investigate one PocketIC scenario directly:
 
 ```bash
-cargo test --locked -p event-horizon-pocketic <test-name> -- --ignored --nocapture --test-threads=1
+cargo test --locked -p event-horizon-pocketic --lib '<exact-test-name>' \
+  -- --exact --ignored --nocapture --test-threads=1
 ```
 
 One-way subscriber callbacks are tested with a bounded condition-based PocketIC wait. Exhaustion reports the expected condition, deterministic tick bound, elapsed time, the last mock-subscriber observation, and Event Horizon debug state.

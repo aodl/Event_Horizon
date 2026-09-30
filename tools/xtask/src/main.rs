@@ -6,7 +6,7 @@ use std::{
     process::{exit, Command},
 };
 
-use test_runner::{print_summary, run_suite, run_suites, Parser, SuiteSpec};
+use test_runner::{print_summary, run_pocketic_tests, run_suite, run_suites, Parser, SuiteSpec};
 
 const HELP: &str = "Event Horizon test orchestration
 
@@ -140,26 +140,7 @@ fn run_unit(outcomes: &mut Vec<test_runner::SuiteOutcome>) {
 }
 
 fn run_pocketic(outcomes: &mut Vec<test_runner::SuiteOutcome>) {
-    outcomes.push(run_suite(
-        &repo_root(),
-        &SuiteSpec::command_with_env(
-            "[pocketic] Event Horizon integration",
-            "cargo",
-            &[
-                "test",
-                "--locked",
-                "-p",
-                "event-horizon-pocketic",
-                "--",
-                "--ignored",
-                "--nocapture",
-                "--test-threads=1",
-            ],
-            &[("POCKET_IC_MUTE_SERVER", "1")],
-            Parser::Rust,
-            "cargo test --locked -p event-horizon-pocketic -- --ignored --nocapture --test-threads=1",
-        ),
-    ));
+    outcomes.extend(run_pocketic_tests(&repo_root()));
 }
 
 fn finish(outcomes: Vec<test_runner::SuiteOutcome>) {

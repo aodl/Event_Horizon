@@ -6,7 +6,14 @@ The same reviewed `event_horizon.wasm` serves every compatible instance. Immutab
 
 For an SNS-aware instance, externally verify the observed token Ledger and SNS Root tuple against canonical SNS-WASM inventory or reviewed primary evidence. Confirm Root `list_sns_canisters` reports that Root, Ledger, and SNS Governance and that Ledger `icrc1_minting_account` is Governance's default account. Install with those immutable principals, wait for profile initialization, then verify `get_instance` reports the Ledger, SNS Root, neuron Governance, and expected Wasm hash. Perform controlled tests, remove all controllers, and only then propose frontend listing. Event Horizon never calls SNS-WASM and, after profile caching, does not call Root or Governance. ICP and non-SNS generic installs use `sns_root = null`.
 
-Before final deployment, obtain a dedicated Jupiter Faucet alias through the Jupiter Faucet community review process: identify the target Ledger (canonical ICP, or a non-ICP ledger supporting ICRC-1, ICRC-3, and `1xfer`), reserve the Event Horizon canister principal, submit a Faucet source pull request for the alias mapping, raise the community discussion/proposal required by Jupiter governance, and wait for approval/activation planning. Do not modify Jupiter as part of an Event Horizon deployment.
+Before opening the instance for subscriber use, obtain a dedicated Jupiter Faucet alias through the Jupiter Faucet community review process: identify the target Ledger (canonical ICP, or a non-ICP ledger supporting ICRC-1, ICRC-3, and `1xfer`), reserve the Event Horizon canister principal, submit a Faucet source pull request for the alias mapping, raise the community discussion/proposal required by Jupiter governance, and wait for approval/activation planning. Do not modify Jupiter as part of an Event Horizon deployment.
+
+Installation and observed-ledger profile initialization do not require an
+alias. An Event Horizon backend can be installed and can begin observing its
+configured ledger before Jupiter review completes. The reviewed alias is
+required before subscriber declarations can be funded or admitted, because
+Jupiter Faucet payout plus matching Historian route evidence is the admission
+mechanism.
 
 Then install and verify the instance, establish Faucet endowment funding, confirm `get_instance` and public CONFIG/HEALTH logs, verify the reviewed generic module hash, set `status_visibility=public`, `log_visibility=public`, and backend `log_memory_limit=16384`, test functionality, and remove every controller. Event Horizon calls this finalized state immutable or blackholed: `controllers = []`; no separate blackhole canister is required and there is no operator afterward.
 
