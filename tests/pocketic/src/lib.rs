@@ -4179,6 +4179,7 @@ mod tests {
         let env = Env::new()?;
         env.poll()?;
         let before = env.state()?.observed_next_block;
+        let counts_before = env.scheduler_lane_counts("poll")?;
         env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(Principal::from_slice(&[8]), [0; 32]),
@@ -4191,24 +4192,94 @@ mod tests {
         for _ in 0..40 {
             env.pic.tick();
             if env.state()?.observed_next_block > before
-                && env
-                    .scheduler_lane_counts("poll")?
-                    .get(1)
-                    .copied()
-                    .unwrap_or(0)
-                    > 0
+                && env.scheduler_lane_counts("poll")?[1] == counts_before[1] + 2
             {
                 break;
             }
         }
         let counts = env.scheduler_lane_counts("poll")?;
-        assert_eq!(counts[0], 1, "only the owning poll worker may start");
-        assert!(
-            counts[1] >= 1,
-            "overlap fixture must exercise the busy path"
+        assert_eq!(
+            counts[0],
+            counts_before[0] + 1,
+            "only one new owning poll worker may start"
+        );
+        assert_eq!(
+            counts[1],
+            counts_before[1] + 2,
+            "overlap self-call did not complete two ownership-preserving poll rejections; logs:\n{}",
+            env.public_logs()?
         );
         assert!(env.state()?.observed_next_block > before);
         assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn overlapping_scheduled_funding_does_not_release_or_duplicate_the_active_worker() -> Result<()>
+    {
+        let env = Env::new()?;
+        let counts_before = env.scheduler_lane_counts("funding")?;
+        env.set_balance(100_000_000)?;
+        env.arm_scheduler_overlap("funding")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.scheduler_lane_counts("funding")?[1] == counts_before[1] + 2
+                && env.accepted_with_memo(1_347_768_404)? == 1
+                && env.state()?.cmc_state.contains("Idle")
+            {
+                break;
+            }
+        }
+        let counts = env.scheduler_lane_counts("funding")?;
+        assert_eq!(
+            counts[0],
+            counts_before[0] + 1,
+            "only one new owning funding worker may start"
+        );
+        assert_eq!(
+            counts[1],
+            counts_before[1] + 2,
+            "overlap self-call did not complete two ownership-preserving funding rejections; logs:\n{}",
+            env.public_logs()?
+        );
+        assert_eq!(env.accepted_with_memo(1_347_768_404)?, 1);
+        assert!(env.state()?.cmc_state.contains("Idle"));
+        assert_eq!(env.scheduler_lane_state("funding")?, [false, true]);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn overlapping_scheduled_pricing_does_not_release_or_duplicate_the_active_worker() -> Result<()>
+    {
+        let env = Env::new_unpriced()?;
+        let counts_before = env.scheduler_lane_counts("pricing")?;
+        env.arm_scheduler_overlap("pricing")?;
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.scheduler_lane_counts("pricing")?[1] == counts_before[1] + 2
+                && env.pricing()?.initialized
+            {
+                break;
+            }
+        }
+        let counts = env.scheduler_lane_counts("pricing")?;
+        assert_eq!(
+            counts[0],
+            counts_before[0] + 1,
+            "only one new owning pricing worker may start"
+        );
+        assert_eq!(
+            counts[1],
+            counts_before[1] + 2,
+            "overlap self-call did not complete two ownership-preserving pricing rejections; logs:\n{}",
+            env.public_logs()?
+        );
+        assert!(env.pricing()?.initialized);
+        assert_eq!(env.scheduler_lane_state("pricing")?, [false, true]);
         Ok(())
     }
 

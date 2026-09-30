@@ -70,10 +70,16 @@ impl Lane {
                 }
             }),
         };
-        acquired.then_some(LaneGuard {
-            lane: self,
-            armed: true,
-        })
+        // Construct the armed guard only after acquisition; a rejected contender
+        // must not drop a guard that releases another worker's lane.
+        if acquired {
+            Some(LaneGuard {
+                lane: self,
+                armed: true,
+            })
+        } else {
+            None
+        }
     }
 
     fn clear_running(self) {

@@ -250,7 +250,32 @@ mod debug {
 
     #[ic_cdk::update]
     async fn debug_scheduler_overlap(lane: String) {
-        scheduler::debug_run_lane(&lane).await
+        let (running_before, _) = scheduler::debug_lane_state(&lane);
+        assert!(
+            running_before,
+            "overlap fixture requires an active owning worker for {lane}"
+        );
+
+        let (starts_before, busy_before) = scheduler::debug_lane_counts(&lane);
+        for attempt in 1_u64..=2 {
+            scheduler::debug_run_lane(&lane).await;
+
+            let (running_after, _) = scheduler::debug_lane_state(&lane);
+            let (starts_after, busy_after) = scheduler::debug_lane_counts(&lane);
+            assert!(
+                running_after,
+                "busy {lane} attempt {attempt} released the owning worker's lane"
+            );
+            assert_eq!(
+                starts_after, starts_before,
+                "busy {lane} attempt {attempt} started another worker"
+            );
+            assert_eq!(
+                busy_after,
+                busy_before + attempt,
+                "busy {lane} attempt {attempt} did not follow the rejection path"
+            );
+        }
     }
 
     #[ic_cdk::query]

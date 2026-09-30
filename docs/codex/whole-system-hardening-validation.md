@@ -85,7 +85,8 @@ files as proof of any hypothesis.
   `styles.css?v=2` and `app.bundle.js?v=2`. Certification and CSP are unchanged.
 - **Regression:** `frontend_transition_urls_are_certified_and_require_revalidation`
   proves old and new URLs differ, both query-suffixed assets resolve, the new
-  policy is present, and certified responses verify.
+  URLs return the expected bytes and cache policy, and certification headers
+  are present.
 - **Remaining limitation:** This is an HTTP/header and certified-routing
   regression, not an automated real-browser upgrade run. Future changes use
   revalidation rather than a recurring versioning system.
