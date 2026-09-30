@@ -115,13 +115,16 @@ The production constructor is:
 record {
   observed_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
   sns_root = null;
+  surplus_canister = null;
 }
 ```
 
 Canonical ICP requires `sns_root = null` and selects the fixed legacy
 `query_blocks` adapter. Any other principal selects the generic ICRC-3 adapter
 and must pass ICRC-1/ICRC-3/`1xfer` readiness. This is immutable dispatch, not
-fallback. SNS-aware instance deployment is covered by
+fallback. `surplus_canister = null` keeps canonical ICP CMC-only unless the
+repository owner deliberately supplies a reviewed receiver before reinstall.
+SNS-aware instance deployment is covered by
 [Deploying an immutable instance](deploying-an-instance.md).
 
 `icp.yaml` declares the production observability settings:
@@ -231,21 +234,25 @@ Controller removal is a separate operational decision. During the controlled obs
 12. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
-15. if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
+15. `get_instance.surplus_canister` and the CONFIG log match the reviewed install argument; if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
 
 Only after that evidence is satisfactory should [controller removal](controller-removal.md) be followed.
 
 ## External dependencies
 
-Production constants are compiled into the backend Wasm:
+Wasm-level protocol constants are compiled into the backend Wasm:
 
 - ICP Ledger: `ryjl3-tyaaa-aaaaa-aaaba-cai`
 - CMC: `rkp4c-7iaaa-aaaaa-aaaca-cai`
 - Jupiter Historian: `j5gs6-uiaaa-aaaar-qb5cq-cai`
 - Jupiter Faucet: `acjuz-liaaa-aaaar-qb4qq-cai`
-- Surplus receiver: currently `None` (diversion disabled)
 
-The surplus receiver is a compile-time trust anchor, not deployment input. Before a production build intended to enable diversion, replace `SURPLUS_CANISTER = None` with exactly one reviewed `Some("<principal>")`, rebuild the canonical Wasm, rerun every validation and export audit, and record the new hash. Never add a runtime setter. Once controllers are removed, the destination cannot change.
+Instance installation persists `observed_ledger`, optional `sns_root`, and
+optional `surplus_canister`. The receiver is deployment input, not a build
+input: every recipient uses the same canonical backend Wasm. There is no
+runtime setter or upgrade argument. Verify `get_instance` and the initial
+CONFIG log against all three values; once controllers are removed, the entire
+instance is immutable.
 
 The Jupiter Faucet `X` alias must resolve to the actual deployed Event Horizon backend before subscription endowments are created.
 
@@ -255,7 +262,8 @@ The certified frontend embeds a reviewed static instance registry, including
 canonical backend `eo6ei-gaaaa-aaaar-qchra-cai`, in its JavaScript asset and
 therefore in the frontend Wasm. Its production query path uses
 `https://icp-api.io` and the mainnet root key embedded by the JavaScript agent.
-It calls `get_instance` to verify the selected registry entry and `get_pricing`
+It calls `get_instance` to verify the selected registry entry's observed
+Ledger, SNS Root, surplus recipient, and profile, and calls `get_pricing`
 for authoritative prices. It does not discover principals from cookies,
 canister environment values, URL parameters, local storage, HTTP configuration,
 init arguments, or mutable canister state. The frontend's own principal is

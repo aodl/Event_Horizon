@@ -16,9 +16,9 @@ Do not continue unless all of the following are true:
 - `log_visibility` is `public`;
 - `log_memory_limit` is exactly 16384 bytes;
 - the canister has a healthy cycles reserve;
-- `get_instance` and recent public `CONFIG`/`HEALTH` logs report the intended immutable observed Ledger;
+- `get_instance` and recent public `CONFIG`/`HEALTH` logs report the intended immutable observed Ledger, SNS Root, and surplus recipient;
 - the fixed Protocol ICP Ledger, CMC, Historian and Faucet constants are correct;
-- `SURPLUS_CANISTER` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;
+- install-time `surplus_canister` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;
 - if surplus is enabled, retained-first ordering, epoch policy, immediate gates, duplicate recovery, and pending-state upgrades have passed against the canonical Wasm;
 - the Jupiter Faucet `X` alias points to this backend canister;
 - pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
@@ -35,7 +35,7 @@ icp canister settings show event_horizon -e ic
 sha256sum release-artifacts/event_horizon.wasm
 ```
 
-Record the canister ID, module hash, current controllers, cycle balance and settings in the release record.
+Record the canister ID, module hash, current controllers, cycle balance, settings, and complete immutable `get_instance` tuple in the release record.
 
 ## Make immutable
 

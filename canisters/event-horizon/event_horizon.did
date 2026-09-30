@@ -16,7 +16,11 @@ type InstanceInfo = record {
   icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
   jupiter_historian : principal; surplus_canister : opt principal;
 };
-type InitArgs = record { observed_ledger : principal; sns_root : opt principal };
+type InitArgs = record {
+  observed_ledger : principal;
+  sns_root : opt principal;
+  surplus_canister : opt principal;
+};
 service : (InitArgs) -> {
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;

@@ -13,7 +13,7 @@ Observed Ledger ─────────►│ Trigger reader      │
                               subscriber.poke
 ```
 
-The observed asset can differ per immutable instance; the funding asset never does. Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index.
+The observed asset and optional surplus recipient can differ per immutable instance; the funding and surplus asset never does. Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index. One reviewed Wasm supports every `observed_ledger` / `sns_root` / `surplus_canister` tuple.
 
 Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
@@ -49,6 +49,6 @@ The hourly lane also takes one liquid-cycles observation for the surplus control
 
 ## Frontend
 
-Certified assets remain embedded in the Rust frontend Wasm. Its reviewed static registry contains ICP live and IO planned. A selected live backend supplies `get_instance` and ICP-denominated `get_pricing`; configuration must match before memo construction. No cookie, environment, URL, local storage, mutable service, or automatic discovery supplies principals. The frontend exports only certified `http_request`.
+Certified assets remain embedded in the Rust frontend Wasm. Its reviewed static registry contains ICP live and IO planned and pins each entry's backend, observed Ledger, optional SNS Root, optional surplus recipient, and expected backend hash. A selected live backend supplies `get_instance` and ICP-denominated `get_pricing`; the immutable tuple must match before memo construction. No cookie, environment, URL, local storage, mutable service, or automatic discovery supplies principals. The frontend exports only certified `http_request`.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.

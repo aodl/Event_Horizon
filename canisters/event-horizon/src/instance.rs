@@ -25,6 +25,7 @@ impl From<String> for ProfileError {
 pub struct InitArgs {
     pub observed_ledger: Principal,
     pub sns_root: Option<Principal>,
+    pub surplus_canister: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]
@@ -40,6 +41,7 @@ pub struct InstanceConfig {
     pub observed_ledger: Principal,
     pub observed_profile: Option<ObservedLedgerProfile>,
     pub sns_root: Option<Principal>,
+    pub surplus_canister: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -57,7 +59,9 @@ pub struct InstanceInfo {
 pub fn validate_init(
     observed_ledger: Principal,
     sns_root: Option<Principal>,
+    surplus_canister: Option<Principal>,
     icp_ledger: Principal,
+    this_canister: Principal,
 ) {
     assert!(
         observed_ledger != Principal::anonymous(),
@@ -77,18 +81,26 @@ pub fn validate_init(
             "sns_root must be a canister principal"
         );
     }
+    if let Some(recipient) = surplus_canister {
+        assert!(
+            recipient != Principal::anonymous()
+                && recipient != Principal::management_canister()
+                && recipient != this_canister,
+            "surplus_canister must be a distinct canister principal"
+        );
+    }
 }
 
 #[cfg(not(feature = "debug_api"))]
 pub fn log_config() {
+    let instance = state::read_instance_config();
     let runtime = config::runtime();
     let reader = if runtime.observed_ledger == runtime.icp_ledger {
         "icp_legacy"
     } else {
         "icrc3"
     };
-    let sns_root = state::read_instance_config().sns_root;
-    ic_cdk::println!("CONFIG instance={} observed_ledger={} sns_root={} reader={} icp_ledger={} faucet={} historian={} cmc={} surplus={}", ic_cdk::api::canister_self(), runtime.observed_ledger, sns_root.map_or_else(|| "none".into(), |p| p.to_text()), reader, runtime.icp_ledger, runtime.faucet_canister, runtime.historian_canister, runtime.cmc_canister, runtime.surplus_canister.map_or_else(|| "none".to_string(), |p| p.to_text()));
+    ic_cdk::println!("CONFIG instance={} observed_ledger={} sns_root={} reader={} icp_ledger={} faucet={} historian={} cmc={} surplus={}", ic_cdk::api::canister_self(), runtime.observed_ledger, instance.sns_root.map_or_else(|| "none".into(), |p| p.to_text()), reader, runtime.icp_ledger, runtime.faucet_canister, runtime.historian_canister, runtime.cmc_canister, instance.surplus_canister.map_or_else(|| "none".to_string(), |p| p.to_text()));
 }
 
 pub fn get_instance() -> InstanceInfo {
@@ -102,7 +114,7 @@ pub fn get_instance() -> InstanceInfo {
         cmc: runtime.cmc_canister,
         jupiter_faucet: runtime.faucet_canister,
         jupiter_historian: runtime.historian_canister,
-        surplus_canister: runtime.surplus_canister,
+        surplus_canister: instance.surplus_canister,
     }
 }
 
@@ -210,4 +222,33 @@ pub async fn ensure_observed_profile() -> Result<ObservedLedgerProfile, ProfileE
         profile.neuron_governance.map_or_else(|| "none".into(), |p| p.to_text())
     );
     Ok(profile)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn validate_surplus(recipient: Option<Principal>) {
+        let observed = Principal::from_slice(&[1]);
+        let icp = Principal::from_slice(&[2]);
+        let this_canister = Principal::from_slice(&[3]);
+        validate_init(observed, None, recipient, icp, this_canister);
+    }
+
+    #[test]
+    fn surplus_recipient_accepts_none_and_independent_canister() {
+        validate_surplus(None);
+        validate_surplus(Some(Principal::from_slice(&[9])));
+    }
+
+    #[test]
+    fn surplus_recipient_rejects_anonymous_management_and_self() {
+        for recipient in [
+            Principal::anonymous(),
+            Principal::management_canister(),
+            Principal::from_slice(&[3]),
+        ] {
+            assert!(std::panic::catch_unwind(|| validate_surplus(Some(recipient))).is_err());
+        }
+    }
 }

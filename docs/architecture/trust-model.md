@@ -1,6 +1,8 @@
 # Trust model
 
-For a finalized instance, verify the canister principal, empty controller list, public module hash, reproduced generic backend hash, `get_instance.observed_ledger`, recent public CONFIG/HEALTH logs, the Ledger principal independently, the Jupiter alias mapping, and fixed ICP/CMC/Faucet/Historian anchors in source/module. The complete tuple—not module hash alone—identifies the instance.
+For a finalized instance, verify the canister principal, empty controller list, public module hash, reproduced generic backend hash, `get_instance` values for the observed Ledger, SNS Root, and surplus recipient, recent public CONFIG/HEALTH logs, the Ledger principal independently, the Jupiter alias mapping, and the fixed protocol anchors in source/module. The complete tuple—not module hash alone—identifies the instance.
+
+Wasm-level fixed protocol anchors are the ICP Ledger, CMC, NNS Governance, Jupiter Faucet, and Jupiter Historian. Instance-level immutable configuration is `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. The module hash proves common implementation and policy; `get_instance` plus the initial CONFIG log proves which tuple was installed.
 
 Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 
@@ -20,4 +22,4 @@ Daily samples can be missed, and the observed rolling minimum is only the lowest
 
 Surplus epochs likewise use an observed hourly minimum, not continuous monitoring or a burn forecast. The current-balance gate and retained-first ordering protect service even when the stored level is high. The immutable receiver is trusted only as the destination account owner: Event Horizon calls no receiver endpoint, grants it no control, and makes no claim about how it governs or spends received ICP. Direct donations and Faucet funding share the same pool; funding source never changes subscriber priority.
 
-Controller removal remains an irreversible action after a controlled observation period. Before it, the currently `None` production surplus constant must either remain deliberately disabled or be changed to one reviewed immutable principal and rebuilt. The backend contains no administrative, destination, withdrawal, recovery, install-code, or self-upgrade method.
+Controller removal remains an irreversible action after a controlled observation period. Before it, the installed surplus recipient must be deliberately disabled or equal the final reviewed receiver. The same module supports either choice; there is no recipient environment variable, build argument, feature, source substitution, or recipient-specific Docker build. The backend contains no administrative, destination, withdrawal, recovery, install-code, or self-upgrade method.

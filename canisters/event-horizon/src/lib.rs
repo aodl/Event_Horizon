@@ -39,13 +39,16 @@ fn init(args: InitArgs) {
     instance::validate_init(
         args.observed_ledger,
         args.sns_root,
-        config::RuntimeConfig::production(args.observed_ledger).icp_ledger,
+        args.surplus_canister,
+        config::RuntimeConfig::production(args.observed_ledger, args.surplus_canister).icp_ledger,
+        ic_cdk::api::canister_self(),
     );
     state::initialize_if_needed();
     state::initialize_instance_config(instance::InstanceConfig {
         observed_ledger: args.observed_ledger,
         observed_profile: None,
         sns_root: args.sns_root,
+        surplus_canister: args.surplus_canister,
     });
     instance::log_config();
     scheduler::start();
@@ -101,11 +104,18 @@ mod debug {
     #[ic_cdk::init]
     fn init(args: DebugInitArgs) {
         state::initialize_if_needed();
-        instance::validate_init(args.observed_ledger, args.sns_root, args.icp_ledger);
+        instance::validate_init(
+            args.observed_ledger,
+            args.sns_root,
+            args.surplus_canister,
+            args.icp_ledger,
+            ic_cdk::api::canister_self(),
+        );
         state::initialize_instance_config(instance::InstanceConfig {
             observed_ledger: args.observed_ledger,
             observed_profile: None,
             sns_root: args.sns_root,
+            surplus_canister: args.surplus_canister,
         });
         state::write_debug_config(args.into());
         // Debug builds are manually driven to keep PocketIC tests deterministic.

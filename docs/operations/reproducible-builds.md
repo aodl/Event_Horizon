@@ -55,6 +55,13 @@ service : {
 
 The audit rejects backend update methods and debug markers. The frontend must expose exactly `canister_query http_request`, with no HTTP update, pricing proxy, or administrative application method. These binary audits supplement rather than replace the checked-in Candid interfaces.
 
+The backend build has no surplus-recipient environment variable, build argument,
+feature, source substitution, or recipient-specific Docker path. One backend
+module hash covers every valid install-time `surplus_canister`. The frontend is
+expected to change when its reviewed static registry pins a different backend
+hash or instance recipient; that certified registry change does not create a
+recipient-specific backend Wasm.
+
 ## Release and mainnet evidence
 
 Retain together:

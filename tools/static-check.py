@@ -19,6 +19,8 @@ assert 'vec nat8' not in subscriber_did
 install_args=(root/'canisters/event-horizon/mainnet-icp-install-args.did').read_text()
 assert 'observed_ledger = principal' in install_args
 assert 'sns_root = null' in install_args
+assert 'surplus_canister = null' in install_args
+assert 'surplus_canister : opt principal;' in backend_did
 thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
 unfiltered='X.r5m5ydiaaaaaaaaqanaacai.7'
 assert len(thresholded.encode()) == 32
@@ -60,9 +62,15 @@ assert "fetch('/pricing.json'" not in frontend_app
 registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
+assert registry.count('surplusCanisterId:null') == 2
+assert "expectedBackendWasmSha256:'414bb9a13c6003252c7a6532558f069f266f232d762246c1640f2508cd010c8a'" in registry
 assert "alias:'X'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
+frontend_instance_view=(root/'canisters/frontend/public/instance-view.js').read_text()
+assert 'instance.surplus_canister' in frontend_instance_view
+assert 'registry.surplusCanisterId' in frontend_instance_view
+assert 'Surplus recipient:' in frontend_instance_view
 for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env', 'IC_ROOT_KEY']:
     assert marker not in frontend_client, f'frontend client contains removed discovery marker {marker}'
     assert marker not in frontend, f'frontend canister contains removed discovery marker {marker}'
@@ -169,9 +177,26 @@ assert 'observed_ledger: Principal' in backend_src
 assert 'ryjl3-tyaaa-aaaaa-aaaba-cai' in backend_src, 'fixed protocol ICP ledger missing'
 assert 'rrkah-fqaaa-aaaaa-aaaaq-cai' in backend_src, 'fixed NNS Governance missing'
 assert 'sns_root: Option<Principal>' in backend_src
+instance_src=(root/'canisters/event-horizon/src/instance.rs').read_text()
+init_args=instance_src[instance_src.index('pub struct InitArgs'):instance_src.index('pub struct ObservedLedgerProfile')]
+instance_config=instance_src[instance_src.index('pub struct InstanceConfig'):instance_src.index('pub struct InstanceInfo')]
+assert 'surplus_canister: Option<Principal>' in init_args
+assert 'surplus_canister: Option<Principal>' in instance_config
 assert 'debug_set_sns_root' not in backend_src
 assert 'compute_neuron_staking_subaccount_bytes' in backend_src
-assert 'SURPLUS_CANISTER: Option<&str> = None' in backend_src
+assert 'SURPLUS_CANISTER' not in backend_src
+assert 'set_surplus_canister' not in backend_did
+build_inputs='\n'.join((root/path).read_text() for path in [
+    'Cargo.toml',
+    'canisters/event-horizon/Cargo.toml',
+    'Dockerfile.repro',
+    'tools/scripts/build-release',
+    'tools/scripts/docker-build',
+])
+assert 'SURPLUS_CANISTER' not in build_inputs
+assert 'surplus_canister' not in build_inputs
+for stale in ['compile-time `surplus_canister`', 'compiled surplus destination', 'surplus receiver is a compile-time']:
+    assert stale not in live_text.lower(), f'live documentation contains stale surplus model {stale}'
 for forbidden in ['install_code(', 'reinstall_code(', 'update_settings(']:
     assert forbidden not in backend_src, f'backend source unexpectedly contains management mutation path {forbidden}'
 

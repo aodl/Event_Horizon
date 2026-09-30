@@ -11,8 +11,6 @@ pub const CMC_CANISTER: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const JUPITER_HISTORIAN_CANISTER: &str = "j5gs6-uiaaa-aaaar-qb5cq-cai";
 pub const JUPITER_FAUCET_CANISTER: &str = "acjuz-liaaa-aaaar-qb4qq-cai";
 pub const NNS_GOVERNANCE_CANISTER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
-/// Immutable production surplus destination. `None` keeps diversion disabled.
-pub const SURPLUS_CANISTER: Option<&str> = None;
 
 pub const LEDGER_PAGE_SIZE: u64 = 256;
 pub const FUNDING_MAINTENANCE_SECONDS: u64 = 60 * 60;
@@ -70,7 +68,7 @@ pub struct RuntimeConfig {
 }
 
 impl RuntimeConfig {
-    pub fn production(observed_ledger: Principal) -> Self {
+    pub fn production(observed_ledger: Principal, surplus_canister: Option<Principal>) -> Self {
         Self {
             observed_ledger,
             icp_ledger: Principal::from_text(ICP_LEDGER_CANISTER)
@@ -80,16 +78,15 @@ impl RuntimeConfig {
                 .expect("valid Historian principal"),
             faucet_canister: Principal::from_text(JUPITER_FAUCET_CANISTER)
                 .expect("valid Faucet principal"),
-            surplus_canister: SURPLUS_CANISTER.map(|principal| {
-                Principal::from_text(principal).expect("valid surplus canister principal")
-            }),
+            surplus_canister,
         }
     }
 }
 
 #[cfg(not(feature = "debug_api"))]
 pub fn runtime() -> RuntimeConfig {
-    RuntimeConfig::production(crate::state::read_instance_config().observed_ledger)
+    let instance = crate::state::read_instance_config();
+    RuntimeConfig::production(instance.observed_ledger, instance.surplus_canister)
 }
 
 #[cfg(feature = "debug_api")]

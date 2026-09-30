@@ -1,4 +1,5 @@
 (record {
   observed_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
   sns_root = null;
+  surplus_canister = null;
 })

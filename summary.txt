@@ -8,13 +8,15 @@ Branch: codex/generic-ledger-instances
   admission and observation.
 - Every non-ICP Observed Ledger requires ICRC-1, ICRC-3, and `1xfer`.
 - The fixed Protocol ICP Ledger remains the admission and funding ledger.
-- One backend Wasm contains both adapters; immutable `observed_ledger` and
-  optional verified `sns_root` determine the mode.
+- One backend Wasm contains both adapters; immutable `observed_ledger`,
+  optional verified `sns_root`, and optional `surplus_canister` determine the
+  instance configuration.
 - Specific targets are full `u64` numeric subaccounts or neuron nonces;
   callbacks carry the per-target maximum qualifying arbitrary-precision amount.
 - Production backend application methods are the `get_instance` and
   `get_pricing` queries only.
-- `SURPLUS_CANISTER` remains `None`.
+- Canonical ICP install arguments use `surplus_canister = null`; future
+  instances may select an independent recipient without changing the Wasm.
 
 Current evidence is recorded in
 docs/codex/generic-ledger-instances-validation.md. No mainnet mutation was

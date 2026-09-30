@@ -138,6 +138,7 @@ mod tests {
     struct InitArgs {
         observed_ledger: Principal,
         sns_root: Option<Principal>,
+        surplus_canister: Option<Principal>,
     }
     #[derive(CandidType, Deserialize)]
     struct SetRoute {
@@ -208,6 +209,7 @@ mod tests {
         observed_profile: Option<ObservedProfile>,
         sns_root: Option<Principal>,
         icp_ledger: Principal,
+        surplus_canister: Option<Principal>,
     }
     #[derive(CandidType, Deserialize, Debug)]
     struct ObservedProfile {
@@ -3046,6 +3048,11 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn disabled_destination_preserves_single_leg_funding_and_resets_policy() -> Result<()> {
         let env = Env::new_disabled()?;
+        assert_eq!(
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .surplus_canister,
+            None
+        );
         env.set_surplus_level(19)?;
         env.set_balance(100_000_000)?;
         env.fund()?;
@@ -3084,6 +3091,15 @@ mod tests {
     #[ignore = "builds wasm and runs PocketIC"]
     fn retained_top_up_completes_before_surplus_can_leave() -> Result<()> {
         let env = Env::new()?;
+        assert_eq!(
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .surplus_canister,
+            Some(env.subscriber)
+        );
+        let initial = env.state()?;
+        assert_eq!(initial.surplus_destination, Some(env.subscriber));
+        assert!(initial.surplus_policy.contains("initialized: false"));
+        assert!(initial.surplus_policy.contains("diversion_level: 0"));
         env.set_liquid_cycles_override(Some(200_000_000_000_000))?;
         env.set_surplus_level(19)?;
         env.set_balance(100_000_000)?;
@@ -3105,6 +3121,11 @@ mod tests {
         update::<_, ()>(&env.pic, env.cmc, "debug_set_behavior", CmcBehavior::Ok)?;
         env.fund()?;
         assert_eq!(env.accepted_with_memo(SURPLUS_TRANSFER_MEMO)?, 1);
+        assert_eq!(
+            env.accepted_destinations_with_memo(SURPLUS_TRANSFER_MEMO)?,
+            vec![legacy_account_id(env.subscriber, [0; 32])],
+            "configured canister principal derives its default ICP AccountIdentifier"
+        );
         assert!(env.state()?.cmc_state.contains("Idle"));
         assert_eq!(env.raw_balance()?, 0);
         Ok(())
@@ -3688,6 +3709,9 @@ mod tests {
         env.admit_global(10_000_000_000)?;
         let before = env.state()?;
         let pricing_before = env.pricing()?;
+        let surplus_before =
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .surplus_canister;
         let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         env.upgrade_same_debug_wasm()?;
         let after = env.state()?;
@@ -3696,6 +3720,11 @@ mod tests {
         assert_eq!(after.subscriptions, before.subscriptions);
         assert_eq!(after.global_subscriptions, before.global_subscriptions);
         assert_eq!(env.pricing()?, pricing_before);
+        assert_eq!(
+            query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
+                .surplus_canister,
+            surplus_before
+        );
         assert_eq!(
             env.subscription(256)?
                 .expect("subscription survives")
@@ -3820,6 +3849,7 @@ mod tests {
             encode_one(InitArgs {
                 observed_ledger: id,
                 sns_root: None,
+                surplus_canister: None,
             })?,
             None,
         );
@@ -3832,6 +3862,131 @@ mod tests {
             result.is_err(),
             "production Wasm must not export debug_state"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn same_production_wasm_supports_distinct_immutable_surplus_recipients() -> Result<()> {
+        let pic = PocketIcBuilder::new().with_application_subnet().build();
+        let instance_a = pic.create_canister();
+        let instance_b = pic.create_canister();
+        let instance_none = pic.create_canister();
+        let recipient_a = pic.create_canister();
+        let recipient_b = pic.create_canister();
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
+        let module_hash = Sha256::digest(&production_wasm);
+
+        for (instance, recipient) in [
+            (instance_a, Some(recipient_a)),
+            (instance_b, Some(recipient_b)),
+            (instance_none, None),
+        ] {
+            pic.add_cycles(instance, 200_000_000_000_000);
+            pic.install_canister(
+                instance,
+                production_wasm.clone(),
+                encode_one(InitArgs {
+                    observed_ledger: recipient_a,
+                    sns_root: None,
+                    surplus_canister: recipient,
+                })?,
+                None,
+            );
+            let installed_hash = pic
+                .canister_status(instance, None)
+                .map_err(|error| anyhow!("read installed module hash: {error:?}"))?
+                .module_hash
+                .ok_or_else(|| anyhow!("installed instance has no module hash"))?;
+            assert_eq!(
+                installed_hash,
+                module_hash.as_slice(),
+                "each instance uses the same production module bytes"
+            );
+        }
+
+        let info_a: InstanceInfo = query(&pic, instance_a, "get_instance", ())?;
+        let info_b: InstanceInfo = query(&pic, instance_b, "get_instance", ())?;
+        let info_none: InstanceInfo = query(&pic, instance_none, "get_instance", ())?;
+        assert_eq!(info_a.surplus_canister, Some(recipient_a));
+        assert_eq!(info_b.surplus_canister, Some(recipient_b));
+        assert_eq!(info_none.surplus_canister, None);
+        let destination_a = legacy_account_id(info_a.surplus_canister.unwrap(), [0; 32]);
+        let destination_b = legacy_account_id(info_b.surplus_canister.unwrap(), [0; 32]);
+        assert_ne!(destination_a, destination_b);
+
+        let logs_a = pic
+            .fetch_canister_logs(instance_a, Principal::anonymous())
+            .map_err(|error| anyhow!("fetch instance A logs: {error:?}"))?;
+        let logs_none = pic
+            .fetch_canister_logs(instance_none, Principal::anonymous())
+            .map_err(|error| anyhow!("fetch null-recipient logs: {error:?}"))?;
+        let text_a = logs_a
+            .iter()
+            .map(|entry| String::from_utf8_lossy(&entry.content).into_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let text_none = logs_none
+            .iter()
+            .map(|entry| String::from_utf8_lossy(&entry.content).into_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text_a.contains(&format!("surplus={recipient_a}")));
+        assert!(text_none.contains("surplus=none"));
+
+        pic.advance_time(std::time::Duration::from_secs(300));
+        pic.tick();
+        let controller = pic
+            .get_controllers(instance_a)
+            .first()
+            .copied()
+            .ok_or_else(|| anyhow!("instance A has no controller"))?;
+        pic.upgrade_canister(
+            instance_a,
+            production_wasm,
+            encode_one(())?,
+            Some(controller),
+        )
+        .map_err(|error| anyhow!("upgrade instance A: {error:?}"))?;
+        assert_eq!(
+            query::<_, InstanceInfo>(&pic, instance_a, "get_instance", ())?.surplus_canister,
+            Some(recipient_a),
+            "argument-free upgrade preserves the installed recipient"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn production_constructor_rejects_invalid_surplus_recipients() -> Result<()> {
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
+        for invalid in 0..3 {
+            let pic = PocketIcBuilder::new().with_application_subnet().build();
+            let id = pic.create_canister();
+            pic.add_cycles(id, 200_000_000_000_000);
+            let recipient = match invalid {
+                0 => Principal::anonymous(),
+                1 => Principal::management_canister(),
+                _ => id,
+            };
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                pic.install_canister(
+                    id,
+                    production_wasm.clone(),
+                    encode_one(InitArgs {
+                        observed_ledger: Principal::from_slice(&[9]),
+                        sns_root: None,
+                        surplus_canister: Some(recipient),
+                    })
+                    .expect("encode init args"),
+                    None,
+                );
+            }));
+            assert!(
+                result.is_err(),
+                "invalid surplus recipient {recipient} was accepted"
+            );
+        }
         Ok(())
     }
 

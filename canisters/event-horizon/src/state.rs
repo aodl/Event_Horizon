@@ -502,6 +502,7 @@ fn with_debug_config<R>(f: impl FnOnce(&mut StableCell<DebugConfigValue, Memory>
                     DebugConfigValue(RuntimeConfig::production(
                         candid::Principal::from_text(crate::config::ICP_LEDGER_CANISTER)
                             .expect("valid ICP Ledger principal"),
+                        None,
                     )),
                 )
             })
