@@ -7,6 +7,12 @@ including the deterministic PocketIC callback harness, consolidated test
 runner, documentation/CI structure, and complete validation, is recorded in
 [`docs/codex/jupiter-workflow-alignment-validation.md`](docs/codex/jupiter-workflow-alignment-validation.md).
 
+The 2026-09-30 follow-up isolates each discovered ignored PocketIC test in a
+fresh Cargo process and PocketIC lifecycle, preventing cumulative shared-server
+state while retaining exact per-test reporting and runner protections. Its
+validation is recorded in
+[`docs/codex/pocketic-process-isolation-validation.md`](docs/codex/pocketic-process-isolation-validation.md).
+
 `SPEC.md` is the normative protocol. Repository evidence is divided into three stages so historical claims are not confused with checks executed later.
 
 ## Checkpoint 03 historical import
