@@ -6,21 +6,46 @@ command -v "$DOCKER_BIN" >/dev/null || { echo "docker is required" >&2; exit 1; 
 . "$ROOT/tools/scripts/lib/canonical-context.sh"
 canonical_context_prepare "$ROOT"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"; canonical_context_cleanup' EXIT
+active_builders=()
+active_images=()
+active_containers=()
+cleanup() {
+  local item
+  for item in "${active_containers[@]}"; do
+    "$DOCKER_BIN" rm -f "$item" >/dev/null 2>&1 || true
+  done
+  for item in "${active_images[@]}"; do
+    "$DOCKER_BIN" image rm "$item" >/dev/null 2>&1 || true
+  done
+  for item in "${active_builders[@]}"; do
+    "$DOCKER_BIN" buildx rm --force "$item" >/dev/null 2>&1 || true
+  done
+  rm -rf "$work"
+  canonical_context_cleanup
+}
+trap cleanup EXIT
 build_one() {
-  local dest="$1" image container
-  image="$("$DOCKER_BIN" build --no-cache --quiet --file "$CANONICAL_CONTEXT/Dockerfile.repro" --target artifact "$CANONICAL_CONTEXT")"
+  local dest="$1" label="$2" builder image container
+  builder="event-horizon-repro-${BASHPID}-${label}"
+  image="event-horizon-repro-${BASHPID}-${label}:temporary"
+  active_builders+=("$builder")
+  active_images+=("$image")
+  "$DOCKER_BIN" buildx create --name "$builder" --driver docker-container >/dev/null
+  "$DOCKER_BIN" buildx build --builder "$builder" --no-cache --quiet --load \
+    --tag "$image" --file "$CANONICAL_CONTEXT/Dockerfile.repro" \
+    --target artifact "$CANONICAL_CONTEXT" >/dev/null
   container="$("$DOCKER_BIN" create "$image" /bin/true)"
+  active_containers+=("$container")
   mkdir -p "$dest"
   if ! "$DOCKER_BIN" cp "$container:/release-artifacts/." "$dest/"; then
-    "$DOCKER_BIN" rm -f "$container" >/dev/null 2>&1 || true
-    "$DOCKER_BIN" image rm "$image" >/dev/null 2>&1 || true
     return 1
   fi
   "$DOCKER_BIN" rm -f "$container" >/dev/null
   "$DOCKER_BIN" image rm "$image" >/dev/null 2>&1 || true
+  "$DOCKER_BIN" buildx rm --force "$builder" >/dev/null
 }
-build_one "$work/a"; build_one "$work/b"
+build_one "$work/a" a
+build_one "$work/b" b
 (cd "$work/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/a.sum"
 (cd "$work/b" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$work/b.sum"
 diff -u "$work/a.sum" "$work/b.sum"

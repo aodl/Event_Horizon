@@ -60,6 +60,19 @@ case "$command" in
     [[ "${FAKE_DOCKER_MODE:-valid}" != build-fail ]] || exit 9
     printf 'fixture-image\n'
     ;;
+  buildx)
+    subcommand="$1"; shift
+    case "$subcommand" in
+      create) printf 'fixture-builder\n' ;;
+      build)
+        context="${@: -1}"
+        printf '%s\n' "$context" >> "$FAKE_DOCKER_LOG"
+        [[ "${FAKE_DOCKER_MODE:-valid}" != build-fail ]] || exit 9
+        ;;
+      rm) ;;
+      *) echo "unexpected fake buildx command: $subcommand" >&2; exit 2 ;;
+    esac
+    ;;
   create) printf 'fixture-container\n' ;;
   cp)
     destination="${@: -1}"
