@@ -12,6 +12,12 @@ The canonical ICP instance reads the legacy ICP `query_blocks` log for both admi
 
 Jupiter Faucet payments and exact Historian route evidence admit permanent global, numeric-subaccount, inclusive subaccount-range, neuron-nonce, or neuron-range declarations. Ranges expand into the existing watched-account map and contain at most 256 targets. Thresholds use the observed token's decimals; account, range, and global prices remain denominated and funded in ICP.
 
+The backend can be installed, initialize its observed-ledger profile, and
+observe the configured ledger without a Jupiter Faucet alias. A reviewed alias
+is required before opening the instance for subscriber use: Faucet payout plus
+Historian route evidence is how subscriber declarations are funded and
+admitted.
+
 Qualifying activity is coalesced once per subscriber per poll. A specific callback reports sorted target/maximum-raw-amount pairs; an empty vector represents global-only activity. The callback is intentionally one-way and best-effort. Event Horizon does not retry or account for delivery, and subscribers must retain their own authoritative ledger cursors.
 
 Funding converts retained ICP through the CMC while preserving reserve protection, duplicate-safe transfer identity, and upgrade recovery. The optional adaptive surplus destination is compiled immutably and is currently disabled in production.

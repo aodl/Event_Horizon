@@ -21,38 +21,62 @@ pub(crate) enum Parser {
 }
 
 pub(crate) struct SuiteSpec {
-    pub(crate) name: &'static str,
-    program: &'static str,
-    args: Vec<&'static str>,
-    env: Vec<(&'static str, &'static str)>,
+    pub(crate) name: String,
+    program: String,
+    args: Vec<String>,
+    env: Vec<(String, String)>,
     parser: Parser,
-    rerun: &'static str,
+    rerun: String,
 }
 
 impl SuiteSpec {
     pub(crate) fn command(
-        name: &'static str,
-        program: &'static str,
-        args: &[&'static str],
+        name: &str,
+        program: &str,
+        args: &[&str],
         parser: Parser,
-        rerun: &'static str,
+        rerun: &str,
     ) -> Self {
         Self::command_with_env(name, program, args, &[], parser, rerun)
     }
 
     pub(crate) fn command_with_env(
-        name: &'static str,
-        program: &'static str,
-        args: &[&'static str],
-        env: &[(&'static str, &'static str)],
+        name: &str,
+        program: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
         parser: Parser,
-        rerun: &'static str,
+        rerun: &str,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            program: program.to_string(),
+            args: args.iter().map(|value| (*value).to_string()).collect(),
+            env: env
+                .iter()
+                .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+                .collect(),
+            parser,
+            rerun: rerun.to_string(),
+        }
+    }
+
+    fn owned(
+        name: String,
+        program: &str,
+        args: Vec<String>,
+        env: &[(&str, &str)],
+        parser: Parser,
+        rerun: String,
     ) -> Self {
         Self {
             name,
-            program,
-            args: args.to_vec(),
-            env: env.to_vec(),
+            program: program.to_string(),
+            args,
+            env: env
+                .iter()
+                .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+                .collect(),
             parser,
             rerun,
         }
@@ -136,8 +160,8 @@ fn configured_deadline(spec: &SuiteSpec) -> Result<Instant, String> {
     let configured = spec
         .env
         .iter()
-        .find(|(key, _)| *key == COMMAND_TIMEOUT_ENV)
-        .map(|(_, value)| (*value).to_string())
+        .find(|(key, _)| key == COMMAND_TIMEOUT_ENV)
+        .map(|(_, value)| value.clone())
         .or_else(|| env::var(COMMAND_TIMEOUT_ENV).ok());
     let timeout = match configured {
         Some(value) => {
@@ -199,7 +223,7 @@ fn capture_command(root: &Path, spec: &SuiteSpec) -> CapturedCommand {
         }
     };
 
-    let mut command = Command::new(spec.program);
+    let mut command = Command::new(&spec.program);
     command.args(&spec.args).current_dir(root);
     use std::os::{
         fd::OwnedFd,
@@ -343,9 +367,9 @@ fn capture_command(root: &Path, spec: &SuiteSpec) -> CapturedCommand {
             spawn_error: Some(error),
         };
     }
-    match Command::new(spec.program)
+    match Command::new(&spec.program)
         .args(&spec.args)
-        .envs(spec.env.iter().copied())
+        .envs(spec.env.iter().map(|(key, value)| (key, value)))
         .current_dir(root)
         .output()
     {
@@ -445,6 +469,117 @@ pub(crate) fn parse_node_summary(output: &str) -> Option<TestCounts> {
     })
 }
 
+pub(crate) fn parse_ignored_test_listing(output: &str) -> Result<Vec<String>, String> {
+    let tests: Vec<_> = output
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let name = line.strip_suffix(": test")?;
+            if name.is_empty()
+                || line.starts_with("warning:")
+                || line.starts_with("error:")
+                || !name.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '_' | ':')
+                })
+            {
+                return None;
+            }
+            Some(name.to_string())
+        })
+        .collect();
+    if tests.is_empty() {
+        Err("ignored PocketIC discovery returned zero test entries".to_string())
+    } else {
+        Ok(tests)
+    }
+}
+
+fn pocketic_discovery_spec() -> SuiteSpec {
+    SuiteSpec::command_with_env(
+        "[pocketic discovery] ignored tests",
+        "cargo",
+        &[
+            "test",
+            "--locked",
+            "-p",
+            "event-horizon-pocketic",
+            "--lib",
+            "--",
+            "--list",
+            "--ignored",
+        ],
+        &[("POCKET_IC_MUTE_SERVER", "1"), ("RUST_TEST_THREADS", "1")],
+        Parser::Command,
+        "cargo test --locked -p event-horizon-pocketic --lib -- --list --ignored",
+    )
+}
+
+pub(crate) fn pocketic_test_spec(test_name: &str) -> SuiteSpec {
+    let rerun = format!(
+        "cargo test --locked -p event-horizon-pocketic --lib '{test_name}' -- --exact --ignored --nocapture --test-threads=1"
+    );
+    SuiteSpec::owned(
+        format!("[pocketic] {test_name}"),
+        "cargo",
+        vec![
+            "test".to_string(),
+            "--locked".to_string(),
+            "-p".to_string(),
+            "event-horizon-pocketic".to_string(),
+            "--lib".to_string(),
+            test_name.to_string(),
+            "--".to_string(),
+            "--exact".to_string(),
+            "--ignored".to_string(),
+            "--nocapture".to_string(),
+            "--test-threads=1".to_string(),
+        ],
+        &[("POCKET_IC_MUTE_SERVER", "1"), ("RUST_TEST_THREADS", "1")],
+        Parser::Rust,
+        rerun,
+    )
+}
+
+fn run_discovered_pocketic_with(
+    test_names: &[String],
+    mut run: impl FnMut(&SuiteSpec) -> SuiteOutcome,
+) -> Vec<SuiteOutcome> {
+    test_names
+        .iter()
+        .map(|test_name| run(&pocketic_test_spec(test_name)))
+        .collect()
+}
+
+pub(crate) fn run_pocketic_tests(root: &Path) -> Vec<SuiteOutcome> {
+    let discovery = pocketic_discovery_spec();
+    eprintln!("\n=== Discovering ignored PocketIC tests ===");
+    let started = Instant::now();
+    let captured = capture_command(root, &discovery);
+    let discovered = parse_ignored_test_listing(&captured.output);
+    let discovery_outcome = evaluate(&discovery, captured, started.elapsed());
+    if !discovery_outcome.passed {
+        return vec![discovery_outcome];
+    }
+    let test_names = match discovered {
+        Ok(test_names) => test_names,
+        Err(error) => {
+            return vec![SuiteOutcome {
+                name: discovery.name.clone(),
+                duration: started.elapsed(),
+                passed: false,
+                counts: None,
+                failures: vec![FailureDetail {
+                    name: discovery.name.clone(),
+                    detail: error,
+                    rerun: discovery.rerun.clone(),
+                }],
+            }];
+        }
+    };
+    eprintln!("discovered {} ignored PocketIC tests", test_names.len());
+    run_discovered_pocketic_with(&test_names, |spec| run_suite(root, spec))
+}
+
 fn rust_failure_details(output: &str, suite_rerun: &str) -> Vec<FailureDetail> {
     let lines: Vec<_> = output.lines().collect();
     let mut details = Vec::new();
@@ -495,9 +630,7 @@ fn rust_failure_details(output: &str, suite_rerun: &str) -> Vec<FailureDetail> {
 
 fn rust_test_rerun(suite_rerun: &str, test: &str) -> String {
     if suite_rerun.contains("event-horizon-pocketic") {
-        format!(
-            "cargo test --locked -p event-horizon-pocketic {test} -- --ignored --nocapture --test-threads=1"
-        )
+        suite_rerun.to_string()
     } else {
         format!("cargo test --locked --workspace {test} -- --nocapture")
     }
@@ -534,7 +667,7 @@ fn evaluate(spec: &SuiteSpec, captured: CapturedCommand, duration: Duration) -> 
     };
     let passed = captured.success && parse_error.is_none();
     let mut failures = if !passed && spec.parser == Parser::Rust {
-        rust_failure_details(&captured.output, spec.rerun)
+        rust_failure_details(&captured.output, &spec.rerun)
     } else {
         Vec::new()
     };
@@ -550,7 +683,7 @@ fn evaluate(spec: &SuiteSpec, captured: CapturedCommand, duration: Duration) -> 
         failures.push(FailureDetail {
             name: spec.name.to_string(),
             detail,
-            rerun: spec.rerun.to_string(),
+            rerun: spec.rerun.clone(),
         });
     }
     SuiteOutcome {
@@ -616,6 +749,21 @@ fn write_summary(mut writer: impl Write, outcomes: &[SuiteOutcome]) -> std::io::
             outcome.name, outcome.duration
         )?;
     }
+    let pocketic_outcomes: Vec<_> = outcomes
+        .iter()
+        .filter(|outcome| outcome.name.starts_with("[pocketic] "))
+        .collect();
+    if !pocketic_outcomes.is_empty() {
+        let pocketic_passed = pocketic_outcomes
+            .iter()
+            .filter(|outcome| outcome.passed)
+            .count();
+        let pocketic_failed = pocketic_outcomes.len() - pocketic_passed;
+        writeln!(
+            writer,
+            "\nPocketIC: {pocketic_passed} passed, {pocketic_failed} failed"
+        )?;
+    }
     if failed_suites != 0 {
         writeln!(writer, "\nFailures:\n")?;
         for outcome in outcomes.iter().filter(|outcome| !outcome.passed) {
@@ -668,7 +816,7 @@ mod tests {
     #[test]
     fn retains_failing_rust_assertion_details() {
         let output = "running 1 test\ntest tests::bad ... FAILED\n\nfailures:\n\n---- tests::bad stdout ----\nthread 'tests::bad' panicked at src/lib.rs:1:1:\nassertion `left == right` failed\n  left: []\n right: [1]\n\nfailures:\n    tests::bad\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
-        let details = rust_failure_details(output, rust_spec().rerun);
+        let details = rust_failure_details(output, &rust_spec().rerun);
         assert_eq!(details.len(), 1);
         assert_eq!(details[0].name, "tests::bad");
         assert!(details[0]
@@ -681,7 +829,7 @@ mod tests {
     #[test]
     fn retains_multiple_failing_rust_tests() {
         let output = "---- tests::one stdout ----\none failed\n---- tests::two stdout ----\ntwo failed\nfailures:\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
-        let details = rust_failure_details(output, rust_spec().rerun);
+        let details = rust_failure_details(output, &rust_spec().rerun);
         assert_eq!(
             details
                 .iter()
@@ -703,6 +851,129 @@ mod tests {
                 ..TestCounts::default()
             })
         );
+    }
+
+    #[test]
+    fn parses_ignored_test_listing_in_discovery_order() {
+        let output = "warning: an unrelated cargo warning\n    Finished `test` profile\ntests::zeta: test\nnon-test benchmark: benchmark\nwarning: misleading: test\ntests::alpha_2: test\n2 tests, 0 benchmarks\n";
+        assert_eq!(
+            parse_ignored_test_listing(output).unwrap(),
+            ["tests::zeta", "tests::alpha_2"]
+        );
+    }
+
+    #[test]
+    fn zero_discovered_pocketic_tests_is_rejected() {
+        let error = parse_ignored_test_listing(
+            "warning: no matching tests\n0 tests, 0 benchmarks\nnot_a_test: benchmark\n",
+        )
+        .unwrap_err();
+        assert!(error.contains("zero test entries"));
+    }
+
+    #[test]
+    fn constructs_exact_isolated_pocketic_command() {
+        let spec = pocketic_test_spec("tests::one_case");
+        assert_eq!(spec.name, "[pocketic] tests::one_case");
+        assert_eq!(spec.program, "cargo");
+        assert_eq!(
+            spec.args,
+            [
+                "test",
+                "--locked",
+                "-p",
+                "event-horizon-pocketic",
+                "--lib",
+                "tests::one_case",
+                "--",
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ]
+        );
+        assert_eq!(
+            spec.env,
+            [
+                ("POCKET_IC_MUTE_SERVER".to_string(), "1".to_string()),
+                ("RUST_TEST_THREADS".to_string(), "1".to_string()),
+            ]
+        );
+        assert_eq!(
+            spec.rerun,
+            "cargo test --locked -p event-horizon-pocketic --lib 'tests::one_case' -- --exact --ignored --nocapture --test-threads=1"
+        );
+    }
+
+    fn fixture_pocketic_outcome(spec: &SuiteSpec, passed: bool) -> SuiteOutcome {
+        SuiteOutcome {
+            name: spec.name.clone(),
+            duration: Duration::from_millis(1),
+            passed,
+            counts: Some(TestCounts {
+                passed: usize::from(passed),
+                failed: usize::from(!passed),
+                ..TestCounts::default()
+            }),
+            failures: (!passed)
+                .then(|| FailureDetail {
+                    name: spec.name.trim_start_matches("[pocketic] ").to_string(),
+                    detail: "fixture failure".to_string(),
+                    rerun: spec.rerun.clone(),
+                })
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn failed_exact_pocketic_test_does_not_stop_later_tests() {
+        let names = vec![
+            "tests::first".to_string(),
+            "tests::fails".to_string(),
+            "tests::last".to_string(),
+        ];
+        let mut visited = Vec::new();
+        let outcomes = run_discovered_pocketic_with(&names, |spec| {
+            visited.push(spec.name.clone());
+            fixture_pocketic_outcome(spec, !spec.name.ends_with("fails"))
+        });
+        assert_eq!(outcomes.len(), 3);
+        assert_eq!(visited.last().unwrap(), "[pocketic] tests::last");
+        assert!(!outcomes[1].passed);
+        assert!(outcomes[2].passed);
+    }
+
+    #[test]
+    fn summary_aggregates_exact_pocketic_outcomes() {
+        let outcomes = [
+            fixture_pocketic_outcome(&pocketic_test_spec("tests::passes"), true),
+            fixture_pocketic_outcome(&pocketic_test_spec("tests::fails"), false),
+            fixture_pocketic_outcome(&pocketic_test_spec("tests::also_passes"), true),
+        ];
+        let mut rendered = Vec::new();
+        assert!(!write_summary(&mut rendered, &outcomes).unwrap());
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(rendered.contains("PocketIC: 2 passed, 1 failed"));
+    }
+
+    #[test]
+    fn exact_pocketic_rerun_is_printed() {
+        let spec = pocketic_test_spec("tests::fails");
+        let output = "running 1 test\ntest tests::fails ... FAILED\n\nfailures:\n\n---- tests::fails stdout ----\ntransport failed\n\nfailures:\n    tests::fails\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 0.01s\n";
+        let outcome = evaluate(
+            &spec,
+            CapturedCommand {
+                success: false,
+                output: output.to_string(),
+                spawn_error: None,
+            },
+            Duration::from_millis(1),
+        );
+        let mut rendered = Vec::new();
+        assert!(!write_summary(&mut rendered, &[outcome]).unwrap());
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(rendered.contains(&spec.rerun));
     }
 
     #[test]
