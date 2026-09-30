@@ -65,7 +65,7 @@ registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert registry.count('surplusCanisterId:null') == 2
-assert "expectedBackendWasmSha256:'f8a66d19a5215ac2f5fe283834172247e4f99cbc42aabc29d89065f5be93d1e9'" in registry
+assert "expectedBackendWasmSha256:'7c2aac3be594893c0bddaa3f0c6738ea2161a2d23b87beec7268068d364e3b51'" in registry
 assert "alias:'X'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
