@@ -1,0 +1,104 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  --space: #040303;
+  --paper: #eee9e1;
+  --paper-muted: #bdb6ad;
+  --line-strong: rgba(238, 233, 225, .32);
+  --highlight: #f4e6c5;
+  --highlight-glow: rgba(244, 230, 197, .32);
+  color: var(--paper);
+  background: var(--space);
+}
+
+* { box-sizing: border-box; }
+body::selection { color: var(--space); background: var(--paper); }
+
+body {
+  min-height: 100vh;
+  min-height: 100svh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 50% 36%, rgba(132, 82, 49, .11), transparent 36rem),
+    var(--space);
+}
+
+main {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding: clamp(2rem, 7vw, 6rem);
+  text-align: center;
+}
+
+.not-found__icon {
+  width: clamp(9rem, 28vw, 16rem);
+  height: auto;
+  margin-bottom: clamp(1.5rem, 4vw, 2.5rem);
+  filter: drop-shadow(0 0 2.5rem rgba(242, 116, 47, .18));
+}
+
+.not-found__code {
+  margin: 0 0 .8rem;
+  color: var(--paper-muted);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .18em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(3rem, calc(1rem + 5.3vw), 8.5rem);
+  font-weight: 300;
+  letter-spacing: .075em;
+  line-height: 1.02;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 .035em rgb(255 240 219 / .7),
+    0 0 .12em rgb(244 223 197 / .7),
+    0 0 .36em rgb(205 158 126 / .55),
+    0 0 .75em rgb(155 106 78 / .35);
+}
+
+.not-found__message {
+  max-width: 32rem;
+  margin: 1.5rem 0 2rem;
+  color: rgba(238, 233, 225, .78);
+  font-size: clamp(.94rem, 1.3vw, 1.12rem);
+  line-height: 1.7;
+}
+
+a {
+  display: inline-flex;
+  gap: 1rem;
+  align-items: center;
+  padding-bottom: .4rem;
+  border-bottom: 1px solid rgba(238, 233, 225, .55);
+  color: inherit;
+  font-size: .69rem;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: border-color 180ms ease, color 180ms ease;
+}
+
+a:hover,
+a:focus-visible {
+  border-color: var(--highlight);
+  color: var(--highlight);
+  text-shadow: 0 0 .85rem var(--highlight-glow);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--highlight);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a { transition: none; }
+}

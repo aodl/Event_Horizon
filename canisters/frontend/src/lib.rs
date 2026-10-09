@@ -1,4 +1,6 @@
-use ic_asset_certification::{Asset, AssetCertificationError, AssetConfig, AssetRouter};
+use ic_asset_certification::{
+    Asset, AssetCertificationError, AssetConfig, AssetFallbackConfig, AssetRouter,
+};
 use ic_cdk::{api::data_certificate, init, post_upgrade, query};
 use ic_http_certification::HttpCertificationTree;
 use ic_http_certification::{HeaderField, HttpRequest, HttpResponse, StatusCode};
@@ -68,6 +70,17 @@ fn certify_all_assets() {
             aliased_by: vec!["/".to_string()],
             encodings: vec![],
         },
+        AssetConfig::File {
+            path: "404.html".to_string(),
+            content_type: Some("text/html".to_string()),
+            headers: headers(NO_CACHE),
+            fallback_for: vec![AssetFallbackConfig {
+                scope: "/".to_string(),
+                status_code: Some(StatusCode::NOT_FOUND),
+            }],
+            aliased_by: vec![],
+            encodings: vec![],
+        },
         AssetConfig::Pattern {
             pattern: "**/*.js".to_string(),
             content_type: Some("text/javascript".to_string()),
@@ -83,6 +96,18 @@ fn certify_all_assets() {
         AssetConfig::Pattern {
             pattern: "**/*.svg".to_string(),
             content_type: Some("image/svg+xml".to_string()),
+            headers: headers(REVALIDATE),
+            encodings: vec![],
+        },
+        AssetConfig::Pattern {
+            pattern: "**/*.png".to_string(),
+            content_type: Some("image/png".to_string()),
+            headers: headers(REVALIDATE),
+            encodings: vec![],
+        },
+        AssetConfig::Pattern {
+            pattern: "**/*.ico".to_string(),
+            content_type: Some("image/x-icon".to_string()),
             headers: headers(REVALIDATE),
             encodings: vec![],
         },

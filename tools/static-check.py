@@ -6,6 +6,12 @@ svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
 expected_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
 print('svg_sha256', expected_svg)
+for asset, expected in {
+    'favicon.ico': '56912bdc9d6c862359db56a018b7242dcefe634f28f0e1099c170bccb63ed36b',
+    'event-horizon-icon-512.png': 'd4ea23aba24ec72b0b01b6ec2b3b4f7b2dff19f3c7246ddfce215a6307ae5636',
+}.items():
+    actual = hashlib.sha256((root/'canisters/frontend/public'/asset).read_bytes()).hexdigest()
+    assert actual == expected, f'unexpected {asset} digest {actual}'
 
 backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
 assert 'get_pricing : () -> (Pricing) query;' in backend_did
@@ -81,6 +87,17 @@ assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 assert 'styles.css?v=4' in frontend_index
 assert 'app.bundle.js?v=2' in frontend_index
+assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
+frontend_not_found=(root/'canisters/frontend/public/404.html').read_text()
+assert 'src="/event-horizon-icon-512.png"' in frontend_not_found
+frontend_not_found_css=(root/'canisters/frontend/public/404.css').read_text()
+assert 'font-family: Inter, "Helvetica Neue", Arial, sans-serif;' in frontend_not_found_css
+assert 'font-family: Georgia' not in frontend_not_found_css
+assert 'letter-spacing: .075em;' in frontend_not_found_css
+assert '--highlight: #f4e6c5;' in frontend_not_found_css
+assert 'var(--ember)' not in frontend_not_found_css
+assert 'AssetFallbackConfig' in frontend
+assert 'status_code: Some(StatusCode::NOT_FOUND)' in frontend
 
 memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()
 assert "text.split_once('.')" in memo_src

@@ -4667,6 +4667,50 @@ mod tests {
             },
         )?;
         assert_eq!(pricing_response.status_code, 404);
+        assert_eq!(
+            pricing_response.body,
+            std::fs::read(workspace_root()?.join("canisters/frontend/public/404.html"))?
+        );
+        assert!(pricing_response.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("content-type") && value == "text/html"
+        }));
+        assert!(pricing_response.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
+        }));
+
+        for (url, source, content_type) in [
+            (
+                "/favicon.ico?v=1",
+                workspace_root()?.join("canisters/frontend/public/favicon.ico"),
+                "image/x-icon",
+            ),
+            (
+                "/event-horizon-icon-512.png",
+                workspace_root()?.join("canisters/frontend/public/event-horizon-icon-512.png"),
+                "image/png",
+            ),
+        ] {
+            let response: HttpResponse = query(
+                &pic,
+                id,
+                "http_request",
+                HttpRequest {
+                    method: "GET".to_string(),
+                    url: url.to_string(),
+                    headers: vec![],
+                    body: vec![],
+                    certificate_version: Some(2),
+                },
+            )?;
+            assert_eq!(response.status_code, 200, "{url}");
+            assert_eq!(response.body, std::fs::read(source)?, "{url}");
+            assert!(response.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("content-type") && value == content_type
+            }));
+            assert!(response.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
+            }));
+        }
 
         let removed_update = pic.update_call(
             id,
