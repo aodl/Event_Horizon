@@ -12,6 +12,22 @@ import { registryMarkup, verifyInstanceConfiguration } from './instance-view.js'
 import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
 
+export function initHeroArtwork(documentRef, schedule = callback => callback()) {
+  const detail = documentRef.querySelector('.hero__detail');
+  if (!detail) return;
+  let started = false;
+  const reveal = () => {
+    if (started) return;
+    started = true;
+    const decoded = typeof detail.decode === 'function'
+      ? detail.decode().catch(() => undefined)
+      : Promise.resolve();
+    decoded.then(() => schedule(() => detail.classList.add('hero__detail--loaded')));
+  };
+  if (detail.complete && detail.naturalWidth > 0) reveal();
+  else detail.addEventListener('load', reveal, { once: true });
+}
+
 export function createApp({
   documentRef,
   instances = INSTANCES,
@@ -143,4 +159,7 @@ export function createApp({
   return { load };
 }
 
-if (typeof document !== 'undefined') createApp({ documentRef: document });
+if (typeof document !== 'undefined') {
+  initHeroArtwork(document, callback => window.requestAnimationFrame(callback));
+  createApp({ documentRef: document });
+}

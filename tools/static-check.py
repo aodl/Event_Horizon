@@ -3,7 +3,7 @@ import hashlib, json, re, subprocess
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
-expected_svg='edb8090a06441848fbd58c1385c56e1184dc58010d7ffb1704e3fecf43698650'
+expected_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
 print('svg_sha256', expected_svg)
 
@@ -79,7 +79,7 @@ for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env
 assert 'public, max-age=31536000, immutable' not in frontend
 assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
-assert 'styles.css?v=2' in frontend_index
+assert 'styles.css?v=4' in frontend_index
 assert 'app.bundle.js?v=2' in frontend_index
 
 memo_src=(root/'canisters/event-horizon/src/memo.rs').read_text()

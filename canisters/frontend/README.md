@@ -2,7 +2,7 @@
 
 The frontend is a separately controlled informational Rust canister. It embeds and certifies static HTML, JavaScript, CSS, and SVG assets; those exact asset bytes become part of the frontend Wasm and retain certified query responses.
 
-HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and SVG responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The HTML references `app.bundle.js?v=2` and `styles.css?v=2` once to bypass clients that may have cached the former bare URLs under the historical one-year immutable policy. This fixed suffix is a transition, not an asset-versioning pipeline; subsequent changes rely on revalidation. The certified router serves the query-suffixed URLs without weakening response certification or CSP.
+HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and SVG responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The HTML references `app.bundle.js?v=2` and `styles.css?v=4` to bypass clients that may have cached earlier URLs under the historical one-year immutable policy. These fixed suffixes are transitions, not an asset-versioning pipeline; subsequent changes rely on revalidation. The certified router serves the query-suffixed URLs without weakening response certification or CSP.
 
 ## Static instance and network configuration
 

@@ -4630,15 +4630,25 @@ mod tests {
                     certificate_version: Some(2),
                 },
             )?;
-            assert_eq!(response.status_code, 206);
+            assert!(
+                response.status_code == 200 || response.status_code == 206,
+                "asset response must be complete or ranged"
+            );
             assert!(response.headers.iter().any(|(name, value)| {
                 name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
             }));
-            assert!(response.headers.iter().any(|(name, value)| {
-                name.eq_ignore_ascii_case("content-range")
-                    && value.starts_with(&format!("bytes {}-", assembled.len()))
-                    && value.ends_with(&format!("/{}", svg.len()))
-            }));
+            if response.status_code == 206 {
+                assert!(response.headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-range")
+                        && value.starts_with(&format!("bytes {}-", assembled.len()))
+                        && value.ends_with(&format!("/{}", svg.len()))
+                }));
+            } else {
+                assert!(
+                    assembled.is_empty(),
+                    "only the first response may be complete"
+                );
+            }
             assert!(!response.body.is_empty());
             assembled.extend(response.body);
         }
@@ -4707,14 +4717,14 @@ mod tests {
         let index = request("/")?;
         assert_eq!(index.status_code, 200);
         let html = String::from_utf8(index.body)?;
-        assert!(html.contains("styles.css?v=2"));
+        assert!(html.contains("styles.css?v=4"));
         assert!(html.contains("app.bundle.js?v=2"));
         assert!(!html.contains("href=\"styles.css\""));
         assert!(!html.contains("src=\"app.bundle.js\""));
 
         for (url, source) in [
             (
-                "/styles.css?v=2",
+                "/styles.css?v=4",
                 workspace_root()?.join("canisters/frontend/public/styles.css"),
             ),
             (

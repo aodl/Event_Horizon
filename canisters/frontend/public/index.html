@@ -2,60 +2,216 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
   <title>Event Horizon</title>
   <meta name="description" content="Best-effort ledger event triggers funded through Jupiter Faucet in ICP.">
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
-  <div class="background" aria-hidden="true"></div>
-  <main>
-    <header class="hero">
-      <p class="eyebrow">Powered by Jupiter Faucet</p>
-      <h1>Event Horizon</h1>
-      <p class="lead">Best-effort wake-ups for canonical ICP and compatible ICRC token ledgers, funded through Jupiter Faucet in ICP.</p>
-    </header>
+  <a class="skip-link" href="#main-content">Skip to content</a>
 
-    <section class="card">
-      <h2>Event Horizon instance</h2>
-      <label>Selected instance <select id="instance"></select></label>
-      <p id="instance-info"></p>
+  <header class="hero" id="top">
+    <div class="hero__art" aria-hidden="true">
+      <svg class="hero__placeholder" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1672 941" preserveAspectRatio="xMaxYMid slice">
+        <defs>
+          <radialGradient id="g">
+            <stop stop-color="#fff" offset="0" stop-opacity="1"/>
+            <stop stop-color="#fff" offset=".0833" stop-opacity=".946"/>
+            <stop stop-color="#fff" offset=".1667" stop-opacity=".8007"/>
+            <stop stop-color="#fff" offset=".25" stop-opacity=".6065"/>
+            <stop stop-color="#fff" offset=".3333" stop-opacity=".4111"/>
+            <stop stop-color="#fff" offset=".4167" stop-opacity=".2494"/>
+            <stop stop-color="#fff" offset=".5" stop-opacity=".1353"/>
+            <stop stop-color="#fff" offset=".5833" stop-opacity=".0657"/>
+            <stop stop-color="#fff" offset=".6667" stop-opacity=".0286"/>
+            <stop stop-color="#fff" offset=".75" stop-opacity=".0111"/>
+            <stop stop-color="#fff" offset=".8333" stop-opacity=".0039"/>
+            <stop stop-color="#fff" offset=".9167" stop-opacity=".0012"/>
+            <stop stop-color="#fff" offset="1" stop-opacity="0"/>
+          </radialGradient>
+          <mask id="m" maskUnits="userSpaceOnUse" x="-4" y="-4" width="8" height="8">
+            <circle r="4" fill="url(#g)"/>
+          </mask>
+          <circle id="s" r="4" mask="url(#m)"/>
+          <filter id="f" filterUnits="userSpaceOnUse" x="-128" y="-128" width="1928" height="1197" color-interpolation-filters="sRGB">
+            <feGaussianBlur stdDeviation="4"/>
+          </filter>
+        </defs>
+        <path fill="#000" d="M0 0h1672v941H0z"/>
+        <g filter="url(#f)">
+          <use href="#s" fill="#bf8463" transform="matrix(291.1 72.1 -15 60.4 1163 625)" opacity=".8441"/>
+          <use href="#s" fill="#7e716e" transform="matrix(188.7 -272.9 289.6 200.2 891.3 220.2)" opacity=".3865"/>
+          <use href="#s" fill="#000000" transform="matrix(64.4 85.7 -487.8 366.8 1331.5 270.2)" opacity=".9988"/>
+          <use href="#s" fill="#64482e" transform="matrix(568.9 -129.2 10.7 46.9 1149.7 448.3)" opacity=".9919"/>
+          <use href="#s" fill="#cac7af" transform="matrix(149.6 -45.8 10.8 35.2 870.9 465.7)" opacity=".9088"/>
+          <use href="#s" fill="#f99a67" transform="matrix(82.1 54.4 -85.2 128.7 1007.9 252.6)" opacity=".6967"/>
+          <use href="#s" fill="#ebd2bd" transform="matrix(154.5 -190.1 45.1 36.7 1112.2 164.9)" opacity=".9682"/>
+          <use href="#s" fill="#fed2b5" transform="matrix(178.3 -48.4 13.4 49.3 1392.4 -25.2)" opacity=".713"/>
+          <use href="#s" fill="#f0d0b9" transform="matrix(173.9 68.4 -18.4 46.8 1664.2 31.9)" opacity=".9198"/>
+          <use href="#s" fill="#fde0cd" transform="matrix(53.4 -25.5 77.9 162.9 1119 399)" opacity=".9201"/>
+          <use href="#s" fill="#f8dac6" transform="matrix(214.2 -53.2 12 48.4 1672.8 650.5)" opacity=".7401"/>
+          <use href="#s" fill="#fcfffd" transform="matrix(55.8 45.2 -61.7 76.1 1047.2 378.9)" opacity=".9018"/>
+        </g>
+      </svg>
+      <img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">
+    </div>
+
+    <div class="hero__body">
+      <p class="kicker">Ledger signals at the edge of finality</p>
+      <h1><span>Event</span><span>Horizon</span></h1>
+      <p class="hero__lead">Best-effort wake-ups for canonical ICP and compatible ICRC token ledgers, funded through Jupiter Faucet in ICP.</p>
+      <a class="hero__action" href="#builder">Build a subscription memo <span aria-hidden="true">&#8595;</span></a>
+    </div>
+
+    <div class="hero__facts" aria-label="Protocol summary">
+      <p><span>01</span>Certified frontend</p>
+      <p><span>02</span>ICP-funded</p>
+      <p><span>03</span>Best-effort signals</p>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="manifesto" aria-labelledby="manifesto-title">
+      <p class="section-label">The protocol</p>
+      <h2 id="manifesto-title">A fast path for ledger-aware canisters.</h2>
+      <p>Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The signal is intentionally lean; your canister remains the source of truth.</p>
     </section>
 
-    <section class="card">
-      <h2>Authoritative pricing</h2>
-      <div id="pricing" class="pricing">Loading current Event Horizon pricing…</div>
-      <p>Jupiter Faucet endowments fund Event Horizon and are ultimately converted into cycles. A higher ICP/XDR rate creates more cycles per endowed ICP, so fewer ICP are needed. Event Horizon conservatively compares the latest successful daily CMC observation with the lowest daily observation it successfully recorded during the trailing 1,461 UTC-day window. It samples roughly daily, accepts missed samples, rounds upward to whole ICP, and changes prices only at monthly UTC boundaries.</p>
+    <section class="section" id="network" aria-labelledby="network-title">
+      <header class="section__header">
+        <p class="section-label">01 / Network</p>
+        <div>
+          <h2 id="network-title">Choose an instance.</h2>
+          <p>Configuration is verified against the certified registry before the builder becomes available.</p>
+        </div>
+      </header>
+
+      <div class="network-grid">
+        <article class="panel instance-panel">
+          <div class="panel__topline">
+            <p class="panel__eyebrow">Event Horizon instance</p>
+            <span class="status"><span class="status__light"></span>Registry</span>
+          </div>
+          <label class="field field--select">Selected instance
+            <select id="instance"></select>
+          </label>
+          <div id="instance-info" class="instance-info"></div>
+        </article>
+
+        <article class="panel pricing-panel">
+          <div class="panel__topline">
+            <p class="panel__eyebrow">Authoritative pricing</p>
+            <span class="status"><span class="status__light"></span>Live query</span>
+          </div>
+          <div id="pricing" class="pricing">Loading current Event Horizon pricing…</div>
+          <p class="panel__note">Jupiter Faucet endowments fund Event Horizon and are ultimately converted into cycles. A higher ICP/XDR rate creates more cycles per endowed ICP, so fewer ICP are needed. Event Horizon conservatively compares the latest successful daily CMC observation with the lowest daily observation it successfully recorded during the trailing 1,461 UTC-day window. It samples roughly daily, accepts missed samples, rounds upward to whole ICP, and changes prices only at monthly UTC boundaries.</p>
+        </article>
+      </div>
     </section>
 
-    <section class="card builder">
-      <h2>Subscription memo</h2>
-      <p>Choose a global Ledger, numeric-subaccount, or neuron-nonce trigger; either specific target may be a single value or an inclusive contiguous range. The displayed backend price is authoritative when Event Horizon evaluates admission.</p>
-      <form id="memo-form">
-        <label>Subscriber canister <input id="principal" autocomplete="off" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai"></label>
-        <label>Subscription mode <select id="scope"><option value="global">Global Ledger</option><option value="account" selected>Single subaccount</option><option value="range">Subaccount range</option><option value="neuron">Single neuron nonce</option><option value="neuron-range">Neuron nonce range</option></select></label>
-        <span id="account-fields" class="account-fields">
-          <label id="single-field"><span id="single-label">Numbered subaccount</span> <input id="subaccount" inputmode="numeric" value="0"></label>
-          <span id="range-fields" class="range-fields" hidden>
-            <label><span id="range-start-label">Start subaccount</span> <input id="range-start" inputmode="numeric" value="0"></label>
-            <label><span id="range-end-label">End subaccount</span> <input id="range-end" inputmode="numeric" value="1"></label>
+    <section class="section builder-section" id="builder" aria-labelledby="builder-title">
+      <header class="section__header">
+        <p class="section-label">02 / Subscribe</p>
+        <div>
+          <h2 id="builder-title">Compose the declaration.</h2>
+          <p>Choose a ledger-wide, subaccount, or neuron trigger. The memo is validated continuously against Jupiter Faucet’s complete 32-byte limit.</p>
+        </div>
+      </header>
+
+      <div class="builder-card">
+        <div class="builder-card__intro">
+          <p class="panel__eyebrow">Subscription memo</p>
+          <p>Specific targets may be a single value or an inclusive contiguous range. Event Horizon’s displayed backend price is authoritative when admission is evaluated.</p>
+        </div>
+        <form id="memo-form">
+          <label class="field field--wide">Subscriber canister
+            <input id="principal" autocomplete="off" spellcheck="false" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai">
+          </label>
+          <label class="field field--wide">Subscription mode
+            <select id="scope">
+              <option value="global">Global Ledger</option>
+              <option value="account" selected>Single subaccount</option>
+              <option value="range">Subaccount range</option>
+              <option value="neuron">Single neuron nonce</option>
+              <option value="neuron-range">Neuron nonce range</option>
+            </select>
+          </label>
+          <span id="account-fields" class="account-fields">
+            <label id="single-field" class="field"><span id="single-label">Numbered subaccount</span>
+              <input id="subaccount" inputmode="numeric" value="0">
+            </label>
+            <span id="range-fields" class="range-fields" hidden>
+              <label class="field"><span id="range-start-label">Start subaccount</span>
+                <input id="range-start" inputmode="numeric" value="0">
+              </label>
+              <label class="field"><span id="range-end-label">End subaccount</span>
+                <input id="range-end" inputmode="numeric" value="1">
+              </label>
+            </span>
+            <label id="amount-label" class="field">Minimum ICP amount (optional)
+              <input id="amount" inputmode="decimal" placeholder="blank = every transfer">
+            </label>
           </span>
-          <label id="amount-label">Minimum ICP amount (optional) <input id="amount" inputmode="decimal" placeholder="blank = every transfer"></label>
-        </span>
-      </form>
-      <output id="memo-output" class="memo"></output>
-      <p id="memo-help" class="help"></p>
-      <p>A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.</p>
+        </form>
+
+        <div class="memo-result">
+          <p class="memo-result__label">Generated declaration</p>
+          <output id="memo-output" class="memo"></output>
+          <p id="memo-help" class="help"></p>
+        </div>
+        <p class="builder-card__footnote">A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.</p>
+      </div>
     </section>
 
-    <section class="grid">
-      <article class="card"><h2>Fast path</h2><p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p></article>
-      <article class="card"><h2>Correctness stays yours</h2><p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p></article>
-      <article class="card"><h2>ICP-funded</h2><p>Subscriptions are funded with ICP through Jupiter Faucet regardless of which token ledger is observed.</p></article>
-      <article class="card"><h2>Specific hints win</h2><p>A non-empty poke reports each retained specific target and its maximum observed qualifying transfer amount; an empty poke reports global-only activity. Both are best-effort hints, and <code>max_amount</code> is not proof of payment. There are no acknowledgements, retries or delivery guarantee.</p></article>
+    <section class="section" id="protocol" aria-labelledby="protocol-title">
+      <header class="section__header">
+        <p class="section-label">03 / Principles</p>
+        <div>
+          <h2 id="protocol-title">Small surface. Clear contract.</h2>
+          <p>Event Horizon adds a prompt signal path without taking ownership of application correctness.</p>
+        </div>
+      </header>
+
+      <div class="principles">
+        <article class="principle">
+          <p class="principle__number">01</p>
+          <h3>Fast path</h3>
+          <p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p>
+        </article>
+        <article class="principle">
+          <p class="principle__number">02</p>
+          <h3>Correctness stays yours</h3>
+          <p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p>
+        </article>
+        <article class="principle">
+          <p class="principle__number">03</p>
+          <h3>ICP-funded</h3>
+          <p>Subscriptions are funded with ICP through Jupiter Faucet regardless of which token ledger is observed.</p>
+        </article>
+        <article class="principle">
+          <p class="principle__number">04</p>
+          <h3>Specific hints win</h3>
+          <p>A non-empty poke reports each retained specific target and its maximum observed qualifying transfer amount; an empty poke reports global-only activity. Both are best-effort hints, and <code>max_amount</code> is not proof of payment. There are no acknowledgements, retries, or delivery guarantees.</p>
+        </article>
+      </div>
     </section>
-    <section class="card"><h2>Additional immutable instances</h2><p>Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed permissionlessly for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p></section>
+
+    <section class="instances-note" aria-labelledby="instances-title">
+      <p class="section-label">Permissionless by design</p>
+      <div>
+        <h2 id="instances-title">Additional immutable instances.</h2>
+        <p>Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed permissionlessly for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p>
+      </div>
+    </section>
   </main>
+
+  <footer>
+    <a class="wordmark" href="#top" aria-label="Back to top">EH<span class="wordmark__dot">.</span></a>
+    <p>Event Horizon / Internet Computer</p>
+    <a href="#top">Return to orbit &#8593;</a>
+  </footer>
   <script src="app.bundle.js?v=2"></script>
 </body>
 </html>
