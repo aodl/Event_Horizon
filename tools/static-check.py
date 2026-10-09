@@ -152,7 +152,7 @@ for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env
 assert 'public, max-age=31536000, immutable' not in frontend
 assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
-assert 'styles.css?v=5' in frontend_index
+assert 'styles.css?v=9' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
 assert '<link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">' in frontend_index
