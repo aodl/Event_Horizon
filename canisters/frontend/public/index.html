@@ -7,7 +7,8 @@
   <title>Event Horizon</title>
   <meta name="description" content="Best-effort ledger event triggers funded through Jupiter Faucet in ICP.">
   <link rel="icon" href="/favicon.ico?v=1">
-  <link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" fetchpriority="high">
+  <link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">
+  <link rel="preload" href="/event-horizon-static.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: reduce)">
   <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
@@ -56,7 +57,10 @@
           <use href="#s" fill="#fcfffd" transform="matrix(55.8 45.2 -61.7 76.1 1047.2 378.9)" opacity=".9018"/>
         </g>
       </svg>
-      <img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">
+      <picture>
+        <source media="(prefers-reduced-motion: reduce)" srcset="/event-horizon-static.svg" type="image/svg+xml">
+        <img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">
+      </picture>
     </div>
 
     <div class="hero__body">

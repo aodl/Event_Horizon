@@ -4609,50 +4609,63 @@ mod tests {
             vec![],
             None,
         );
-        let svg =
-            std::fs::read(workspace_root()?.join("canisters/frontend/public/event-horizon.svg"))?;
-        let mut assembled = Vec::new();
-        while assembled.len() < svg.len() {
-            let headers = if assembled.is_empty() {
-                vec![]
-            } else {
-                vec![("range".to_string(), format!("bytes={}-", assembled.len()))]
-            };
-            let response: HttpResponse = query(
-                &pic,
-                id,
-                "http_request",
-                HttpRequest {
-                    method: "GET".to_string(),
-                    url: "/event-horizon.svg".to_string(),
-                    headers,
-                    body: vec![],
-                    certificate_version: Some(2),
-                },
-            )?;
-            assert!(
-                response.status_code == 200 || response.status_code == 206,
-                "asset response must be complete or ranged"
-            );
-            assert!(response.headers.iter().any(|(name, value)| {
-                name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
-            }));
-            if response.status_code == 206 {
-                assert!(response.headers.iter().any(|(name, value)| {
-                    name.eq_ignore_ascii_case("content-range")
-                        && value.starts_with(&format!("bytes {}-", assembled.len()))
-                        && value.ends_with(&format!("/{}", svg.len()))
-                }));
-            } else {
+        for (url, source) in [
+            (
+                "/event-horizon.svg",
+                workspace_root()?.join("canisters/frontend/public/event-horizon.svg"),
+            ),
+            (
+                "/event-horizon-static.svg",
+                workspace_root()?.join("canisters/frontend/public/event-horizon-static.svg"),
+            ),
+        ] {
+            let svg = std::fs::read(source)?;
+            let mut assembled = Vec::new();
+            while assembled.len() < svg.len() {
+                let headers = if assembled.is_empty() {
+                    vec![]
+                } else {
+                    vec![("range".to_string(), format!("bytes={}-", assembled.len()))]
+                };
+                let response: HttpResponse = query(
+                    &pic,
+                    id,
+                    "http_request",
+                    HttpRequest {
+                        method: "GET".to_string(),
+                        url: url.to_string(),
+                        headers,
+                        body: vec![],
+                        certificate_version: Some(2),
+                    },
+                )?;
                 assert!(
-                    assembled.is_empty(),
-                    "only the first response may be complete"
+                    response.status_code == 200 || response.status_code == 206,
+                    "asset response must be complete or ranged: {url}"
                 );
+                assert!(response.headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-type") && value == "image/svg+xml"
+                }));
+                assert!(response.headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
+                }));
+                if response.status_code == 206 {
+                    assert!(response.headers.iter().any(|(name, value)| {
+                        name.eq_ignore_ascii_case("content-range")
+                            && value.starts_with(&format!("bytes {}-", assembled.len()))
+                            && value.ends_with(&format!("/{}", svg.len()))
+                    }));
+                } else {
+                    assert!(
+                        assembled.is_empty(),
+                        "only the first response may be complete: {url}"
+                    );
+                }
+                assert!(!response.body.is_empty());
+                assembled.extend(response.body);
             }
-            assert!(!response.body.is_empty());
-            assembled.extend(response.body);
+            assert_eq!(assembled, svg, "{url}");
         }
-        assert_eq!(assembled, svg);
 
         let pricing_response: HttpResponse = query(
             &pic,

@@ -1,11 +1,78 @@
 from pathlib import Path
 import hashlib, json, re, subprocess
+import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
-expected_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
+expected_svg='52353d778ae7c1e57bb9e47e3206d013787210c23fbab9c4b6be4d128077bee3'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
+assert len(svg)==946_905 and len(svg)<1_000_000
+static_svg=(root/'canisters/frontend/public/event-horizon-static.svg').read_bytes()
+expected_static_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
+assert hashlib.sha256(static_svg).hexdigest()==expected_static_svg
+assert len(static_svg)==936_294 and len(static_svg)<1_000_000
+svg_root=ET.fromstring(svg)
+static_svg_root=ET.fromstring(static_svg)
+local_name=lambda tag: tag.rsplit('}',1)[-1]
+svg_ids=[element.get('id') for element in svg_root.iter() if element.get('id')]
+static_svg_ids={element.get('id') for element in static_svg_root.iter() if element.get('id')}
+assert len(svg_ids)==len(set(svg_ids))
+assert set(svg_ids)-static_svg_ids=={
+    'ehm-animation','ehm-blurHuge','ehm-blurMid','ehm-blurTight','ehm-blurWide',
+    'ehm-coreWhiteWarm','ehm-haloOuter2','ehm-haloWarm2','ehm-pMidLeft','ehm-pMidRight',
+}
+assert svg_root.get('viewBox')==static_svg_root.get('viewBox')=='0 0 1672 941'
+title=next(element for element in svg_root if local_name(element.tag)=='title')
+description=next(element for element in svg_root if local_name(element.tag)=='desc')
+assert title.text=='Black hole and accretion disc'
+assert description.text=='A luminous golden accretion disc crosses a black hole, with a small dark planet at the left. Vector light and geometry combine with transparent, native-resolution texture patches.'
+svg_images=[element.attrib for element in svg_root.iter() if local_name(element.tag)=='image']
+static_svg_images=[element.attrib for element in static_svg_root.iter() if local_name(element.tag)=='image']
+assert len(svg_images)==len(static_svg_images)==15 and svg_images==static_svg_images
+original_paths=[
+    element.attrib for element in svg_root.iter()
+    if local_name(element.tag)=='path' and not (element.get('id') or '').startswith('ehm-')
+]
+static_paths=[element.attrib for element in static_svg_root.iter() if local_name(element.tag)=='path']
+assert len(original_paths)==len(static_paths)==118 and original_paths==static_paths
+svg_by_id={element.get('id'):element for element in svg_root.iter() if element.get('id')}
+assert svg_by_id['ehm-pMidLeft'].get('d')==svg_by_id['r10-lower_midleft'].get('d')
+assert svg_by_id['ehm-pMidRight'].get('d')==svg_by_id['r10-lower_midright'].get('d')
+motion=svg_by_id['ehm-animation']
+motion_uses=[element for element in motion.iter() if local_name(element.tag)=='use']
+assert len([element for element in motion if local_name(element.tag)=='g'])==7
+assert len(motion_uses)==23
+assert all(
+    all(name.startswith('ehm-') for name in element.get('class','').split())
+    for element in motion.iter() if element.get('class')
+)
+root_children=list(svg_root)
+motion_index=root_children.index(motion)
+texture_indices=[
+    index for index,element in enumerate(root_children)
+    if local_name(element.tag)=='image' and (element.get('id') or '').startswith('texture-patch-')
+]
+assert len(texture_indices)==14 and all(index>motion_index for index in texture_indices)
+assert root_children[motion_index+1].get('id')=='texture-patch-r1-c3'
+fragment_refs=[]
+for element in svg_root.iter():
+    assert local_name(element.tag)!='script'
+    for key,value in element.attrib.items():
+        assert not local_name(key).lower().startswith('on')
+        if local_name(key)=='href':
+            assert value.startswith('#') or value.startswith('data:image/png;base64,')
+            if value.startswith('#'):
+                fragment_refs.append(value[1:])
+        fragment_refs.extend(re.findall(r'url\(#([^)]+)\)',value))
+assert set(fragment_refs)<=set(svg_ids)
+animation_css=next(
+    (element.text or '') for element in svg_root.iter()
+    if local_name(element.tag)=='style' and '#ehm-animation' in (element.text or '')
+)
+assert '@media(prefers-reduced-motion:reduce)' in animation_css
+assert not re.search(r'(?<!ehm-)\.(?:gA|gB|gC|gD|u1o|l1o)\b',animation_css)
 print('svg_sha256', expected_svg)
+print('static_svg_sha256', expected_static_svg)
 for asset, expected in {
     'favicon.ico': '56912bdc9d6c862359db56a018b7242dcefe634f28f0e1099c170bccb63ed36b',
     'event-horizon-icon-512.png': 'd4ea23aba24ec72b0b01b6ec2b3b4f7b2dff19f3c7246ddfce215a6307ae5636',
@@ -88,6 +155,11 @@ frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 assert 'styles.css?v=4' in frontend_index
 assert 'app.bundle.js?v=2' in frontend_index
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
+assert '<link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">' in frontend_index
+assert '<link rel="preload" href="/event-horizon-static.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: reduce)">' in frontend_index
+assert '<source media="(prefers-reduced-motion: reduce)" srcset="/event-horizon-static.svg" type="image/svg+xml">' in frontend_index
+assert '<img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">' in frontend_index
+assert 'event_horizon_animated.svg' not in frontend_index
 assert 'Event-driven infra that notifies canisters about token transfers' in frontend_index
 for number, label in [
     ('01', 'Open Source &amp; Verifiable'),
