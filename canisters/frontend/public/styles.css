@@ -155,9 +155,9 @@ h1 span:first-child { margin-bottom: .13em; }
 .hero__action span { color: var(--ember); font-size: 1rem; }
 .hero__facts {
   display: grid;
-  grid-template-columns: repeat(3, auto);
+  grid-template-columns: repeat(4, minmax(0, auto));
   align-self: flex-end;
-  gap: clamp(1.5rem, 4vw, 4rem);
+  gap: clamp(1rem, 2.3vw, 2.5rem);
 }
 .hero__facts p {
   margin: 0;

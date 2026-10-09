@@ -88,6 +88,14 @@ frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 assert 'styles.css?v=4' in frontend_index
 assert 'app.bundle.js?v=2' in frontend_index
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
+assert 'Event-driven infra that notifies canisters about token transfers' in frontend_index
+for number, label in [
+    ('01', 'Open Source &amp; Verifiable'),
+    ('02', 'Blackholed &amp; Immutable'),
+    ('03', 'Perpetually Funded &amp; Immortal'),
+    ('04', 'Powered by Internet Computer Protocol'),
+]:
+    assert f'<p><span>{number}</span>{label}</p>' in frontend_index
 frontend_not_found=(root/'canisters/frontend/public/404.html').read_text()
 assert 'src="/event-horizon-icon-512.png"' in frontend_not_found
 frontend_not_found_css=(root/'canisters/frontend/public/404.css').read_text()
