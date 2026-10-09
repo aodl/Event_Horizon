@@ -28,6 +28,31 @@ export function initHeroArtwork(documentRef, schedule = callback => callback()) 
   else detail.addEventListener('load', reveal, { once: true });
 }
 
+export function initHeroBackdrop(documentRef, windowRef) {
+  const art = documentRef.querySelector('.hero__art');
+  if (!art || !windowRef) return;
+  let queued = false;
+  const update = () => {
+    queued = false;
+    if (!windowRef.matchMedia('(max-aspect-ratio: 1/1)').matches) {
+      art.style.removeProperty('--hero-art-scroll-opacity');
+      return;
+    }
+    const fadeDistance = Math.max(windowRef.innerWidth * 941 / (1672 * .7), 1);
+    const progress = Math.min(Math.max(windowRef.scrollY / fadeDistance, 0), 1);
+    const eased = progress * progress * (3 - 2 * progress);
+    art.style.setProperty('--hero-art-scroll-opacity', (1 - .86 * eased).toFixed(3));
+  };
+  const queueUpdate = () => {
+    if (queued) return;
+    queued = true;
+    windowRef.requestAnimationFrame(update);
+  };
+  update();
+  windowRef.addEventListener('scroll', queueUpdate, { passive: true });
+  windowRef.addEventListener('resize', queueUpdate, { passive: true });
+}
+
 export function createApp({
   documentRef,
   instances = INSTANCES,
@@ -161,5 +186,6 @@ export function createApp({
 
 if (typeof document !== 'undefined') {
   initHeroArtwork(document, callback => window.requestAnimationFrame(callback));
+  initHeroBackdrop(document, window);
   createApp({ documentRef: document });
 }
