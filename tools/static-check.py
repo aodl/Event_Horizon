@@ -161,6 +161,11 @@ assert '<source media="(prefers-reduced-motion: reduce)" srcset="/event-horizon-
 assert '<img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">' in frontend_index
 assert 'event_horizon_animated.svg' not in frontend_index
 assert 'Event-driven infra that notifies canisters about token transfers' in frontend_index
+assert '>Open deployment</p>' in frontend_index
+assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index
+assert '>EVH<span class="wordmark__dot">.</span></a>' in frontend_index
+assert 'Return to top &#8593;' in frontend_index
+assert 'deployed permissionlessly' not in frontend_index
 for number, label in [
     ('01', 'Open Source &amp; Verifiable'),
     ('02', 'Blackholed &amp; Immutable'),
