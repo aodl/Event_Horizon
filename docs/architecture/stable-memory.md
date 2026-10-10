@@ -14,7 +14,7 @@ Stable-memory IDs are permanent protocol identifiers and are never reused.
 | 7 | `FundingState`: the complete authoritative retained/CMC/surplus operation |
 | 8 | `SurplusPolicyState`: initialization, epoch start, hourly observed minimum, and level `0..19` |
 
-No migration from the pre-generic acceptance deployment or intermediate development schemas is supported. The accepted transition is a deliberate reinstall because there are no subscribers.
+No migration from the pre-generic acceptance deployment or intermediate development schemas is supported; that historical zero-state transition used a deliberate reinstall. The deployed current schema is preserved by ordinary argument-free upgrades, including reader-only patches.
 
 ID 7 initializes directly to `FundingState::Idle`. Its only states are `Idle`, `CmcTransferPending`, `CmcNotifyPending`, and `SurplusTransferPending`. One cell always determines the next money-moving action, so no crash boundary exists between an authoritative split plan and its execution state.
 
@@ -24,7 +24,7 @@ ID 8 defaults to an uninitialized level-zero policy. This is live protocol state
 
 Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands once into the ID 1 map. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
 
-ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from prior acceptance schemas; the zero-subscriber acceptance backend is reinstalled. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
+ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from prior acceptance schemas; the earlier zero-state acceptance transition used reinstall. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
 
 The stable pricing `Price` is `{ account_icp, global_icp }`. Public `get_pricing` values derive `range_icp = ceil(global_icp / 5)` with quotient/remainder arithmetic, exactly equal to `ceil(20F/C)`.
 

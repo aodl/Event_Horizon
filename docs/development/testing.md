@@ -58,7 +58,15 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - ordinary full-width `u64` targets, arbitrary-precision `Nat` callbacks, and the outbound 256-target bound;
 - threshold loosening with per-target `max_amount` coalescing for subscriber-local policy;
 - subscriber trap isolation and continued reader progress;
-- explicit archive-gap skip-and-continue behavior and unexplained-hole retry semantics;
+- table-driven archive interval validation (partial, adjacent, overlapping,
+  repeated, gapped, zero-length, over-broad, and overflowing ranges), awkward
+  empty legacy first indices, no-progress and genuine-hole rejection;
+- shared ICP, separate ICP admission, and generic ICRC-3 multi-page
+  archive-only catch-up through a pinned boundary, including one real Economy
+  scheduler execution and exact live-tail callback payloads;
+- structural response rejection before archive mutation, durable proved
+  archive prefixes before malformed live data, page-level admission commits,
+  and identical/conflicting ICRC-3 duplicate IDs;
 - generic ICRC-3 observation alongside canonical ICP legacy-log admission and observation;
 - legacy ICP CMC top-up transfer;
 - accepted transfer with lost response and duplicate-safe recovery;
@@ -72,11 +80,16 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - subscription admission after the original Faucet ICP has flowed through funding or surplus transfers;
 - destination-disabled equivalence and zero policy;
 - fresh-install `FundingState::Idle`, CMC-only `None`, split-plan `Some(PlannedSurplus)`, and current-Wasm upgrades of every pending funding phase;
-- subscription, cursor, verified SNS profile, and scheduler persistence across upgrade;
+- subscription, cursor, verified SNS profile, pricing, and scheduler persistence
+  across upgrade, including archive backlog recovery from both current schema
+  and the tracked prepatch debug Wasm fixture;
 - timer-wrapper recovery after real post-await continuation traps in polling, pricing, and funding, including preserved pending funding identity and non-overlapping ownership;
 - Reserve Protection checks at scheduled poll entry, including Economy hysteresis and resumption above 2 T;
 - the certified frontend response, transition asset URLs, revalidation headers, and absence of debug application methods from production Wasm;
-- deterministic stale-frontend-response rejection under reordered success, failure, planned-entry, same-profile/different-backend, and verification-failure cases;
+- deterministic stale-frontend-response rejection under reordered success,
+  failure, planned-entry, same-profile/different-backend, and
+  verification-failure cases, plus synchronous removal of the previous memo
+  and funding instruction while a new live instance is pending;
 - a bounded capacity matrix: global and specific fan-out at 256 and 1,024 records, a 4,096-block/16-page backlog through the scheduler, the existing 256-target callback bound, values above `u64::MAX`, and a 2,048-decimal-digit `Nat` fixture.
 
 The capacity matrix uses batched debug-only fixture setup and the production polling path. Synthetic principals measure dispatch pressure as attempted/accepted one-way calls; they are not described as confirmed subscriber execution. The large-`Nat` case uses the real mock subscriber and confirms execution. PocketIC exposes cycle and memory deltas used in the validation report, but not a sound single aggregate instruction count across the poll's many asynchronous messages. The tested matrix is a finite envelope, not evidence of unlimited capacity.

@@ -152,6 +152,15 @@ called. An unexplained live hole does not advance the cursor and is retried
 later; Event Horizon does not infer archival merely from the first live block
 returned.
 
+For legacy `query_blocks`, `first_block_index` is interpreted only when the
+returned `blocks` vector is nonempty; the Ledger contract leaves that field
+unspecified for an empty vector. Empty responses therefore advance only over
+explicit contiguous archive evidence. A partial archived prefix commits only
+that prefix and the same poll continues toward its pinned boundary. An empty
+response below the boundary without usable evidence fails rather than spinning
+or making unsupported progress. Archive intervals are checked for overflow,
+clipped to the outstanding requested interval, and never bridge a genuine gap.
+
 This is acceptable because subscribers retain authoritative reconciliation.
 
 ## 8. Poke contract
@@ -282,3 +291,8 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
 The certified frontend embeds a reviewed static instance registry in its JavaScript asset and therefore in the frontend Wasm. Browser queries use each selected backend principal directly. No frontend update call is involved. It uses `get_instance` to verify immutable configuration/profile and `get_pricing` for authoritative admission prices. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, ordinary single/range, and neuron single/range modes when supported, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
+
+Selecting another live instance immediately clears the previous memo and
+funding instruction and disables construction while the new configuration is
+pending. The existing generation guard prevents either stale successes or
+stale failures from restoring an older instance's output.

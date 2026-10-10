@@ -7,7 +7,10 @@ use crate::{
     subscription::{merge_subscription, Subscription, WatchTarget},
 };
 use candid::{Nat, Principal};
-use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
+use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
+    icrc3::blocks::{BlockWithId, GetBlocksResult},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256;
@@ -316,57 +319,123 @@ fn coalesce(ranges: &[(u64, u64)], start: u64) -> u64 {
         end = n
     }
 }
-fn icrc_archived(r: &GetBlocksResult, start: u64, boundary: u64) -> Result<u64, String> {
+fn validated_archive_prefix(
+    ranges: impl IntoIterator<Item = (u64, u64)>,
+    start: u64,
+    request_end: u64,
+) -> Result<u64, String> {
+    let mut validated = Vec::new();
+    for (range_start, length) in ranges {
+        let range_end = range_start.checked_add(length).ok_or_else(|| {
+            format!("archive interval overflow start={range_start} length={length}")
+        })?;
+        let clipped_start = range_start.max(start);
+        let clipped_end = range_end.min(request_end);
+        if clipped_start < clipped_end {
+            validated.push((clipped_start, clipped_end));
+        }
+    }
+    Ok(coalesce(&validated, start))
+}
+
+fn request_end(start: u64, length: u64, boundary: u64) -> Result<u64, String> {
+    start
+        .checked_add(length)
+        .map(|end| end.min(boundary))
+        .ok_or_else(|| format!("request interval overflow start={start} length={length}"))
+}
+
+fn page_length(start: u64, remaining: Option<u64>) -> u64 {
+    let representable = u64::MAX - start;
+    remaining
+        .unwrap_or(config::LEDGER_PAGE_SIZE)
+        .min(config::LEDGER_PAGE_SIZE)
+        .min(representable)
+}
+
+fn icrc_archived(r: &GetBlocksResult, start: u64, request_end: u64) -> Result<u64, String> {
+    if r.archived_blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive archive groups".into());
+    }
     let mut v = Vec::new();
     for a in &r.archived_blocks {
-        if v.len().saturating_add(a.args.len()) > config::LEDGER_PAGE_SIZE as usize {
+        let count = v
+            .len()
+            .checked_add(a.args.len())
+            .ok_or("archive range count overflow")?;
+        if count > config::LEDGER_PAGE_SIZE as usize {
             return Err("excessive archive ranges".into());
         }
         for q in &a.args {
             let (s, l) = q.as_start_and_length()?;
-            v.push((s, s.saturating_add(l).min(boundary)))
+            v.push((s, l))
         }
     }
-    Ok(coalesce(&v, start))
+    validated_archive_prefix(v, start, request_end)
+}
+
+fn icrc_live_blocks(
+    mut blocks: Vec<BlockWithId>,
+    start: u64,
+    request_end: u64,
+) -> Result<Vec<(u64, ICRC3Value)>, String> {
+    blocks.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut unique: Vec<(u64, ICRC3Value)> = Vec::new();
+    for block in blocks {
+        let id = u64nat(&block.id)?;
+        if id < start || id >= request_end {
+            continue;
+        }
+        if let Some((previous_id, previous_block)) = unique.last() {
+            if *previous_id == id {
+                if *previous_block != block.block {
+                    return Err(format!("conflicting duplicate block id={id}"));
+                }
+                continue;
+            }
+        }
+        unique.push((id, block.block));
+    }
+    Ok(unique)
 }
 
 async fn icrc_page(
     r: GetBlocksResult,
     boundary: u64,
+    requested_start: u64,
+    requested_length: u64,
     out: &mut BTreeMap<Principal, MatchState>,
 ) -> Result<(u64, bool), String> {
+    if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive live blocks".into());
+    }
     let original = position(&state::read_metadata(), Stream::Observed)
         .unwrap()
         .1;
+    if original != requested_start {
+        return Err(format!(
+            "observed request cursor changed expected={requested_start} actual={original}"
+        ));
+    }
+    let requested_end = request_end(requested_start, requested_length, boundary)?;
     let mut at = original;
-    let archived = icrc_archived(&r, at, boundary)?;
+    let archived = icrc_archived(&r, at, requested_end)?;
     if archived > at {
         logging::history_gap("observed", at, archived);
         at = archived;
         commit(Stream::Observed, true, at)
     }
-    if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
-        return Err("excessive live blocks".into());
-    }
-    let mut blocks = r.blocks;
-    blocks.sort_by(|a, b| a.id.cmp(&b.id));
+    let blocks = icrc_live_blocks(r.blocks, at, requested_end)?;
     let mut local = BTreeMap::new();
     let mut live = false;
-    for b in blocks {
-        let id = u64nat(&b.id)?;
-        if id < at {
-            continue;
-        }
-        if id >= boundary {
-            break;
-        }
+    for (id, block) in blocks {
         if id != at {
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
-        let e = icrc3::decode_block(&b.block)?;
+        let e = icrc3::decode_block(&block)?;
         observe_icrc3(&e, &mut local);
         live = true;
-        at += 1
+        at = at.checked_add(1).ok_or("observed cursor overflow")?;
     }
     if at == original && at < boundary {
         return Err("no live progress or archive evidence".into());
@@ -387,18 +456,20 @@ async fn scan_icrc(
         commit(Stream::Observed, true, tip);
         return Ok(false);
     }
-    let first = icrc3::get_blocks(ledger, at, config::LEDGER_PAGE_SIZE).await?;
+    let first_length = page_length(at, None);
+    let first = icrc3::get_blocks(ledger, at, first_length).await?;
     let boundary = u64nat(&first.log_length)?;
-    let mut next = Some(first);
+    let mut next = Some((first, first_length));
     let mut activity = false;
     while at < boundary {
-        let r = match next.take() {
-            Some(r) => r,
+        let (r, requested_length) = match next.take() {
+            Some(value) => value,
             None => {
-                icrc3::get_blocks(ledger, at, config::LEDGER_PAGE_SIZE.min(boundary - at)).await?
+                let length = page_length(at, Some(boundary - at));
+                (icrc3::get_blocks(ledger, at, length).await?, length)
             }
         };
-        let (n, live) = icrc_page(r, boundary, out).await?;
+        let (n, live) = icrc_page(r, boundary, at, requested_length, out).await?;
         at = n;
         activity |= live
     }
@@ -408,22 +479,23 @@ async fn scan_icrc(
 fn legacy_archived(
     r: &[icp_ledger::ArchivedBlocksRange],
     start: u64,
-    boundary: u64,
+    request_end: u64,
 ) -> Result<u64, String> {
     if r.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive archive ranges".into());
     }
-    Ok(coalesce(
-        &r.iter()
-            .map(|x| (x.start, x.start.saturating_add(x.length).min(boundary)))
-            .collect::<Vec<_>>(),
+    validated_archive_prefix(
+        r.iter().map(|range| (range.start, range.length)),
         start,
-    ))
+        request_end,
+    )
 }
 async fn legacy_page(
     r: icp_ledger::QueryBlocksResponse,
     s: Stream,
     boundary: u64,
+    requested_start: u64,
+    requested_length: u64,
     decimals: u8,
     out: &mut BTreeMap<Principal, MatchState>,
     shared_globals: Option<&mut SharedGlobalOrder>,
@@ -434,14 +506,21 @@ async fn legacy_page(
     let original = position(&state::read_metadata(), s)
         .ok_or("shared cursor invariant violated")?
         .1;
+    if original != requested_start {
+        return Err(format!(
+            "{} request cursor changed expected={requested_start} actual={original}",
+            name(s)
+        ));
+    }
+    let requested_end = request_end(requested_start, requested_length, boundary)?;
     let mut at = original;
-    let archived = legacy_archived(&r.archived_blocks, at, boundary)?;
+    let archived = legacy_archived(&r.archived_blocks, at, requested_end)?;
     if archived > at {
         logging::history_gap(name(s), at, archived);
         at = archived;
         commit(s, true, at)
     }
-    if r.first_block_index > at {
+    if !r.blocks.is_empty() && r.first_block_index > at {
         return Err(format!(
             "unexplained hole cursor={at} first={}",
             r.first_block_index
@@ -453,11 +532,14 @@ async fn legacy_page(
     let mut page_last_live = None;
     let mut live = false;
     for (offset, b) in r.blocks.into_iter().enumerate() {
-        let id = r.first_block_index.saturating_add(offset as u64);
+        let id = r
+            .first_block_index
+            .checked_add(offset as u64)
+            .ok_or("legacy block index overflow")?;
         if id < at {
             continue;
         }
-        if id >= boundary {
+        if id >= requested_end {
             break;
         }
         if id != at {
@@ -485,7 +567,7 @@ async fn legacy_page(
             page_last_live = Some(id);
         }
         live = true;
-        at += 1
+        at = at.checked_add(1).ok_or("legacy cursor overflow")?;
     }
     if at == original && at < boundary {
         return Err("no live progress or archive evidence".into());
@@ -534,26 +616,28 @@ async fn scan_legacy(
         admitted_at: BTreeMap::new(),
         last_live: None,
     });
-    let first = icp_ledger::query_blocks(r.icp_ledger, at, config::LEDGER_PAGE_SIZE).await?;
+    let first_length = page_length(at, None);
+    let first = icp_ledger::query_blocks(r.icp_ledger, at, first_length).await?;
     let boundary = first.chain_length;
-    let mut next = Some(first);
+    let mut next = Some((first, first_length));
     let mut activity = false;
     while at < boundary {
-        let response = match next.take() {
-            Some(x) => x,
+        let (response, requested_length) = match next.take() {
+            Some(value) => value,
             None => {
-                icp_ledger::query_blocks(
-                    r.icp_ledger,
-                    at,
-                    config::LEDGER_PAGE_SIZE.min(boundary - at),
+                let length = page_length(at, Some(boundary - at));
+                (
+                    icp_ledger::query_blocks(r.icp_ledger, at, length).await?,
+                    length,
                 )
-                .await?
             }
         };
         let (n, live) = legacy_page(
             response,
             s,
             boundary,
+            at,
+            requested_length,
             decimals,
             out,
             shared_globals.as_mut(),
@@ -669,6 +753,10 @@ pub async fn run_poll() {
 #[cfg(test)]
 mod target_match_tests {
     use super::*;
+    use icrc_ledger_types::icrc3::{
+        archive::QueryArchiveFn,
+        blocks::{ArchivedBlocks, BlockWithId, GetBlocksRequest},
+    };
     use std::str::FromStr;
 
     #[test]
@@ -701,5 +789,174 @@ mod target_match_tests {
         assert_eq!(state.subs.len(), MAX_SPECIFIC_TARGETS_PER_POKE);
         record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(999u16));
         assert_eq!(state.subs[&WatchTarget::Subaccount(7)], Nat::from(999u16));
+    }
+
+    #[test]
+    fn archive_interval_coverage_is_bounded_contiguous_and_order_independent() {
+        struct Case {
+            name: &'static str,
+            ranges: Vec<(u64, u64)>,
+            start: u64,
+            request_end: u64,
+            expected: u64,
+        }
+        let cases = [
+            Case {
+                name: "complete",
+                ranges: vec![(10, 10)],
+                start: 10,
+                request_end: 20,
+                expected: 20,
+            },
+            Case {
+                name: "partial",
+                ranges: vec![(10, 4)],
+                start: 10,
+                request_end: 20,
+                expected: 14,
+            },
+            Case {
+                name: "out of order adjacent overlapping repeated",
+                ranges: vec![(15, 5), (10, 3), (13, 4), (10, 3), (12, 6)],
+                start: 10,
+                request_end: 20,
+                expected: 20,
+            },
+            Case {
+                name: "genuine gap",
+                ranges: vec![(14, 6), (10, 3)],
+                start: 10,
+                request_end: 20,
+                expected: 13,
+            },
+            Case {
+                name: "zero length",
+                ranges: vec![(10, 0), (9, 0)],
+                start: 10,
+                request_end: 20,
+                expected: 10,
+            },
+            Case {
+                name: "over broad evidence is clipped",
+                ranges: vec![(0, 100)],
+                start: 10,
+                request_end: 20,
+                expected: 20,
+            },
+            Case {
+                name: "boundary equal to cursor",
+                ranges: vec![(0, 100)],
+                start: 20,
+                request_end: 20,
+                expected: 20,
+            },
+            Case {
+                name: "near u64 boundary",
+                ranges: vec![(u64::MAX - 2, 2)],
+                start: u64::MAX - 2,
+                request_end: u64::MAX,
+                expected: u64::MAX,
+            },
+        ];
+        for case in cases {
+            assert_eq!(
+                validated_archive_prefix(case.ranges, case.start, case.request_end).unwrap(),
+                case.expected,
+                "{}",
+                case.name
+            );
+        }
+        for ranges in [vec![(u64::MAX, 1)], vec![(u64::MAX - 1, 2)]] {
+            assert!(validated_archive_prefix(ranges, 0, u64::MAX).is_err());
+        }
+        assert_eq!(request_end(u64::MAX - 1, 1, u64::MAX).unwrap(), u64::MAX);
+        assert!(request_end(u64::MAX, 1, u64::MAX).is_err());
+        assert_eq!(page_length(u64::MAX, None), 0);
+    }
+
+    #[test]
+    fn legacy_archive_wrapper_rejects_excessive_or_overflowing_ranges() {
+        let excessive = vec![
+            icp_ledger::ArchivedBlocksRange {
+                start: 0,
+                length: 0,
+            };
+            config::LEDGER_PAGE_SIZE as usize + 1
+        ];
+        assert_eq!(
+            legacy_archived(&excessive, 0, 10).unwrap_err(),
+            "excessive archive ranges"
+        );
+        assert!(legacy_archived(
+            &[icp_ledger::ArchivedBlocksRange {
+                start: u64::MAX,
+                length: 1,
+            }],
+            0,
+            10,
+        )
+        .is_err());
+    }
+
+    fn icrc_result(groups: Vec<Vec<GetBlocksRequest>>) -> GetBlocksResult {
+        GetBlocksResult {
+            log_length: Nat::from(0u8),
+            blocks: vec![],
+            archived_blocks: groups
+                .into_iter()
+                .map(|args| ArchivedBlocks {
+                    args,
+                    callback: QueryArchiveFn::new(Principal::anonymous(), "unused"),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn icrc_archive_wrapper_rejects_counts_unrepresentable_values_and_overflow() {
+        let request = |start: Nat, length: Nat| GetBlocksRequest { start, length };
+        let excessive_groups =
+            icrc_result((0..=config::LEDGER_PAGE_SIZE).map(|_| Vec::new()).collect());
+        assert_eq!(
+            icrc_archived(&excessive_groups, 0, 10).unwrap_err(),
+            "excessive archive groups"
+        );
+        let excessive_ranges = icrc_result(vec![(0..=config::LEDGER_PAGE_SIZE)
+            .map(|_| request(0u8.into(), 0u8.into()))
+            .collect()]);
+        assert_eq!(
+            icrc_archived(&excessive_ranges, 0, 10).unwrap_err(),
+            "excessive archive ranges"
+        );
+        let above_u64 = Nat::from_str("18446744073709551616").unwrap();
+        for malformed in [
+            icrc_result(vec![vec![request(above_u64.clone(), 1u8.into())]]),
+            icrc_result(vec![vec![request(1u8.into(), above_u64)]]),
+            icrc_result(vec![vec![request(u64::MAX.into(), 1u8.into())]]),
+        ] {
+            assert!(icrc_archived(&malformed, 0, 10).is_err());
+        }
+    }
+
+    fn block(id: u64, value: u64) -> BlockWithId {
+        BlockWithId {
+            id: id.into(),
+            block: ICRC3Value::Nat(value.into()),
+        }
+    }
+
+    #[test]
+    fn icrc_live_blocks_sort_and_deduplicate_without_selecting_conflicts() {
+        assert_eq!(
+            icrc_live_blocks(vec![block(11, 2), block(10, 1), block(10, 1)], 10, 12).unwrap(),
+            vec![
+                (10, ICRC3Value::Nat(1u8.into())),
+                (11, ICRC3Value::Nat(2u8.into()))
+            ]
+        );
+        assert_eq!(
+            icrc_live_blocks(vec![block(10, 1), block(10, 2)], 10, 11).unwrap_err(),
+            "conflicting duplicate block id=10"
+        );
     }
 }

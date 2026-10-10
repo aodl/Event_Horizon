@@ -187,3 +187,123 @@ pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> Lega
         | Err(LegacyTransferError::InsufficientFunds { .. }) => LegacyTransferOutcome::Replan,
     }
 }
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod contract_tests {
+    use super::*;
+
+    // Mirrors the public ICP Ledger interface at dfinity/ic revision
+    // 6a36bed9dad2542f7b9f508560301703b1936ede. These intentionally do not
+    // reuse the consumer projection above.
+    #[derive(CandidType)]
+    struct WireTokens {
+        e8s: u64,
+    }
+
+    #[derive(CandidType)]
+    struct WireTimeStamp {
+        timestamp_nanos: u64,
+    }
+
+    #[derive(CandidType)]
+    enum WireOperation {
+        Mint {
+            to: Vec<u8>,
+            amount: WireTokens,
+        },
+        Burn {
+            from: Vec<u8>,
+            amount: WireTokens,
+        },
+        Transfer {
+            from: Vec<u8>,
+            to: Vec<u8>,
+            amount: WireTokens,
+            fee: WireTokens,
+        },
+    }
+
+    #[derive(CandidType)]
+    struct WireTransaction {
+        memo: u64,
+        operation: Option<WireOperation>,
+        created_at_time: WireTimeStamp,
+    }
+
+    #[derive(CandidType)]
+    struct WireBlock {
+        parent_hash: Option<Vec<u8>>,
+        transaction: WireTransaction,
+        timestamp: WireTimeStamp,
+    }
+
+    #[derive(CandidType)]
+    struct WireBlockRange {
+        blocks: Vec<WireBlock>,
+    }
+
+    #[derive(CandidType)]
+    enum WireQueryArchiveError {
+        BadFirstBlockIndex {
+            requested_index: u64,
+            first_valid_index: u64,
+        },
+        Other {
+            error_code: u64,
+            error_message: String,
+        },
+    }
+
+    #[derive(CandidType)]
+    enum WireQueryArchiveResult {
+        Ok(WireBlockRange),
+        Err(WireQueryArchiveError),
+    }
+
+    candid::define_function!(WireQueryArchiveFn : (GetBlocksArgs) -> (WireQueryArchiveResult) query);
+
+    #[derive(CandidType)]
+    struct WireArchivedBlocksRange {
+        start: u64,
+        length: u64,
+        callback: WireQueryArchiveFn,
+    }
+
+    #[derive(CandidType)]
+    struct WireQueryBlocksResponse {
+        chain_length: u64,
+        certificate: Option<Vec<u8>>,
+        blocks: Vec<WireBlock>,
+        first_block_index: u64,
+        archived_blocks: Vec<WireArchivedBlocksRange>,
+    }
+
+    #[test]
+    fn official_empty_legacy_reply_decodes_into_consumer_projection() {
+        let wire = WireQueryBlocksResponse {
+            chain_length: 38_803_000,
+            certificate: Some(vec![1, 2, 3]),
+            blocks: vec![],
+            // Officially unspecified because blocks is empty.
+            first_block_index: u64::MAX,
+            archived_blocks: vec![WireArchivedBlocksRange {
+                start: 38_801_807,
+                length: 256,
+                callback: WireQueryArchiveFn::new(Principal::anonymous(), "get_blocks".to_string()),
+            }],
+        };
+        let encoded = candid::encode_one(wire).unwrap();
+        let decoded: QueryBlocksResponse = candid::decode_one(&encoded).unwrap();
+        assert_eq!(decoded.chain_length, 38_803_000);
+        assert_eq!(decoded.first_block_index, u64::MAX);
+        assert!(decoded.blocks.is_empty());
+        assert_eq!(
+            decoded.archived_blocks,
+            vec![ArchivedBlocksRange {
+                start: 38_801_807,
+                length: 256,
+            }]
+        );
+    }
+}

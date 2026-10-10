@@ -221,6 +221,16 @@ mod tests {
         start: u64,
         count: u64,
     }
+    #[derive(CandidType, Deserialize)]
+    struct DebugEmptyFirstOverride {
+        requested_start: u64,
+        first_block_index: u64,
+    }
+    #[derive(CandidType, Deserialize)]
+    struct DebugIcrcDuplicateReply {
+        requested_start: u64,
+        conflicting: bool,
+    }
     #[derive(CandidType, Deserialize, Debug)]
     struct InstanceInfo {
         observed_ledger: Principal,
@@ -823,6 +833,37 @@ mod tests {
             }
             Ok(())
         }
+        fn append_ledger_batch(&self, kind: DebugBatchKind, total: u64) -> Result<()> {
+            for start in (0..total).step_by(128) {
+                update::<_, u64>(
+                    &self.pic,
+                    self.ledger,
+                    "debug_append_batch",
+                    DebugAppendBatch {
+                        kind,
+                        start,
+                        count: (total - start).min(128),
+                    },
+                )?;
+            }
+            Ok(())
+        }
+        fn set_empty_first_overrides(&self, values: Vec<DebugEmptyFirstOverride>) -> Result<()> {
+            update(
+                &self.pic,
+                self.ledger,
+                "debug_set_empty_first_overrides",
+                values,
+            )
+        }
+        fn set_legacy_reject_starts(&self, values: Vec<u64>) -> Result<()> {
+            update(
+                &self.pic,
+                self.ledger,
+                "debug_set_query_blocks_reject_starts",
+                values,
+            )
+        }
         fn poke_counts(&self) -> Result<Vec<u64>> {
             query(&self.pic, self.event_horizon, "debug_poke_counts", ())
         }
@@ -1031,7 +1072,7 @@ mod tests {
             self.poll()?;
             Ok(memo)
         }
-        fn upgrade_same_debug_wasm(&self) -> Result<()> {
+        fn upgrade_with_debug_wasm(&self, bytes: Vec<u8>) -> Result<()> {
             // Install-code rate limiting is part of replica behavior; advance beyond the
             // short initial-install window before exercising the upgrade path.
             self.pic.advance_time(std::time::Duration::from_secs(300));
@@ -1043,14 +1084,16 @@ mod tests {
                 .copied()
                 .ok_or_else(|| anyhow!("no controller"))?;
             self.pic
-                .upgrade_canister(
-                    self.event_horizon,
-                    wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
-                    encode_one(())?,
-                    Some(controller),
-                )
+                .upgrade_canister(self.event_horizon, bytes, encode_one(())?, Some(controller))
                 .map_err(|e| anyhow!("upgrade event horizon: {e:?}"))?;
             Ok(())
+        }
+        fn upgrade_same_debug_wasm(&self) -> Result<()> {
+            self.upgrade_with_debug_wasm(wasm(
+                &EVENT_HORIZON_WASM,
+                "event-horizon",
+                Some("debug_api"),
+            )?)
         }
     }
 
@@ -2096,15 +2139,9 @@ mod tests {
             "debug_set_first_local_block",
             1u64,
         )?;
-        let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        let poke_counts = env.poke_counts()?;
         env.poll()?;
-        for _ in 0..5 {
-            env.pic.tick()
-        }
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes
-        );
+        assert_eq!(env.poke_counts()?, poke_counts);
         assert_eq!(env.state()?.observed_next_block, 1);
         Ok(())
     }
@@ -2160,6 +2197,13 @@ mod tests {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
 
+        let observed_failure_cursor = env.state()?.observed_next_block;
+        let observed_calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_icrc3_get_blocks_calls",
+            (),
+        )?;
         let compact = env.subscriber.to_text().replace('-', "");
         let memo = format!("{compact}.7").into_bytes();
         env.set_route(memo.clone(), 1_000_000_000)?;
@@ -2176,6 +2220,23 @@ mod tests {
             (),
         )?;
         env.poll()?;
+        assert_eq!(
+            env.state()?.observed_next_block,
+            observed_failure_cursor,
+            "malformed generic transfer must fail at its cursor"
+        );
+        assert!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_icrc3_get_blocks_calls",
+                (),
+            )? > observed_calls_before,
+            "the observed request must actually be attempted"
+        );
+        assert!(env
+            .public_logs()?
+            .contains("OBSERVED_LEDGER_UNAVAILABLE account is not an array"));
         assert!(
             env.subscription(7)?.is_some(),
             "admission must survive observed failure"
@@ -2193,7 +2254,18 @@ mod tests {
             },
         )?;
 
-        update::<_, u64>(&env.pic, env.ledger, "debug_append_malformed_transfer", ())?;
+        // First recover the observed failure episode, then force a real legacy
+        // query rejection at the exact admission cursor.
+        env.poll()?;
+        let admission_failure_cursor = env.state()?.admission_next_block;
+        let admission_calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        env.set_legacy_reject_starts(vec![admission_failure_cursor])?;
+        let pokes_before = env.subscriber_observation()?.pokes;
         env.append_observed(
             account_id(Principal::from_slice(&[95]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
@@ -2201,11 +2273,62 @@ mod tests {
             None,
         )?;
         env.poll()?;
-        env.wait_for_pokes(1)?;
+        assert_eq!(env.state()?.admission_next_block, admission_failure_cursor);
         assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - admission_calls_before,
+            1,
+            "the rejected legacy request must actually be attempted"
+        );
+        assert!(env
+            .public_logs()?
+            .contains("ICP_ADMISSION_LEDGER_UNAVAILABLE query_blocks transport"));
+        env.wait_for_pokes(pokes_before + 1)?;
+        assert_eq!(
+            env.subscriber_observation()?.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(1u8),
+            }]
+        );
+
+        // Clear the deliberate rejection and complete one successful scan so a
+        // later no-progress failure starts a distinct sparse-log episode.
+        env.set_legacy_reject_starts(vec![])?;
+        env.poll()?;
+        let no_progress_cursor = env.state()?.admission_next_block;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 1)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_first_local_block",
+            no_progress_cursor + 1,
+        )?;
+        update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", true)?;
+        let no_progress_calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.admission_next_block, no_progress_cursor);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - no_progress_calls_before,
             1
         );
+        assert!(env
+            .public_logs()?
+            .contains("ICP_ADMISSION_LEDGER_UNAVAILABLE no live progress or archive evidence"));
         Ok(())
     }
 
@@ -2273,6 +2396,42 @@ mod tests {
 
         env.append(
             account_id(env.faucet, [0; 32]),
+            account_id(Principal::from_slice(&[77]), [0; 32]),
+            1,
+            Some(memo.clone()),
+        )?;
+        env.poll()?;
+        assert!(
+            env.subscription(7)?.is_none(),
+            "payout to the wrong destination never admits"
+        );
+
+        env.set_route(memo.clone(), 0)?;
+        update::<_, ()>(
+            &env.pic,
+            env.historian,
+            "debug_set_route",
+            SetRoute {
+                destination_canister_id: Principal::from_slice(&[77]),
+                memo: memo.clone(),
+                total_e8s: 1_000_000_000,
+            },
+        )?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo.clone()),
+        )?;
+        env.poll()?;
+        assert!(
+            env.subscription(7)?.is_none(),
+            "Historian evidence for a different destination is not exact"
+        );
+
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
             account_id(env.event_horizon, [0; 32]),
             1,
             Some(memo),
@@ -2282,6 +2441,59 @@ mod tests {
             env.subscription(7)?.is_some(),
             "later perpetual payout admits after evidence recovers"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn historian_outage_does_not_halt_observation_or_create_admission_retry() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.8").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        update::<_, ()>(&env.pic, env.historian, "debug_set_fault", true)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo.clone()),
+        )?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            41,
+            None,
+        )?;
+        let pokes_before = env.subscriber_observation()?.pokes;
+
+        env.poll()?;
+
+        env.wait_for_pokes(pokes_before + 1)?;
+        assert_eq!(
+            env.subscriber_observation()?.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(41u8),
+            }]
+        );
+        assert!(env.subscription(8)?.is_none());
+
+        update::<_, ()>(&env.pic, env.historian, "debug_set_fault", false)?;
+        env.poll()?;
+        assert!(
+            env.subscription(8)?.is_none(),
+            "recovery alone must not create an admission retry"
+        );
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        env.poll()?;
+        assert!(env.subscription(8)?.is_some());
         Ok(())
     }
 
@@ -3176,6 +3388,588 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_icp_multi_page_archive_catch_up_ignores_empty_first_index() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let start = env.state()?.observed_next_block;
+        assert_eq!(env.state()?.admission_next_block, start);
+
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let live = env.append(
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            17,
+            None,
+        )?;
+        assert_eq!(live, start + 3 * 256);
+        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", live)?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+
+        env.poll()?;
+
+        let state = env.state()?;
+        assert_eq!(state.admission_next_block, live + 1);
+        assert_eq!(state.observed_next_block, live + 1);
+        assert_eq!(state.admission_next_block, state.observed_next_block);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - calls_before,
+            4,
+            "one poll must traverse three archive-only pages and the live tail"
+        );
+        env.wait_for_pokes(pokes_before + 1)?;
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(17u8),
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_icp_empty_pages_ignore_all_valid_first_index_variations() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 4 * 256)?;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_first_local_block",
+            4 * 256u64,
+        )?;
+        env.set_empty_first_overrides(vec![
+            DebugEmptyFirstOverride {
+                requested_start: 0,
+                first_block_index: 0,
+            },
+            DebugEmptyFirstOverride {
+                requested_start: 256,
+                first_block_index: 512,
+            },
+            DebugEmptyFirstOverride {
+                requested_start: 512,
+                first_block_index: 1_024,
+            },
+            DebugEmptyFirstOverride {
+                requested_start: 768,
+                first_block_index: u64::MAX,
+            },
+        ])?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        let poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        let state = env.state()?;
+        assert_eq!(state.admission_next_block, 1_024);
+        assert_eq!(state.observed_next_block, 1_024);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - calls_before,
+            4
+        );
+        assert_eq!(env.poke_counts()?, poke_counts);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn separate_icp_admission_traverses_archive_pages_and_admits_only_live_payout() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+
+        // This observed activity predates admission and must never become retroactive.
+        env.append_observed(
+            account_id(Principal::from_slice(&[93]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            3,
+            None,
+        )?;
+        // An authorized payout hidden behind archive metadata is not reconstructed.
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo.clone()),
+        )?;
+        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 1u64)?;
+        let initial_poke_counts = env.poke_counts()?;
+        env.poll()?;
+        assert!(env.subscription(7)?.is_none());
+        assert_eq!(env.state()?.admission_next_block, 1);
+        assert_eq!(env.state()?.observed_next_block, 1);
+        assert_eq!(env.poke_counts()?, initial_poke_counts);
+
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let live = env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        assert_eq!(live, 1 + 3 * 256);
+        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", live)?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        let catch_up_poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        let state = env.state()?;
+        assert_eq!(state.admission_next_block, live + 1);
+        assert_eq!(
+            state.observed_next_block, 1,
+            "observed cursor is independent"
+        );
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - calls_before,
+            4
+        );
+        assert!(env.subscription(7)?.is_some());
+        assert_eq!(env.poke_counts()?, catch_up_poke_counts);
+
+        env.append_observed(
+            account_id(Principal::from_slice(&[94]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            5,
+            None,
+        )?;
+        env.poll()?;
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(5u8),
+        }])?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_icrc3_multi_page_archive_catch_up_reaches_live_tail() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let live = env.append_observed(
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            23,
+            None,
+        )?;
+        assert_eq!(live, 3 * 256);
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            live,
+        )?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_icrc3_get_blocks_calls",
+            (),
+        )?;
+        let admission_before = env.state()?.admission_next_block;
+        let pokes_before = env.subscriber_observation()?.pokes;
+
+        env.poll()?;
+
+        assert_eq!(env.state()?.observed_next_block, live + 1);
+        assert_eq!(env.state()?.admission_next_block, admission_before);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_icrc3_get_blocks_calls",
+                (),
+            )? - calls_before,
+            4,
+            "archive callback evidence must be followed without invoking callbacks"
+        );
+        env.wait_for_pokes(pokes_before + 1)?;
+        assert_eq!(
+            env.subscriber_observation()?.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(23u8),
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn economy_scheduler_traverses_all_shared_archive_pages_in_one_execution() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let start = env.state()?.observed_next_block;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let live = env.append(
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            29,
+            None,
+        )?;
+        assert_eq!(live, start + 3 * 256);
+        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", live)?;
+        env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
+        let starts_before = env.scheduler_lane_counts("poll")?[0];
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..100 {
+            env.pic.tick();
+            if env.state()?.observed_next_block == live + 1 {
+                break;
+            }
+        }
+
+        assert_eq!(env.state()?.polling_mode, PollingMode::Economy);
+        assert_eq!(env.state()?.observed_next_block, live + 1);
+        assert_eq!(env.state()?.admission_next_block, live + 1);
+        assert_eq!(env.scheduler_lane_counts("poll")?[0] - starts_before, 1);
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - calls_before,
+            4,
+            "one scheduled poll must consume all pages"
+        );
+        assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(29u8),
+        }])?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn invalid_icrc_envelope_cannot_commit_archive_evidence_before_rejection() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 256)?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            256u64,
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_icrc_excess_live_starts",
+            vec![0u64],
+        )?;
+        let poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        assert_eq!(
+            env.state()?.observed_next_block,
+            0,
+            "structurally invalid live vector must be rejected before archive commit"
+        );
+        assert!(env
+            .public_logs()?
+            .contains("OBSERVED_LEDGER_UNAVAILABLE excessive live blocks"));
+        assert_eq!(env.poke_counts()?, poke_counts);
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_icrc_excess_live_starts",
+            Vec::<u64>::new(),
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 256);
+        assert_eq!(env.poke_counts()?, poke_counts);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn valid_icrc_archive_prefix_survives_malformed_live_suffix() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 128)?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            128u64,
+        )?;
+        let poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        assert_eq!(
+            env.state()?.observed_next_block,
+            128,
+            "valid archive proof is durable but malformed live results are not"
+        );
+        assert_eq!(env.poke_counts()?, poke_counts);
+        assert!(env
+            .public_logs()?
+            .contains("OBSERVED_LEDGER_UNAVAILABLE account is not an array"));
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_repair_last_transfer",
+            Append {
+                from: account_id(Principal::from_slice(&[96]), [0; 32]),
+                to: account_id(Principal::from_slice(&[97]), [0; 32]),
+                amount_e8s: 1,
+                icrc1_memo: None,
+            },
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 129);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn icrc_duplicate_ids_deduplicate_identical_values_and_reject_conflicts() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        env.append_observed(
+            account_id(Principal::from_slice(&[8]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            31,
+            None,
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_icrc_duplicate_reply",
+            Some(DebugIcrcDuplicateReply {
+                requested_start: 0,
+                conflicting: true,
+            }),
+        )?;
+        let poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        assert_eq!(env.state()?.observed_next_block, 0);
+        assert_eq!(env.poke_counts()?, poke_counts);
+        assert!(env
+            .public_logs()?
+            .contains("OBSERVED_LEDGER_UNAVAILABLE conflicting duplicate block id=0"));
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_icrc_duplicate_reply",
+            Some(DebugIcrcDuplicateReply {
+                requested_start: 0,
+                conflicting: false,
+            }),
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 1);
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(31u8),
+        }])?;
+        assert_eq!(env.subscriber_observation()?.pokes, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn admission_at_page_end_survives_next_page_failure_and_matches_on_retry() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        let start = env.state()?.observed_next_block;
+        let compact = env.subscriber.to_text().replace('-', "");
+        let memo = format!("{compact}.7").into_bytes();
+        env.set_route(memo.clone(), 1_000_000_000)?;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 255)?;
+        assert_eq!(
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(env.event_horizon, [0; 32]),
+                1,
+                Some(memo),
+            )?,
+            start + 255
+        );
+        assert_eq!(
+            env.append(
+                account_id(Principal::from_slice(&[8]), [0; 32]),
+                account_id(env.subscriber, numbered(7)),
+                37,
+                None,
+            )?,
+            start + 256
+        );
+        env.set_legacy_reject_starts(vec![start + 256])?;
+        let poke_counts = env.poke_counts()?;
+
+        env.poll()?;
+
+        assert_eq!(env.state()?.observed_next_block, start + 256);
+        assert_eq!(env.state()?.admission_next_block, start + 256);
+        assert!(env.subscription(7)?.is_some());
+        assert_eq!(env.poke_counts()?, poke_counts);
+        assert!(env
+            .public_logs()?
+            .contains("SHARED_ICP_LEDGER_UNAVAILABLE query_blocks transport"));
+
+        env.set_legacy_reject_starts(vec![])?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, start + 257);
+        env.wait_for_matches(&[PokeMatch {
+            target: WatchTarget::Subaccount(7),
+            max_amount: candid::Nat::from(37u8),
+        }])?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn sparse_reader_failure_and_archive_logs_follow_episode_boundaries() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        let cursor = env.state()?.observed_next_block;
+
+        env.poll()?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, cursor);
+        assert_eq!(
+            env.public_logs()?
+                .matches("OBSERVED_LEDGER_UNAVAILABLE")
+                .count(),
+            1,
+            "repeated failures in one episode are suppressed"
+        );
+
+        env.pic.advance_time(std::time::Duration::from_secs(86_400));
+        env.price_once()?;
+        assert_eq!(env.state()?.observed_next_block, cursor);
+        assert!(
+            env.public_logs()?.matches("HEALTH day=").count() >= 2,
+            "daily maintenance health is independent of reader success"
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_repair_last_transfer",
+            Append {
+                from: account_id(Principal::from_slice(&[96]), [0; 32]),
+                to: account_id(Principal::from_slice(&[97]), [0; 32]),
+                amount_e8s: 1,
+                icrc1_memo: None,
+            },
+        )?;
+        env.poll()?;
+        update::<_, u64>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_append_malformed_transfer",
+            (),
+        )?;
+        env.poll()?;
+        assert_eq!(
+            env.public_logs()?
+                .matches("OBSERVED_LEDGER_UNAVAILABLE")
+                .count(),
+            2,
+            "a successful scan clears the episode for a later failure"
+        );
+
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_repair_last_transfer",
+            Append {
+                from: account_id(Principal::from_slice(&[98]), [0; 32]),
+                to: account_id(Principal::from_slice(&[99]), [0; 32]),
+                amount_e8s: 1,
+                icrc1_memo: None,
+            },
+        )?;
+        env.poll()?;
+        let archive_start = env.state()?.observed_next_block;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            archive_start + 3 * 256,
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, archive_start + 3 * 256);
+        assert_eq!(
+            env.public_logs()?
+                .matches("HISTORY_GAP stream=observed")
+                .count(),
+            1,
+            "one archive episode must not emit one log per page"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
@@ -3186,12 +3980,30 @@ mod tests {
         }
         update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 3u64)?;
         update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", true)?;
+        let calls_before = query::<_, u64>(
+            &env.pic,
+            env.event_horizon,
+            "debug_legacy_query_blocks_calls",
+            (),
+        )?;
         env.poll()?;
         assert_eq!(
             env.state()?.observed_next_block,
             0,
             "unexplained hole must be retried"
         );
+        assert_eq!(
+            query::<_, u64>(
+                &env.pic,
+                env.event_horizon,
+                "debug_legacy_query_blocks_calls",
+                (),
+            )? - calls_before,
+            1
+        );
+        assert!(env
+            .public_logs()?
+            .contains("SHARED_ICP_LEDGER_UNAVAILABLE unexplained hole cursor=0 first=3"));
 
         update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", false)?;
         env.poll()?;
@@ -3942,12 +4754,23 @@ mod tests {
         env.admit_neuron(1_000_000, 1_000_000_000)?;
         env.admit_range(8, 9, None, 10_000_000_000)?;
         env.admit_global(10_000_000_000)?;
+        env.set_scheduler_liquid_cycles_override(Some(0))?;
+        let retained_cursor = env.state()?.observed_next_block;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let archive_boundary = retained_cursor + 3 * 256;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_first_local_block",
+            archive_boundary,
+        )?;
         let before = env.state()?;
         let pricing_before = env.pricing()?;
         let surplus_before =
             query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
                 .surplus_canister;
         let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        let poke_counts_before = env.poke_counts()?;
         env.upgrade_same_debug_wasm()?;
         let after = env.state()?;
         assert_eq!(after.observed_next_block, before.observed_next_block);
@@ -3983,11 +4806,94 @@ mod tests {
         for _ in 0..3 {
             env.pic.tick();
         }
+        assert_eq!(env.state()?.observed_next_block, archive_boundary);
+        assert_eq!(env.state()?.admission_next_block, archive_boundary);
+        assert_eq!(env.poke_counts()?, poke_counts_before);
         assert_eq!(
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             pokes_before,
             "upgrade does not replay already committed cursor activity"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn baseline_reader_failure_upgrades_in_place_and_catches_up_from_retained_cursor() -> Result<()>
+    {
+        let baseline = std::fs::read(
+            workspace_root()?
+                .join("tests/fixtures/event_horizon_reader_baseline_dca1caa_debug.wasm"),
+        )?;
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&baseline)),
+            "54578ead9519a5b63372e5d76997adafe1b2da46f2d3fec7568fafd3baeb9092"
+        );
+        let env = Env::with_event_horizon_wasm(baseline, 200_000_000_000_000)?;
+        // Keep the baseline scheduler dormant while the test drives exact polls.
+        env.set_scheduler_liquid_cycles_override(Some(0))?;
+        env.price_once()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit_global(10_000_000_000)?;
+        let start = env.state()?.observed_next_block;
+        assert!(
+            start > 0,
+            "fixture must begin with a nonzero retained cursor"
+        );
+        let pricing_before = env.pricing()?;
+        let instance_before: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
+        let boundary = start + 3 * 256;
+        update::<_, ()>(
+            &env.pic,
+            env.ledger,
+            "debug_set_first_local_block",
+            boundary,
+        )?;
+
+        env.poll()?;
+
+        let failed = env.state()?;
+        assert_eq!(failed.observed_next_block, start + 256);
+        assert_eq!(failed.admission_next_block, start + 256);
+        assert!(env.public_logs()?.contains(&format!(
+            "SHARED_ICP_LEDGER_UNAVAILABLE unexplained hole cursor={} first={boundary}",
+            start + 256
+        )));
+
+        env.upgrade_with_debug_wasm(wasm(
+            &EVENT_HORIZON_WASM,
+            "event-horizon",
+            Some("debug_api"),
+        )?)?;
+
+        let retained = env.state()?;
+        assert_eq!(retained.observed_next_block, failed.observed_next_block);
+        assert_eq!(retained.admission_next_block, failed.admission_next_block);
+        assert_eq!(retained.subscriptions, 1);
+        assert_eq!(retained.global_subscriptions, 1);
+        assert_eq!(env.pricing()?, pricing_before);
+        assert!(env.subscription(7)?.is_some());
+        assert!(env.global_subscription()?);
+        let instance_after: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(
+            instance_after.observed_ledger,
+            instance_before.observed_ledger
+        );
+        assert_eq!(instance_after.icp_ledger, instance_before.icp_ledger);
+        assert_eq!(instance_after.sns_root, instance_before.sns_root);
+        assert_eq!(
+            instance_after.surplus_canister,
+            instance_before.surplus_canister
+        );
+
+        env.poll()?;
+        let caught_up = env.state()?;
+        assert_eq!(caught_up.observed_next_block, boundary);
+        assert_eq!(caught_up.admission_next_block, boundary);
+        assert_eq!(caught_up.subscriptions, 1);
+        assert_eq!(caught_up.global_subscriptions, 1);
         Ok(())
     }
 

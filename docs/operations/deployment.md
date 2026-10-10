@@ -21,10 +21,11 @@ This mapping is local deployment state and must not be committed as application 
 
 > **Do not run a mainnet deploy until the mapping has been checked. Otherwise a deployment tool may create new canisters rather than use the permanent Event Horizon canisters.**
 
-The canonical ICP acceptance backend already exists. Because it has no
-subscribers and this final schema deliberately has no migration decoder, its
-current transition is an explicit reinstall. This is a one-time accepted reset,
-not the normal lifecycle of an immutable production instance. A genuinely new
+The canonical ICP backend is already installed. Reader-contract maintenance
+that leaves the stable schema and constructor unchanged is a state-preserving,
+argument-free **upgrade**, not a reinstall. Do not reset the canister to discard
+a reader backlog: retained cursors, subscriptions, pricing, immutable
+configuration, and pending financial state must survive. A genuinely new
 additional instance uses install mode. The operator performs every mainnet
 action manually; the repository provides no automatic deployment script.
 
@@ -54,13 +55,12 @@ Review the hashes before continuing. Do not deploy a locally compiled replacemen
 
 Canonical-artifact mode verifies `release-artifacts/release-artifacts.sha256`, does not rebuild, prints the exact artifact hash being handed to `icp deploy`, and copies that Wasm to the CLI-requested output path.
 
-Deliberately reinstall and verify the current zero-subscriber canonical backend
-first, using the checked-in final constructor arguments:
+Upgrade and verify the existing canonical backend first. Ordinary upgrades take
+no constructor argument:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon -e ic --mode reinstall \
-  --args-file canisters/event-horizon/mainnet-icp-install-args.did
+  icp deploy event_horizon -e ic --mode upgrade
 ```
 
 After checking its live module hash, configuration, and production application
@@ -82,9 +82,8 @@ EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
 ```
 
 Do not assume either frontend state and do not automate this choice. The
-canonical backend instruction above remains a deliberate reinstall because it
-already exists, has no subscribers, and the final schema intentionally has no
-migration machinery.
+canonical backend instruction above remains an argument-free upgrade. A
+reinstall is destructive and is not a backlog-recovery procedure.
 
 For a fresh additional instance, use `--mode install` and follow
 [Deploying an immutable instance](deploying-an-instance.md). For an SNS-aware
@@ -97,7 +96,7 @@ behavioural/source/security/reproducibility gates
 → canonical Docker build
 → review printed hashes
 → inspect canister mapping/settings
-→ deliberately reinstall zero-subscriber canonical backend
+→ state-preserving argument-free backend upgrade
 → compare live module hash
 → verify backend
 → inspect frontend installed-module state
@@ -235,6 +234,16 @@ Controller removal is a separate operational decision. During the controlled obs
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
 14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
 15. `get_instance.surplus_canister` and the CONFIG log match the reviewed install argument; if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
+16. A patch upgrade retains the pre-upgrade nonzero reader cursors,
+    subscriptions, pricing, immutable configuration, and pending financial
+    state before ordinary catch-up resumes.
+
+For reader-patch acceptance, take a read-only Ledger-tip observation near a
+later cursor observation and compare the two with timestamps. The Ledger may
+grow between samples, and cursor advancement can include explicitly skipped
+archive ranges, so equality between differently timed observations is neither
+required nor sufficient. Confirm fresh processing and failure-episode behavior
+as well; do not validate the patch solely by the absence of one log line.
 
 Only after that evidence is satisfactory should [controller removal](controller-removal.md) be followed.
 

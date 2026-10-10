@@ -119,6 +119,17 @@ pub struct DebugAppendBatch {
     pub start: u64,
     pub count: u64,
 }
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugEmptyFirstOverride {
+    pub requested_start: u64,
+    pub first_block_index: u64,
+}
+#[cfg(feature = "generic_icrc3")]
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DebugIcrcDuplicateReply {
+    pub requested_start: u64,
+    pub conflicting: bool,
+}
 #[cfg(feature = "generic_icrc3")]
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DebugAppendNatTransfer {
@@ -179,6 +190,12 @@ struct State {
     icrc_blocks: Vec<ICRC3Value>,
     first_local: u64,
     suppress_archive_info: bool,
+    empty_first_overrides: Vec<DebugEmptyFirstOverride>,
+    query_blocks_reject_starts: Vec<u64>,
+    #[cfg(feature = "generic_icrc3")]
+    icrc_excess_live_starts: Vec<u64>,
+    #[cfg(feature = "generic_icrc3")]
+    icrc_duplicate_reply: Option<DebugIcrcDuplicateReply>,
     fee_e8s: u64,
     balances: Vec<Balance>,
     legacy_dedup: Vec<LegacyDedup>,
@@ -203,6 +220,12 @@ impl Default for State {
             icrc_blocks: vec![],
             first_local: 0,
             suppress_archive_info: false,
+            empty_first_overrides: vec![],
+            query_blocks_reject_starts: vec![],
+            #[cfg(feature = "generic_icrc3")]
+            icrc_excess_live_starts: vec![],
+            #[cfg(feature = "generic_icrc3")]
+            icrc_duplicate_reply: None,
             fee_e8s: 10_000,
             balances: vec![],
             legacy_dedup: vec![],
@@ -363,6 +386,9 @@ fn init() {
 fn query_blocks(args: GetBlocksArgs) -> QueryBlocksResponse {
     STATE.with(|s| {
         let s = s.borrow();
+        if s.query_blocks_reject_starts.contains(&args.start) {
+            ic_cdk::trap("forced query_blocks rejection")
+        }
         let chain = s.blocks.len() as u64;
         if args.length == 0 {
             return QueryBlocksResponse {
@@ -381,10 +407,19 @@ fn query_blocks(args: GetBlocksArgs) -> QueryBlocksResponse {
                 length: archive_end - args.start,
             });
         }
-        let first = args.start.max(s.first_local).min(request_end);
-        let blocks = (first..request_end)
+        let first_live = args.start.max(s.first_local);
+        let blocks: Vec<_> = (first_live..request_end)
             .map(|i| s.blocks[i as usize].clone())
             .collect();
+        let first = if blocks.is_empty() {
+            s.empty_first_overrides
+                .iter()
+                .find(|value| value.requested_start == args.start)
+                .map(|value| value.first_block_index)
+                .unwrap_or(first_live)
+        } else {
+            first_live
+        };
         QueryBlocksResponse {
             chain_length: chain,
             blocks,
@@ -812,6 +847,7 @@ fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
         let mut archived_blocks = Vec::new();
         for request in args {
             let (start, length) = request.as_start_and_length().unwrap();
+            let first_block_position = blocks.len();
             let end = start
                 .saturating_add(length)
                 .min(state.icrc_blocks.len() as u64);
@@ -834,6 +870,27 @@ fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
                     block: state.icrc_blocks[id as usize].clone(),
                 });
             }
+            if state.icrc_excess_live_starts.contains(&start) {
+                blocks.extend((0..=256u64).map(|offset| BlockWithId {
+                    id: start.saturating_add(offset).into(),
+                    block: ICRC3Value::Map(std::collections::BTreeMap::new()),
+                }));
+            } else if state
+                .icrc_duplicate_reply
+                .as_ref()
+                .is_some_and(|value| value.requested_start == start)
+                && blocks.len() > first_block_position
+            {
+                let mut duplicate = blocks[first_block_position].clone();
+                if state
+                    .icrc_duplicate_reply
+                    .as_ref()
+                    .is_some_and(|value| value.conflicting)
+                {
+                    duplicate.block = ICRC3Value::Nat(999u16.into());
+                }
+                blocks.push(duplicate);
+            }
         }
         GetBlocksResult {
             log_length: (state.icrc_blocks.len() as u64).into(),
@@ -846,6 +903,17 @@ fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
 #[ic_cdk::update]
 fn debug_set_profile_available(value: bool) {
     STATE.with(|s| s.borrow_mut().profile_available = value);
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_icrc_excess_live_starts(values: Vec<u64>) {
+    assert!(values.len() <= 16, "at most 16 excessive-live starts");
+    STATE.with(|s| s.borrow_mut().icrc_excess_live_starts = values);
+}
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_icrc_duplicate_reply(value: Option<DebugIcrcDuplicateReply>) {
+    STATE.with(|s| s.borrow_mut().icrc_duplicate_reply = value);
 }
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::update]
@@ -882,6 +950,23 @@ fn debug_set_first_local_block(index: u64) {
 #[ic_cdk::update]
 fn debug_suppress_archive_info(value: bool) {
     STATE.with(|s| s.borrow_mut().suppress_archive_info = value);
+}
+#[ic_cdk::update]
+fn debug_set_empty_first_overrides(values: Vec<DebugEmptyFirstOverride>) {
+    assert!(values.len() <= 16, "at most 16 empty first-index overrides");
+    let mut starts = values
+        .iter()
+        .map(|value| value.requested_start)
+        .collect::<Vec<_>>();
+    starts.sort_unstable();
+    starts.dedup();
+    assert_eq!(starts.len(), values.len(), "override starts must be unique");
+    STATE.with(|s| s.borrow_mut().empty_first_overrides = values);
+}
+#[ic_cdk::update]
+fn debug_set_query_blocks_reject_starts(values: Vec<u64>) {
+    assert!(values.len() <= 16, "at most 16 query rejection starts");
+    STATE.with(|s| s.borrow_mut().query_blocks_reject_starts = values);
 }
 #[ic_cdk::update]
 fn debug_set_balance(arg: DebugSetBalance) {

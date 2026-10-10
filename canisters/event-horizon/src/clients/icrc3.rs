@@ -74,14 +74,18 @@ fn account(value: Option<&ICRC3Value>) -> Result<Account, String> {
 /// Decodes only the shallow fields Event Horizon needs; unknown values are never traversed.
 pub fn decode_block(block: &ICRC3Value) -> Result<LedgerEvent, String> {
     let block = map(block).ok_or("block is not a map")?;
+    let btype = match block.get("btype") {
+        None => None,
+        Some(ICRC3Value::Text(value)) => Some(value.as_str()),
+        Some(_) => return Err("block btype is not Text".into()),
+    };
     let tx = match block.get("tx").and_then(map) {
         Some(tx) => tx,
-        None if matches!(text(block.get("btype")), Some("1xfer" | "2xfer")) => {
+        None if matches!(btype, Some("1xfer" | "2xfer")) => {
             return Err("transfer block has no tx map".into())
         }
         None => return Ok(LedgerEvent::Other),
     };
-    let btype = text(block.get("btype"));
     let transfer = matches!(btype, Some("1xfer" | "2xfer"))
         || (btype.is_none() && text(tx.get("op")) == Some("xfer"));
     if !transfer {
@@ -182,7 +186,7 @@ pub async fn supported_block_types(ledger: Principal) -> Result<Vec<SupportedBlo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, str::FromStr};
 
     fn account_value(owner: Principal, subaccount: Option<[u8; 32]>) -> ICRC3Value {
         let mut values = vec![ICRC3Value::Blob(owner.as_slice().to_vec().into())];
@@ -191,50 +195,186 @@ mod tests {
         }
         ICRC3Value::Array(values)
     }
-    fn transfer(btype: Option<&str>) -> ICRC3Value {
+
+    fn transfer(btype: Option<ICRC3Value>, op: Option<&str>, amount: Nat) -> ICRC3Value {
         let owner = Principal::from_slice(&[1, 2, 3]);
         let mut tx = BTreeMap::from([
-            ("op".into(), ICRC3Value::Text("xfer".into())),
             ("from".into(), account_value(owner, None)),
             ("to".into(), account_value(owner, Some([0; 32]))),
-            ("amt".into(), ICRC3Value::Nat(7u8.into())),
+            ("amt".into(), ICRC3Value::Nat(amount)),
         ]);
+        if let Some(op) = op {
+            tx.insert("op".into(), ICRC3Value::Text(op.into()));
+        }
         tx.insert("memo".into(), ICRC3Value::Blob(vec![9].into()));
         let mut block = BTreeMap::from([("tx".into(), ICRC3Value::Map(tx))]);
         if let Some(kind) = btype {
-            block.insert("btype".into(), ICRC3Value::Text(kind.into()));
+            block.insert("btype".into(), kind);
         }
         ICRC3Value::Map(block)
     }
+
+    fn text_btype(value: &str) -> Option<ICRC3Value> {
+        Some(ICRC3Value::Text(value.into()))
+    }
+
+    fn decoded_transfer(block: &ICRC3Value) -> (Account, Account, Nat, Option<Vec<u8>>) {
+        let LedgerEvent::Transfer {
+            from,
+            to,
+            amount,
+            memo,
+        } = decode_block(block).unwrap()
+        else {
+            panic!("expected transfer")
+        };
+        (from, to, amount, memo)
+    }
+
+    fn tx_mut(block: &mut ICRC3Value) -> &mut BTreeMap<String, ICRC3Value> {
+        let ICRC3Value::Map(outer) = block else {
+            unreachable!()
+        };
+        let ICRC3Value::Map(tx) = outer.get_mut("tx").unwrap() else {
+            unreachable!()
+        };
+        tx
+    }
+
     #[test]
-    fn decodes_transfer_variants_and_normalizes_default_account() {
-        for kind in [Some("1xfer"), Some("2xfer"), None] {
-            let LedgerEvent::Transfer {
-                from,
-                to,
-                amount,
-                memo,
-            } = decode_block(&transfer(kind)).unwrap()
-            else {
-                panic!()
-            };
+    fn transfer_discriminator_distinguishes_absent_unknown_and_malformed_btype() {
+        for (name, kind, op) in [
+            ("1xfer without op", text_btype("1xfer"), None),
+            ("1xfer with op", text_btype("1xfer"), Some("xfer")),
+            ("2xfer without op", text_btype("2xfer"), None),
+            ("2xfer with op", text_btype("2xfer"), Some("xfer")),
+            ("absent legacy fallback", None, Some("xfer")),
+        ] {
+            let (from, to, amount, memo) = decoded_transfer(&transfer(kind, op, Nat::from(7u8)));
             assert_eq!(from, to);
             assert_eq!(amount, Nat::from(7u8));
             assert_eq!(memo, Some(vec![9]));
+            assert!(!name.is_empty());
+        }
+
+        assert_eq!(
+            decode_block(&transfer(text_btype("99future"), Some("xfer"), 7u8.into())).unwrap(),
+            LedgerEvent::Other,
+            "a present unknown btype is authoritative"
+        );
+        assert_eq!(
+            decode_block(&transfer(None, None, 7u8.into())).unwrap(),
+            LedgerEvent::Other
+        );
+        assert_eq!(
+            decode_block(&ICRC3Value::Map(BTreeMap::from([(
+                "btype".into(),
+                ICRC3Value::Nat(1u8.into())
+            )])))
+            .unwrap_err(),
+            "block btype is not Text"
+        );
+    }
+
+    #[test]
+    fn recognized_transfer_requires_a_valid_tx_and_required_fields() {
+        for tx in [None, Some(ICRC3Value::Text("wrong".into()))] {
+            let mut fields = BTreeMap::new();
+            fields.insert("btype".into(), ICRC3Value::Text("1xfer".into()));
+            if let Some(tx) = tx {
+                fields.insert("tx".into(), tx);
+            }
+            assert_eq!(
+                decode_block(&ICRC3Value::Map(fields)).unwrap_err(),
+                "transfer block has no tx map"
+            );
+        }
+
+        for field in ["from", "to", "amt"] {
+            for replacement in [None, Some(ICRC3Value::Text("wrong".into()))] {
+                let mut block = transfer(text_btype("2xfer"), None, 7u8.into());
+                match replacement {
+                    Some(value) => {
+                        tx_mut(&mut block).insert(field.into(), value);
+                    }
+                    None => {
+                        tx_mut(&mut block).remove(field);
+                    }
+                }
+                assert!(decode_block(&block).is_err(), "{field}");
+            }
+        }
+
+        let mut without_memo = transfer(text_btype("1xfer"), None, 7u8.into());
+        tx_mut(&mut without_memo).remove("memo");
+        assert_eq!(decoded_transfer(&without_memo).3, None);
+        let mut wrong_memo = transfer(text_btype("1xfer"), None, 7u8.into());
+        tx_mut(&mut wrong_memo).insert("memo".into(), ICRC3Value::Text("wrong".into()));
+        assert_eq!(
+            decode_block(&wrong_memo).unwrap_err(),
+            "transfer memo is not Blob"
+        );
+    }
+
+    #[test]
+    fn account_shapes_and_subaccount_lengths_are_checked_and_normalized() {
+        let owner = Principal::from_slice(&[1, 2, 3]);
+        let (from, to, _, _) = decoded_transfer(&transfer(None, Some("xfer"), 1u8.into()));
+        assert_eq!(from.subaccount, None);
+        assert_eq!(to.subaccount, Some([0; 32]));
+        assert_eq!(
+            from, to,
+            "absent and explicit zero subaccounts normalize equally"
+        );
+
+        for values in [
+            vec![],
+            vec![
+                ICRC3Value::Blob(owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(vec![0; 32].into()),
+                ICRC3Value::Blob(vec![0; 32].into()),
+            ],
+        ] {
+            assert_eq!(
+                account(Some(&ICRC3Value::Array(values))).unwrap_err(),
+                "account array length must be 1 or 2"
+            );
+        }
+        assert_eq!(
+            account(Some(&ICRC3Value::Array(vec![ICRC3Value::Nat(1u8.into())]))).unwrap_err(),
+            "account owner is not a blob"
+        );
+        assert_eq!(
+            account(Some(&ICRC3Value::Array(vec![ICRC3Value::Blob(
+                vec![0; 30].into()
+            )])))
+            .unwrap_err(),
+            "invalid account owner principal"
+        );
+
+        for (length, valid) in [(31, false), (32, true), (33, false)] {
+            let value = ICRC3Value::Array(vec![
+                ICRC3Value::Blob(owner.as_slice().to_vec().into()),
+                ICRC3Value::Blob(vec![0; length].into()),
+            ]);
+            assert_eq!(account(Some(&value)).is_ok(), valid, "length={length}");
         }
     }
+
     #[test]
-    fn malformed_identified_transfer_fails() {
-        let mut block = transfer(Some("1xfer"));
-        let ICRC3Value::Map(ref mut outer) = block else {
-            unreachable!()
-        };
-        let ICRC3Value::Map(ref mut tx) = outer.get_mut("tx").unwrap() else {
-            unreachable!()
-        };
-        tx.remove("from");
-        assert!(decode_block(&block).is_err());
+    fn transfer_amounts_remain_arbitrary_precision_and_extra_fields_are_harmless() {
+        let above_u64 = Nat::from_str("18446744073709551616").unwrap();
+        for amount in [Nat::from(0u8), Nat::from(u64::MAX), above_u64] {
+            let mut block = transfer(text_btype("1xfer"), None, amount.clone());
+            tx_mut(&mut block).insert("created_at_time".into(), ICRC3Value::Nat(123u8.into()));
+            let ICRC3Value::Map(outer) = &mut block else {
+                unreachable!()
+            };
+            outer.insert("phash".into(), ICRC3Value::Blob(vec![4, 5].into()));
+            assert_eq!(decoded_transfer(&block).2, amount);
+        }
     }
+
     #[test]
     fn unknown_type_is_other_without_recursive_walk() {
         assert_eq!(

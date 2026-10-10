@@ -149,8 +149,8 @@ export function createApp({
     $('pricing').textContent = requested.status === 'planned'
       ? 'Pricing unavailable until launch.'
       : 'Verifying backend configuration…';
+    render();
     if (requested.status !== 'live') {
-      render();
       return;
     }
     try {
