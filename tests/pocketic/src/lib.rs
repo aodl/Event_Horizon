@@ -5680,18 +5680,18 @@ mod tests {
         let index = request("/")?;
         assert_eq!(index.status_code, 200);
         let html = String::from_utf8(index.body)?;
-        assert!(html.contains("styles.css?v=4"));
-        assert!(html.contains("app.bundle.js?v=2"));
+        assert!(html.contains("styles.css?v=9"));
+        assert!(html.contains("app.bundle.js?v=3"));
         assert!(!html.contains("href=\"styles.css\""));
         assert!(!html.contains("src=\"app.bundle.js\""));
 
         for (url, source) in [
             (
-                "/styles.css?v=4",
+                "/styles.css?v=9",
                 workspace_root()?.join("canisters/frontend/public/styles.css"),
             ),
             (
-                "/app.bundle.js?v=2",
+                "/app.bundle.js?v=3",
                 workspace_root()?.join("canisters/frontend/public/app.bundle.js"),
             ),
         ] {
