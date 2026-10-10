@@ -64,7 +64,77 @@ The legacy wire fixture independently mirrors the official interface, including 
 
 ## Validation and artifact evidence
 
-Targeted Rust unit, Node, and isolated PocketIC regressions passed during implementation. Final aggregate counts, source/artifact revisions, canonical hashes, frontend pin agreement, and release-gate results are recorded here after the clean artifact-source commit and canonical builds.
+The complete artifact-source revision is
+`65de64b354bf30a37e4e5ef49f3563f7a8e97721`. The final gates against that
+revision produced:
+
+- `cargo run -p xtask -- test_all`: 84 Rust tests (65 backend and 19 xtask),
+  24 frontend Node tests, and 101 isolated PocketIC tests passed; no test
+  failed.
+- `cargo fmt --all -- --check`: passed.
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`: passed.
+- `./tools/scripts/security-scan`: passed. Cargo audit/deny, npm audit, and
+  OSV reported no unfiltered vulnerability; the four existing documented
+  transitive warnings remained explicitly allowed.
+- `npm run verify:reproducible-artifacts`: passed with byte-identical output
+  from two independent no-cache Docker builders and the exclusive pinned APT
+  snapshot configuration.
+- `./tools/scripts/docker-build`: passed from the commit-derived canonical
+  context. The restored artifact manifest verified after the local build.
+- `DFX_IDENTITY=codex_local icp build -e local`: reported `Canisters built
+  successfully`.
+- Production export audits passed: the backend has 10 total exports and only
+  `get_instance` and `get_pricing` as application queries; the frontend has 7
+  total exports and only `http_request` as its application query. No debug mock
+  surface is present in the production backend.
+
+The first aggregate run after preserving the newer frontend revisions exposed
+one unrelated stale regression literal: the certified-transition test expected
+`styles.css?v=4` and `app.bundle.js?v=2`, while committed HTML already used
+`v=9` and `v=3`. Only those test expectations were aligned; no frontend asset
+or behavior was changed by that correction. The isolated test and subsequent
+full aggregate gates passed.
+
+Canonical artifact evidence:
+
+- Backend Wasm SHA-256:
+  `9775fa94617e4c089e9b7420129de0392e870d1d8ea4281f426bd1890c72721a`.
+- Frontend Wasm SHA-256:
+  `4f2a5b873f4ebef34d15cfc60f6185c9e40ab9dc70af4f3de0ddde1f3a871cde`.
+- `build-info.json` SHA-256:
+  `5fe7145fa309efb9bcf12cef47aeac6de13f03315ffafd27ecfeef22bcf8ff0e`.
+- Artifact manifest SHA-256:
+  `fe81ad9278198a611c7f03c2883af43826de4c9f184d4c6389fb8017f1a7248f`.
+- Deterministic canonical release archive SHA-256:
+  `81b9a5a6759102da8c7be4d239247a868b7366a3c8c7c2c315071b19e0076653`.
+
+The static registry and generated frontend bundle both pin the exact backend
+hash above. The deterministic archive hash is reproducible with:
+
+```bash
+tar --sort=name --mtime='@1700000000' --owner=0 --group=0 \
+  --numeric-owner --format=ustar -C release-artifacts -cf - \
+  build-info.json event_horizon.wasm event_horizon_frontend.wasm \
+  release-artifacts.sha256 | gzip -n | sha256sum
+```
+
+The artifact-source revision is followed only by this evidence report and its
+regenerated source manifest. The source manifest was verified after that
+evidence-only commit.
+
+## Operator handoff
+
+The production action, when separately authorized, is a state-preserving,
+argument-free patch upgrade of the existing backend. It must not be a reinstall
+and requires no replacement constructor arguments. Acceptance should compare a
+later reader cursor with a read-only ledger-tip observation taken near the same
+time, while accounting for the moving tip and explicit archive skips. The
+disappearance of one log line, a HEALTH entry, or a merely increasing cursor is
+not sufficient evidence of complete catch-up.
+
+No deploy, install, reinstall, upgrade, controller change, token/cycles
+transfer, top-up, payout, alias publication, or other mainnet mutation occurred
+during this work.
 
 ## Remaining limits
 
