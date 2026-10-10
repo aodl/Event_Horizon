@@ -183,6 +183,13 @@ service : {
 }
 ```
 
+Event Horizon always sends this one `vec PokeMatch` argument. A wake-up-only
+subscriber may instead implement `poke : () -> ()`; Candid argument-sequence
+compatibility ignores the extra payload at that receiver. Empty and nonempty
+vectors use the same rule. These are alternative receiver implementations of
+one outbound protocol: there is no callback negotiation, discovery, fallback,
+or per-subscription callback setting.
+
 `max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
 Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.

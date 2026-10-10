@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use candid::{CandidType, Nat};
+use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
 use std::cell::RefCell;
 
@@ -20,6 +20,7 @@ struct PokeMatch {
 struct State {
     pokes: u64,
     last_matches: Vec<PokeMatch>,
+    last_caller: Option<Principal>,
     trap: bool,
 }
 
@@ -36,6 +37,7 @@ fn poke(matches: Vec<PokeMatch>) {
         let mut s = s.borrow_mut();
         s.pokes += 1;
         s.last_matches = matches;
+        s.last_caller = Some(ic_cdk::api::msg_caller());
         if s.trap {
             ic_cdk::trap("forced subscriber trap")
         }
@@ -50,6 +52,11 @@ fn debug_pokes() -> u64 {
 #[ic_cdk::query]
 fn debug_last_matches() -> Vec<PokeMatch> {
     STATE.with(|s| s.borrow().last_matches.clone())
+}
+
+#[ic_cdk::query]
+fn debug_last_caller() -> Option<Principal> {
+    STATE.with(|s| s.borrow().last_caller)
 }
 
 #[ic_cdk::update]

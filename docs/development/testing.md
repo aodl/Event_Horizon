@@ -39,7 +39,15 @@ cargo test --locked -p event-horizon-pocketic --lib '<exact-test-name>' \
   -- --exact --ignored --nocapture --test-threads=1
 ```
 
-One-way subscriber callbacks are tested with a bounded condition-based PocketIC wait. Exhaustion reports the expected condition, deterministic tick bound, elapsed time, the last mock-subscriber observation, and Event Horizon debug state.
+One-way subscriber callbacks are tested with a bounded condition-based PocketIC wait. Exhaustion reports the expected condition, subscriber principal and receiver style, deterministic tick bound, elapsed time, the last mock-subscriber observation, and Event Horizon debug state. Positive delivery assertions require a fresh receiver-side counter increment and verify the recorded caller; Event Horizon's accepted one-way-call counter alone is not treated as execution evidence.
+
+Ordinary Rust tests distinguish a zero-argument Candid sequence, one `null`
+argument, and one empty match vector, then cover both zero-argument and
+vector-taking decoders with empty, nonempty, and 256-match payloads. A direct
+PocketIC case sends identical encoded vectors through the two fixtures' real
+CDK-generated entry points. Production-path cases then use ordinary
+Faucet/Historian admission and Ledger polling with both receiver styles in one
+instance, across the shared ICP reader and a separate ICRC-3 observed ledger.
 
 ## What PocketIC covers
 
@@ -53,6 +61,9 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;
 - one poke carrying deterministic target/maximum-amount matches per subscriber per poll, bounded to 256 specific targets;
+- zero-argument wake-up receivers alongside payload-aware receivers, including
+  real entry-point arity rejection, global and specific delivery, caller
+  authentication evidence, coalescing, precedence, and no-new-work behavior;
 - NNS and verified-SNS neuron ownership, nonce derivation, ranges, and exact raw amounts;
 - SNS Root transport and relationship failures that remain fail-closed and log once per uninterrupted failure episode;
 - ordinary full-width `u64` targets, arbitrary-precision `Nat` callbacks, and the outbound 256-target bound;

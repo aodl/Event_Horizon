@@ -1,6 +1,6 @@
 # Event Horizon
 
-Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. Its target-aware poke reports each matching numeric subaccount or neuron nonce and the largest qualifying raw transfer amount. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
+Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each matching numeric subaccount or neuron nonce and the largest qualifying raw transfer amount; wake-up-only subscribers may expose a zero-argument receiver and ignore that payload through Candid compatibility. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
 
 Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. Trigger thresholds use the observed token's decimals, while prices, cycles funding, and any surplus remain ICP.
 

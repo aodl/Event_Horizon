@@ -6,7 +6,7 @@ Event Horizon accelerates an application's authoritative Ledger or optional Inde
 
 1. Identify the Event Horizon instance or instances for the ledgers the application needs.
 2. Record each trusted Event Horizon canister principal and its immutable observed ledger.
-3. Implement the target-aware `poke` callback.
+3. Implement either the target-aware or wake-up-only `poke` callback.
 4. Authenticate `caller` before interpreting any match.
 5. Maintain authoritative reconciliation cursor/state independently per observed ledger.
 6. Create the required Jupiter declaration for each instance.
@@ -22,11 +22,59 @@ type PokeMatch = record { target : PokeTarget; max_amount : nat };
 service : { poke : (vec PokeMatch) -> (); }
 ```
 
+Event Horizon has one outbound callback format and always sends the match
+vector above. A subscriber chooses one of the two receiver styles described in
+this guide; Event Horizon does not discover, negotiate, or retry another
+signature. Candid permits a receiver with fewer arguments to ignore extra
+arguments. See the [Candid argument and result sequence
+rules](https://github.com/dfinity/candid/blob/master/spec/Candid.md#upgrading-and-subtyping).
+
 Jupiter suffixes accept `<subscriber>`, `<subscriber>.<number>[:<amount>]`, `<subscriber>.<start>-<end>[:<amount>]`, and corresponding neuron forms using `n<nonce>` or `n<start>-<end>`. Numbers are canonical decimal `u64`. An inclusive range contains 2 through 256 targets and may begin anywhere. The complete routed memo still must fit 32 bytes.
 
 Numeric subaccount `N` means subscriber ownership with `24 zero bytes || N.to_be_bytes()`. Neuron nonce `N` derives the staking subaccount with controller equal to the subscriber principal. ICP uses NNS Governance as owner; an SNS-token instance uses its verified SNS Governance. This excludes hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts.
 
 `max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. It is a prefilter hint, not proof of payment. Specific matches take precedence over simultaneous global activity. `poke([])` means global-only activity. Non-empty targets are ordered as numeric subaccounts ascending and then neuron nonces ascending, with at most 256 retained targets per subscriber per poll. Any omission affects wake-up latency only.
+
+## Wake-up-only subscribers
+
+A consumer that needs only a wake-up signal may expose this alternative
+receiver interface:
+
+```candid
+service : { poke : () -> (); }
+```
+
+Event Horizon still sends its standard match-vector payload. A wake-up-only
+subscriber may expose a zero-argument `poke()` update method; the extra
+argument is ignored. The subscriber can use that notification to schedule
+authoritative reconciliation without interpreting target or amount hints.
+This works for both empty global payloads and nonempty specific-match payloads;
+it does not depend on the canister previously exposing the longer signature.
+
+Choosing `poke()` does not make a subscription global. Global, account, range,
+and neuron declarations retain their existing meanings. The zero-argument
+receiver simply discards the targets and `max_amount` values, so it must not
+claim to have performed the payload-aware local filtering described below.
+
+Authenticate the caller before scheduling meaningful work. A multi-ledger
+consumer must retain a trusted Event-Horizon-caller-to-observed-ledger mapping
+and independent reconciliation state for every ledger. Treat each callback as
+a best-effort hint, coalesce repeated wake-ups locally, prevent overlapping
+reconciliation work, and retain an independent periodic reconciliation path.
+
+For example, an index canister that implements the callback could use the
+following pseudocode; this does not imply that every existing Index canister
+already exports `poke`:
+
+```text
+poke():
+    context = trusted_event_horizon_instances.get(caller)
+    if context is absent:
+        return
+
+    mark reconciliation needed for context.observed_ledger
+    schedule reconciliation unless already scheduled or running
+```
 
 ## Subscribing to multiple ledgers
 

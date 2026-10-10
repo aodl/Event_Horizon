@@ -18,7 +18,7 @@ is required before opening the instance for subscriber use: Faucet payout plus
 Historian route evidence is how subscriber declarations are funded and
 admitted.
 
-Qualifying activity is coalesced once per subscriber per poll. A specific callback reports sorted target/maximum-raw-amount pairs; an empty vector represents global-only activity. The callback is intentionally one-way and best-effort. Event Horizon does not retry or account for delivery, and subscribers must retain their own authoritative ledger cursors.
+Qualifying activity is coalesced once per subscriber per poll. A specific callback reports sorted target/maximum-raw-amount pairs; an empty vector represents global-only activity. Event Horizon always sends this vector payload, while a wake-up-only subscriber may implement a zero-argument `poke()` receiver and ignore it through Candid argument compatibility. The callback is intentionally one-way and best-effort. Event Horizon does not negotiate signatures, retry, or account for delivery, and subscribers must retain their own authoritative ledger cursors.
 
 Funding converts retained ICP through the CMC while preserving reserve protection, duplicate-safe transfer identity, and upgrade recovery. A configured recipient begins at diversion level zero; it does not bypass the seven-day policy or either 150 T gate. Before value moves, a split freezes the destination account, memo, amount, and fee. Recovery continues with that identity rather than re-reading instance configuration. Canonical ICP currently installs with no recipient.
 

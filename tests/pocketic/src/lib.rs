@@ -9,7 +9,9 @@ mod tests {
     };
 
     use anyhow::{anyhow, bail, Context, Result};
-    use candid::{decode_one, encode_one, CandidType, Deserialize, Principal};
+    use candid::{
+        decode_args, decode_one, encode_args, encode_one, CandidType, Deserialize, Principal,
+    };
     use pocket_ic::{CreateCanisterParams, PocketIc, PocketIcBuilder};
     use sha2::{Digest, Sha224, Sha256};
 
@@ -18,6 +20,7 @@ mod tests {
     static HISTORIAN_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static CMC_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    static SUBSCRIBER_NO_ARGS_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SNS_ROOT_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
@@ -92,6 +95,11 @@ mod tests {
             .query_call(id, Principal::anonymous(), method, encode_one(arg)?)
             .map_err(|e| anyhow!("{method}: {e:?}"))?;
         Ok(decode_one(&bytes)?)
+    }
+
+    fn update_raw(pic: &PocketIc, id: Principal, method: &str, bytes: Vec<u8>) -> Result<Vec<u8>> {
+        pic.update_call(id, Principal::anonymous(), method, bytes)
+            .map_err(|error| anyhow!("{method}: {error:?}"))
     }
 
     fn legacy_account_id(owner: Principal, subaccount: [u8; 32]) -> Vec<u8> {
@@ -352,6 +360,7 @@ mod tests {
         historian: Principal,
         cmc: Principal,
         subscriber: Principal,
+        subscriber_no_args: Principal,
         event_horizon: Principal,
         faucet: Principal,
         sns_root: Option<Principal>,
@@ -361,6 +370,13 @@ mod tests {
     struct SubscriberObservation {
         pokes: u64,
         matches: Vec<PokeMatch>,
+        last_caller: Option<Principal>,
+    }
+
+    #[derive(Debug)]
+    struct NoArgsSubscriberObservation {
+        pokes: u64,
+        last_caller: Option<Principal>,
     }
 
     impl Env {
@@ -461,6 +477,7 @@ mod tests {
             let historian = pic.create_canister();
             let cmc = pic.create_canister();
             let subscriber = pic.create_canister();
+            let subscriber_no_args = pic.create_canister();
             let sns_root = sns.then(|| pic.create_canister());
             let event_horizon = pic
                 .create_canister_with_params(
@@ -472,9 +489,16 @@ mod tests {
                     },
                 )
                 .map_err(|error| anyhow!("create Event Horizon canister: {error}"))?;
-            for id in [ledger, observed_ledger, historian, cmc, subscriber]
-                .into_iter()
-                .chain(sns_root)
+            for id in [
+                ledger,
+                observed_ledger,
+                historian,
+                cmc,
+                subscriber,
+                subscriber_no_args,
+            ]
+            .into_iter()
+            .chain(sns_root)
             {
                 pic.add_cycles(id, 200_000_000_000_000);
             }
@@ -537,6 +561,12 @@ mod tests {
                 vec![],
                 None,
             );
+            pic.install_canister(
+                subscriber_no_args,
+                wasm(&SUBSCRIBER_NO_ARGS_WASM, "mock-subscriber-no-args", None)?,
+                vec![],
+                None,
+            );
             let faucet = Principal::from_slice(&[42]);
             pic.install_canister(
                 event_horizon,
@@ -559,6 +589,7 @@ mod tests {
                 historian,
                 cmc,
                 subscriber,
+                subscriber_no_args,
                 event_horizon,
                 faucet,
                 sns_root,
@@ -571,6 +602,13 @@ mod tests {
             Ok(SubscriberObservation {
                 pokes: query(&self.pic, self.subscriber, "debug_pokes", ())?,
                 matches: query(&self.pic, self.subscriber, "debug_last_matches", ())?,
+                last_caller: query(&self.pic, self.subscriber, "debug_last_caller", ())?,
+            })
+        }
+        fn no_args_subscriber_observation(&self) -> Result<NoArgsSubscriberObservation> {
+            Ok(NoArgsSubscriberObservation {
+                pokes: query(&self.pic, self.subscriber_no_args, "debug_pokes", ())?,
+                last_caller: query(&self.pic, self.subscriber_no_args, "debug_last_caller", ())?,
             })
         }
         fn wait_for_subscriber<F>(
@@ -595,9 +633,38 @@ mod tests {
             }
             bail!(
                 "one-way subscriber callback did not reach expected condition `{expected}`; \
+                 subscriber principal: {} type: vec PokeMatch; \
                  ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
                  last observed subscriber state: {last:?}; Event Horizon state: {:?}",
+                self.subscriber,
                 started.elapsed(),
+                self.state()?
+            )
+        }
+        fn wait_for_no_args_pokes(&self, expected: u64) -> Result<NoArgsSubscriberObservation> {
+            let started = std::time::Instant::now();
+            let mut last = self.no_args_subscriber_observation()?;
+            for ticks in 0..=MAX_ONE_WAY_CALLBACK_TICKS {
+                if last.pokes == expected {
+                    return Ok(last);
+                }
+                if ticks == MAX_ONE_WAY_CALLBACK_TICKS {
+                    break;
+                }
+                self.pic.tick();
+                last = self.no_args_subscriber_observation()?;
+            }
+            bail!(
+                "one-way subscriber callback did not reach expected count {expected}; \
+                 subscriber principal: {} type: zero arguments; \
+                 ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
+                 observed count: {}; last caller: {:?}; vector subscriber state: {:?}; \
+                 Event Horizon state: {:?}",
+                self.subscriber_no_args,
+                started.elapsed(),
+                last.pokes,
+                last.last_caller,
+                self.subscriber_observation()?,
                 self.state()?
             )
         }
@@ -896,12 +963,19 @@ mod tests {
             )
         }
         fn subscription(&self, subaccount: u64) -> Result<Option<Subscription>> {
+            self.subscription_for(self.subscriber, subaccount)
+        }
+        fn subscription_for(
+            &self,
+            subscriber: Principal,
+            subaccount: u64,
+        ) -> Result<Option<Subscription>> {
             query(
                 &self.pic,
                 self.event_horizon,
                 "debug_subscription",
                 DebugSubscriptionArgs {
-                    subscriber: self.subscriber,
+                    subscriber,
                     target: WatchTarget::Subaccount(subaccount),
                 },
             )
@@ -918,11 +992,14 @@ mod tests {
             )
         }
         fn global_subscription(&self) -> Result<bool> {
+            self.global_subscription_for(self.subscriber)
+        }
+        fn global_subscription_for(&self, subscriber: Principal) -> Result<bool> {
             query(
                 &self.pic,
                 self.event_horizon,
                 "debug_global_subscription",
-                self.subscriber,
+                subscriber,
             )
         }
         fn set_observed_profile_available(&self, value: bool) -> Result<()> {
@@ -948,12 +1025,22 @@ mod tests {
             update(&self.pic, self.event_horizon, "debug_set_cursors", args)
         }
         fn admit_global(&self, total: u64) -> Result<Vec<u8>> {
-            let memo = self.append_global_admission(total)?;
+            self.admit_global_for(self.subscriber, total)
+        }
+        fn admit_global_for(&self, subscriber: Principal, total: u64) -> Result<Vec<u8>> {
+            let memo = self.append_global_admission_for(subscriber, total)?;
             self.poll()?;
             Ok(memo)
         }
         fn append_global_admission(&self, total: u64) -> Result<Vec<u8>> {
-            let memo = self.subscriber.to_text().replace('-', "").into_bytes();
+            self.append_global_admission_for(self.subscriber, total)
+        }
+        fn append_global_admission_for(
+            &self,
+            subscriber: Principal,
+            total: u64,
+        ) -> Result<Vec<u8>> {
+            let memo = subscriber.to_text().replace('-', "").into_bytes();
             self.set_route(memo.clone(), total)?;
             self.append(
                 account_id(self.faucet, [0; 32]),
@@ -964,7 +1051,17 @@ mod tests {
             Ok(memo)
         }
         fn admit(&self, subaccount: u64, threshold: Option<&str>, total: u64) -> Result<Vec<u8>> {
-            let memo = self.append_account_admission(subaccount, threshold, total)?;
+            self.admit_for(self.subscriber, subaccount, threshold, total)
+        }
+        fn admit_for(
+            &self,
+            subscriber: Principal,
+            subaccount: u64,
+            threshold: Option<&str>,
+            total: u64,
+        ) -> Result<Vec<u8>> {
+            let memo =
+                self.append_account_admission_for(subscriber, subaccount, threshold, total)?;
             self.poll()?;
             Ok(memo)
         }
@@ -1034,7 +1131,16 @@ mod tests {
             threshold: Option<&str>,
             total: u64,
         ) -> Result<Vec<u8>> {
-            let compact = self.subscriber.to_text().replace('-', "");
+            self.append_account_admission_for(self.subscriber, subaccount, threshold, total)
+        }
+        fn append_account_admission_for(
+            &self,
+            subscriber: Principal,
+            subaccount: u64,
+            threshold: Option<&str>,
+            total: u64,
+        ) -> Result<Vec<u8>> {
+            let compact = subscriber.to_text().replace('-', "");
             let memo = match threshold {
                 Some(v) => format!("{compact}.{subaccount}:{v}"),
                 None => format!("{compact}.{subaccount}"),
@@ -1095,6 +1201,252 @@ mod tests {
                 Some("debug_api"),
             )?)
         }
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generated_subscriber_entrypoints_obey_candid_argument_compatibility() -> Result<()> {
+        let pic = PocketIcBuilder::new().with_application_subnet().build();
+        let vector_subscriber = pic.create_canister();
+        let no_args_subscriber = pic.create_canister();
+        for subscriber in [vector_subscriber, no_args_subscriber] {
+            pic.add_cycles(subscriber, 200_000_000_000_000);
+        }
+        pic.install_canister(
+            vector_subscriber,
+            wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
+            vec![],
+            None,
+        );
+        pic.install_canister(
+            no_args_subscriber,
+            wasm(&SUBSCRIBER_NO_ARGS_WASM, "mock-subscriber-no-args", None)?,
+            vec![],
+            None,
+        );
+
+        let empty_payload = encode_one(Vec::<PokeMatch>::new())?;
+        for subscriber in [vector_subscriber, no_args_subscriber] {
+            let reply = update_raw(&pic, subscriber, "poke", empty_payload.clone())?;
+            decode_args::<()>(&reply)?;
+        }
+        assert_eq!(
+            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
+            1
+        );
+        assert_eq!(
+            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
+            1
+        );
+        assert!(
+            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?
+                .is_empty()
+        );
+
+        // The general `update` helper uses `encode_one(())`, which is one null
+        // argument. This arity-sensitive case deliberately supplies the true
+        // empty argument sequence instead.
+        let zero_arguments = encode_args(())?;
+        let reply = update_raw(&pic, no_args_subscriber, "poke", zero_arguments.clone())?;
+        decode_args::<()>(&reply)?;
+        assert!(pic
+            .update_call(
+                vector_subscriber,
+                Principal::anonymous(),
+                "poke",
+                zero_arguments
+            )
+            .is_err());
+        assert_eq!(
+            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
+            1
+        );
+        assert_eq!(
+            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
+            2
+        );
+
+        let matches = vec![
+            PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(9u8),
+            },
+            PokeMatch {
+                target: WatchTarget::NeuronNonce(11),
+                max_amount: candid::Nat::from_str("18446744073709551616")?,
+            },
+        ];
+        let nonempty_payload = encode_one(&matches)?;
+        for subscriber in [vector_subscriber, no_args_subscriber] {
+            let reply = update_raw(&pic, subscriber, "poke", nonempty_payload.clone())?;
+            decode_args::<()>(&reply)?;
+        }
+        assert_eq!(
+            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
+            2
+        );
+        assert_eq!(
+            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
+            3
+        );
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?,
+            matches
+        );
+        assert_eq!(
+            query::<_, Option<Principal>>(&pic, vector_subscriber, "debug_last_caller", ())?,
+            Some(Principal::anonymous())
+        );
+        assert_eq!(
+            query::<_, Option<Principal>>(&pic, no_args_subscriber, "debug_last_caller", ())?,
+            Some(Principal::anonymous())
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn shared_icp_mixed_receiver_styles_cover_global_specific_and_coalescing() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+
+        env.admit_for(env.subscriber, 7, None, 1_000_000_000)?;
+        env.admit_for(env.subscriber_no_args, 7, None, 1_000_000_000)?;
+        assert!(env.subscription_for(env.subscriber, 7)?.is_some());
+        assert!(env.subscription_for(env.subscriber_no_args, 7)?.is_some());
+
+        env.admit_global_for(env.subscriber, 10_000_000_000)?;
+        let vector_before_second_global = env.subscriber_observation()?.pokes;
+        env.admit_global_for(env.subscriber_no_args, 10_000_000_000)?;
+        env.wait_for_pokes(vector_before_second_global + 1)?;
+        assert!(env.global_subscription_for(env.subscriber)?);
+        assert!(env.global_subscription_for(env.subscriber_no_args)?);
+
+        let vector_global_before = env.subscriber_observation()?.pokes;
+        let no_args_global_before = env.no_args_subscriber_observation()?.pokes;
+        let dispatch_global_before = env.poke_counts()?;
+        env.append(
+            account_id(Principal::from_slice(&[90]), [0; 32]),
+            account_id(Principal::from_slice(&[91]), [0; 32]),
+            1,
+            None,
+        )?;
+        env.poll()?;
+        let vector_global = env.wait_for_pokes(vector_global_before + 1)?;
+        let no_args_global = env.wait_for_no_args_pokes(no_args_global_before + 1)?;
+        assert_eq!(vector_global.pokes, vector_global_before + 1);
+        assert!(vector_global.matches.is_empty());
+        assert_eq!(vector_global.last_caller, Some(env.event_horizon));
+        assert_eq!(no_args_global.last_caller, Some(env.event_horizon));
+        assert_eq!(
+            env.poke_counts()?,
+            vec![dispatch_global_before[0] + 2, dispatch_global_before[1] + 2],
+            "one payload-bearing dispatch per intended subscriber"
+        );
+
+        let vector_specific_before = vector_global.pokes;
+        let no_args_specific_before = no_args_global.pokes;
+        let dispatch_specific_before = env.poke_counts()?;
+        let source = account_id(Principal::from_slice(&[92]), [0; 32]);
+        for amount in [3, 9] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                amount,
+                None,
+            )?;
+        }
+        for amount in [4, 8] {
+            env.append(
+                source.clone(),
+                account_id(env.subscriber_no_args, numbered(7)),
+                amount,
+                None,
+            )?;
+        }
+        env.poll()?;
+        let vector_specific = env.wait_for_pokes(vector_specific_before + 1)?;
+        let no_args_specific = env.wait_for_no_args_pokes(no_args_specific_before + 1)?;
+        assert_eq!(
+            vector_specific.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(9u8),
+            }],
+            "specific matches take precedence over the same subscriber's global interest"
+        );
+        assert_eq!(vector_specific.last_caller, Some(env.event_horizon));
+        assert_eq!(no_args_specific.last_caller, Some(env.event_horizon));
+        assert_eq!(
+            env.poke_counts()?,
+            vec![
+                dispatch_specific_before[0] + 2,
+                dispatch_specific_before[1] + 2
+            ],
+            "multiple transfers coalesce without a signature fallback"
+        );
+
+        let no_work_dispatch = env.poke_counts()?;
+        env.poll()?;
+        for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+            env.pic.tick();
+        }
+        assert_eq!(env.poke_counts()?, no_work_dispatch);
+        assert_eq!(
+            env.subscriber_observation()?.pokes,
+            vector_specific_before + 1
+        );
+        assert_eq!(
+            env.no_args_subscriber_observation()?.pokes,
+            no_args_specific_before + 1
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_icrc3_specific_activity_executes_both_receiver_styles() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        env.admit_for(env.subscriber, 19, None, 1_000_000_000)?;
+        env.admit_for(env.subscriber_no_args, 19, None, 1_000_000_000)?;
+
+        let vector_before = env.subscriber_observation()?.pokes;
+        let no_args_before = env.no_args_subscriber_observation()?.pokes;
+        let dispatch_before = env.poke_counts()?;
+        let source = account_id(Principal::from_slice(&[93]), [0; 32]);
+        for amount in [5, 13] {
+            env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(19)),
+                amount,
+                None,
+            )?;
+            env.append_observed(
+                source.clone(),
+                account_id(env.subscriber_no_args, numbered(19)),
+                amount - 1,
+                None,
+            )?;
+        }
+        env.poll()?;
+
+        let vector = env.wait_for_pokes(vector_before + 1)?;
+        let no_args = env.wait_for_no_args_pokes(no_args_before + 1)?;
+        assert_eq!(
+            vector.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(19),
+                max_amount: candid::Nat::from(13u8),
+            }]
+        );
+        assert_eq!(vector.last_caller, Some(env.event_horizon));
+        assert_eq!(no_args.last_caller, Some(env.event_horizon));
+        assert_eq!(
+            env.poke_counts()?,
+            vec![dispatch_before[0] + 2, dispatch_before[1] + 2]
+        );
+        Ok(())
     }
 
     #[test]
