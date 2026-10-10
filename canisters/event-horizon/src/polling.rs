@@ -11,7 +11,10 @@ use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
     icrc3::blocks::{BlockWithId, GetBlocksResult},
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Range,
+};
 
 const MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256;
 
@@ -494,8 +497,7 @@ async fn legacy_page(
     r: icp_ledger::QueryBlocksResponse,
     s: Stream,
     boundary: u64,
-    requested_start: u64,
-    requested_length: u64,
+    requested: Range<u64>,
     decimals: u8,
     out: &mut BTreeMap<Principal, MatchState>,
     shared_globals: Option<&mut SharedGlobalOrder>,
@@ -506,15 +508,15 @@ async fn legacy_page(
     let original = position(&state::read_metadata(), s)
         .ok_or("shared cursor invariant violated")?
         .1;
-    if original != requested_start {
+    if original != requested.start {
         return Err(format!(
-            "{} request cursor changed expected={requested_start} actual={original}",
-            name(s)
+            "{} request cursor changed expected={} actual={original}",
+            name(s),
+            requested.start,
         ));
     }
-    let requested_end = request_end(requested_start, requested_length, boundary)?;
     let mut at = original;
-    let archived = legacy_archived(&r.archived_blocks, at, requested_end)?;
+    let archived = legacy_archived(&r.archived_blocks, at, requested.end)?;
     if archived > at {
         logging::history_gap(name(s), at, archived);
         at = archived;
@@ -539,7 +541,7 @@ async fn legacy_page(
         if id < at {
             continue;
         }
-        if id >= requested_end {
+        if id >= requested.end {
             break;
         }
         if id != at {
@@ -636,8 +638,7 @@ async fn scan_legacy(
             response,
             s,
             boundary,
-            at,
-            requested_length,
+            at..request_end(at, requested_length, boundary)?,
             decimals,
             out,
             shared_globals.as_mut(),
