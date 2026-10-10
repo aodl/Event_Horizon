@@ -4,9 +4,9 @@ import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
-expected_svg='52353d778ae7c1e57bb9e47e3206d013787210c23fbab9c4b6be4d128077bee3'
+expected_svg='2352f30e66de1d2be306b7338a0f3c28836c3b7356cddbc8063681df7487ea56'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
-assert len(svg)==946_905 and len(svg)<1_000_000
+assert len(svg)==953_853 and len(svg)<1_000_000
 static_svg=(root/'canisters/frontend/public/event-horizon-static.svg').read_bytes()
 expected_static_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
 assert hashlib.sha256(static_svg).hexdigest()==expected_static_svg
@@ -20,6 +20,9 @@ assert len(svg_ids)==len(set(svg_ids))
 assert set(svg_ids)-static_svg_ids=={
     'ehm-animation','ehm-blurHuge','ehm-blurMid','ehm-blurTight','ehm-blurWide',
     'ehm-coreWhiteWarm','ehm-haloOuter2','ehm-haloWarm2','ehm-pMidLeft','ehm-pMidRight',
+    'ehp-definitions','ehp-disc-mask','ehp-edge-response','ehp-height',
+    'ehp-initial-underlay','ehp-moving','ehp-original-art','ehp-reduced','ehp-relit',
+    'ehp-shade','ehp-surface','ehp-travel',
 }
 assert svg_root.get('viewBox')==static_svg_root.get('viewBox')=='0 0 1672 941'
 title=next(element for element in svg_root if local_name(element.tag)=='title')
@@ -54,6 +57,86 @@ texture_indices=[
 ]
 assert len(texture_indices)==14 and all(index>motion_index for index in texture_indices)
 assert root_children[motion_index+1].get('id')=='texture-patch-r1-c3'
+planet_source=next(element for element in static_svg_root.iter() if element.get('id')=='cp10_planet_D')
+planet_original=svg_by_id['cp10_planet_D']
+assert ET.tostring(planet_original)==ET.tostring(planet_source)
+planet_underlay=svg_by_id['ehp-initial-underlay']
+planet_underlay_index=root_children.index(planet_underlay)
+assert root_children[planet_underlay_index-1].get('id')=='ambient_I_ambient'
+assert root_children[planet_underlay_index+1].get('id')=='ehp-reduced'
+assert root_children[planet_underlay_index+2].get('id')=='ehm-animation'
+underlay_art=[
+    element for element in planet_underlay
+    if local_name(element.tag) in {'ellipse','circle'}
+]
+assert len(underlay_art)==len(planet_source)==4
+assert all(
+    element.tag==source.tag and element.attrib==source.attrib
+    for element,source in zip(underlay_art,planet_source)
+)
+planet_motion=svg_by_id['ehp-moving']
+assert root_children.index(planet_motion)>max(texture_indices)
+travel=svg_by_id['ehp-travel']
+assert travel.attrib=={
+    'id':'ehp-travel','attributeName':'transform','type':'translate',
+    'values':'0 0;29.3851 -6.5235;992 -220.224','keyTimes':'0;0.05;1',
+    'keySplines':'0.42 0 1 1;0 0 1 1','begin':'0.8s','dur':'240s',
+    'fill':'freeze','calcMode':'spline',
+}
+underlay_travel=next(
+    element for element in planet_underlay
+    if local_name(element.tag)=='animateTransform'
+)
+assert underlay_travel.attrib=={
+    key:value for key,value in travel.attrib.items() if key!='id'
+}
+travel_points=[
+    tuple(float(value) for value in point.split())
+    for point in travel.get('values').split(';')
+]
+assert travel_points[0]==(0,0)
+assert travel_points[1]==(29.3851,-6.5235)
+dx,dy=travel_points[-1]
+assert abs(dy/dx-(-0.222))<0.000_000_01
+assert 714+dx>float(svg_root.get('viewBox').split()[2])
+planet_animations=[
+    element for parent in [planet_underlay,planet_motion,svg_by_id['ehp-shade']]
+    for element in parent.iter()
+    if local_name(element.tag) in {'animate','animateTransform','set'}
+]
+assert planet_animations and all(element.get('repeatCount') is None for element in planet_animations)
+light_animations=[
+    element for element in svg_by_id['ehp-shade'].iter()
+    if local_name(element.tag)=='animate'
+]
+assert {element.get('attributeName') for element in light_animations}=={'azimuth','elevation'}
+assert all(
+    element.get('begin')=='0.8s'
+    and element.get('dur')=='240s'
+    and element.get('fill')=='freeze'
+    and element.get('calcMode')=='linear'
+    and len(element.get('values').split(';'))==41
+    and element.get('values').split(';')[0]!=element.get('values').split(';')[-1]
+    for element in light_animations
+)
+relit=svg_by_id['ehp-relit']
+relit_opacity=next(
+    element for element in relit
+    if local_name(element.tag)=='animate' and element.get('attributeName')=='opacity'
+)
+assert relit.get('opacity')=='0'
+assert relit_opacity.attrib=={
+    'attributeName':'opacity','values':'0;1','dur':'2s','begin':'0.8s',
+    'fill':'freeze','calcMode':'linear',
+}
+assert any(
+    local_name(element.tag)=='set'
+    and element.get('attributeName')=='display'
+    and element.get('to')=='none'
+    and element.get('begin')=='3.8s'
+    and element.get('fill')=='freeze'
+    for element in planet_underlay
+)
 fragment_refs=[]
 for element in svg_root.iter():
     assert local_name(element.tag)!='script'
@@ -71,6 +154,12 @@ animation_css=next(
 )
 assert '@media(prefers-reduced-motion:reduce)' in animation_css
 assert not re.search(r'(?<!ehm-)\.(?:gA|gB|gC|gD|u1o|l1o)\b',animation_css)
+planet_css=next(
+    (element.text or '') for element in svg_root.iter()
+    if local_name(element.tag)=='style' and '#ehp-moving' in (element.text or '')
+)
+assert '#ehp-initial-underlay,#ehp-moving{display:none!important}' in planet_css
+assert '#ehp-reduced{display:inline!important}' in planet_css
 print('svg_sha256', expected_svg)
 print('static_svg_sha256', expected_static_svg)
 for asset, expected in {
