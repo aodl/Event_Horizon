@@ -12,6 +12,12 @@ The canonical ICP instance reads the legacy ICP `query_blocks` log for both admi
 
 Jupiter Faucet payments and exact Historian route evidence admit permanent global, numeric-subaccount, inclusive subaccount-range, neuron-nonce, or neuron-range declarations. Ranges expand into the existing watched-account map and contain at most 256 targets. Thresholds use the observed token's decimals; account, range, and global prices remain denominated and funded in ICP.
 
+Initial reference bases are 10 ICP for an account, 20 ICP for a range, and
+1,000 ICP for a global subscription. They remain subject to the existing
+monthly CMC-rate formula and independent upward rounding. The stored `Price`
+shape is unchanged; range remains exactly derived from the 20 ICP basis using
+`ceil(global_icp / 50)`.
+
 The backend can be installed, initialize its observed-ledger profile, and
 observe the configured ledger without a Jupiter Faucet alias. A reviewed alias
 is required before opening the instance for subscriber use: Faucet payout plus
@@ -20,7 +26,15 @@ admitted.
 
 Qualifying activity is coalesced once per subscriber per poll. A specific callback reports sorted target/maximum-raw-amount pairs; an empty vector represents global-only activity. Event Horizon always sends this vector payload, while a wake-up-only subscriber may implement a zero-argument `poke()` receiver and ignore it through Candid argument compatibility. The callback is intentionally one-way and best-effort. Event Horizon does not negotiate signatures, retry, or account for delivery, and subscribers must retain their own authoritative ledger cursors.
 
-Funding converts retained ICP through the CMC while preserving reserve protection, duplicate-safe transfer identity, and upgrade recovery. A configured recipient begins at diversion level zero; it does not bypass the seven-day policy or either 150 T gate. Before value moves, a split freezes the destination account, memo, amount, and fee. Recovery continues with that identity rather than re-reading instance configuration. Canonical ICP currently installs with no recipient.
+Productive endowment principal remains in Jupiter's staking path. Event Horizon
+receives recurring maturity-derived raw-ICP payouts, pools them, and converts
+retained ICP through the CMC while preserving reserve protection,
+duplicate-safe transfer identity, and upgrade recovery. A configured recipient
+begins at diversion level zero; it does not bypass the seven-day policy or
+either 150 T gate. Before value moves, a split freezes the destination account,
+memo, amount, and fee. Recovery continues with that identity rather than
+re-reading instance configuration. Canonical ICP currently installs with no
+recipient. This changes no production API.
 
 An instance can be installed, initialize its observed-ledger profile, and observe
 the configured Ledger without a Jupiter Faucet alias. A reviewed alias is

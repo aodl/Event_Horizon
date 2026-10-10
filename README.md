@@ -1,6 +1,16 @@
 # Event Horizon
 
-Event Horizon is a ledger-generic low-latency wake-up service, funded through Jupiter Faucet in ICP. The canonical ICP instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each matching numeric subaccount or neuron nonce and the largest qualifying raw transfer amount; wake-up-only subscribers may expose a zero-argument receiver and ignore that payload through Candid compatibility. Subscribers keep authoritative ledger cursors and independent reconciliation; an Index is optional.
+Event Horizon is a ledger-generic low-latency wake-up service funded by
+productive endowments through Jupiter Faucet. Endowed ICP principal contributes
+to Jupiter's productive neuron stake; it does not become Event Horizon's liquid
+operating balance. Recurring maturity-derived Faucet payouts are sent to Event
+Horizon as raw ICP, pooled, and converted into cycles. The canonical ICP
+instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances
+read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each
+matching numeric subaccount or neuron nonce and the largest qualifying raw
+transfer amount; wake-up-only subscribers may expose a zero-argument receiver
+through Candid compatibility. Subscribers keep authoritative ledger cursors
+and independent reconciliation; an Index is optional.
 
 Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. Trigger thresholds use the observed token's decimals, while prices, cycles funding, and any surplus remain ICP.
 
@@ -29,10 +39,25 @@ Event Horizon observes the CMC ICP/XDR conversion rate roughly daily and retains
 ```text
 account price = ceil(10 × F / C) ICP
 range price   = ceil(20 × F / C) ICP
-global price  = ceil(100 × F / C) ICP
+global price  = ceil(1000 × F / C) ICP
 ```
 
 Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes exactly the read-only `get_instance` and `get_pricing` queries; the certified frontend verifies the first against its reviewed static registry.
+
+The initial reference requirements are therefore 10 ICP for an account, 20 ICP
+for a range, and 1,000 ICP for a global subscription. These are reference bases,
+not permanently fixed displayed prices: each class is independently rounded by
+the formula above. A qualifying declaration becomes permanent only after Event
+Horizon observes a Faucet payout and Historian verifies the complete cumulative
+endowment for the exact route. Additional endowment does not buy priority.
+
+The launch plan separately contemplates a 3,000 ICP productive protocol
+endowment for baseline recurring funding and a liquid-cycles bootstrap while
+initial payouts are pending. The planned endowment is neither confirmed
+deposited nor immediately spendable, and service sustainability depends on
+actual payouts, conversion rates, workload, fees, and cycle costs. See
+[Economics and pricing](docs/architecture/economics-pricing.md) for the funding
+flow and limitations.
 
 See [deploying an instance](docs/operations/deploying-an-instance.md), [acceptance observation](docs/operations/acceptance-observation.md), and the [subscriber guide](docs/subscriber-guide.md).
 
@@ -99,6 +124,7 @@ See the [`xtask` testing guide](tools/xtask/README.md), [testing documentation](
 
 - [Documentation index](docs/README.md)
 - [Architecture overview](docs/architecture/overview.md)
+- [Funding, economics, and pricing](docs/architecture/economics-pricing.md)
 - [Development and testing](docs/development/testing.md)
 - [Security](docs/security/dependency-scanning.md)
 - [Operations and deployment](docs/operations/deployment.md)

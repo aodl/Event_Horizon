@@ -12,7 +12,12 @@ A missed, rejected, delayed, or duplicated poke must therefore affect only laten
 
 ## 2. Product and trust boundary
 
-Event Horizon is a standalone downstream product powered by Jupiter Faucet endowments.
+Event Horizon is a standalone downstream product powered by productive Jupiter
+Faucet endowments. Endowed principal is staked through Jupiter and does not
+enter Event Horizon's liquid balance. Event Horizon instead receives
+proportional maturity-derived raw-ICP payouts, converts its retained share to
+cycles, and spends the common cycles pool on polling, notifications, and other
+operating costs. Neither yield nor uninterrupted service is guaranteed.
 
 The Event Horizon backend:
 
@@ -21,7 +26,10 @@ The Event Horizon backend:
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
 
-Jupiter Historian is used for admission verification. Jupiter Faucet and Disburser do not depend on Event Horizon and do not consume its pokes.
+Jupiter Historian is used for admission verification. Jupiter Faucet and
+Disburser remain correct without Event Horizon, but their current
+implementations may consume authenticated Event Horizon pokes as optional
+reconciliation acceleration.
 
 ## 3. Subscription declaration
 
@@ -57,8 +65,9 @@ X.r5m5ydiaaaaaaaaqanaacai.n0-2
 ```
 
 The planned canonical IO instance has intended alias `I`; that alias is not
-claimed to be published. Aliases are reviewed Jupiter Faucet runtime aliases
-whose mappings are owned by Jupiter Historian. Future aliases are not assumed
+claimed to be published. Aliases are reviewed source-controlled Jupiter Faucet
+memo policy. Jupiter Historian reports endowment history and verification
+information; it does not own alias mappings. Future aliases are not assumed
 to be one byte or one character. Event Horizon itself receives only the
 outgoing suffix, for example:
 
@@ -118,6 +127,18 @@ A declaration is eligible for permanent admission only after both are true:
 The approved mainnet Faucet payout source is fixed in the production Wasm.
 
 Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
+
+The displayed price is the minimum qualifying cumulative productive endowment
+for that exact declaration. A patron transfers ICP to Jupiter Faucet's
+configured NNS neuron staking account with the routed declaration memo; the
+staking transfer itself is not an Event Horizon admission event. Admission can
+occur only after a later authorised Faucet payout reaches Event Horizon with
+the declaration suffix and Historian reports complete qualifying evidence.
+The reviewed production Faucet configuration applies a seven-day stake-
+recognition delay, and payout processing may add further delay. Repeated
+endowments to the same exact route contribute cumulatively, and any patron may
+fund a declaration without controlling the subscriber canister. Cumulative
+endowment principal is distinct from cumulative Faucet rewards distributed.
 
 Global, range, and single-target declarations are distinct exact routes with class-specific prices. Ordinary and neuron singles use the account price; ordinary and neuron ranges use the range price. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
@@ -218,6 +239,14 @@ Account, range, and global endowments enter the same pool. Their different admis
 
 Larger endowments do not buy priority or lower latency.
 
+The intended launch plan adds a 3,000 ICP productive protocol endowment through
+Jupiter Faucet. It is a planned source of recurring baseline payouts, not a
+hardcoded constructor value, confirmed existing deposit, guaranteed yield, or
+liquid cycles. Subscriber endowments add separate productive backing. A
+separate liquid-cycles bootstrap may be required to enter and sustain
+Continuous mode at 100 T while initial Jupiter payouts are pending; Continuous
+still exits below 60 T.
+
 Raw ICP accumulated in Event Horizon is periodically classified once and moved by one serialized funding state machine. The retained leg uses the ICP Ledger's legacy `transfer` method to the CMC account identifier derived from Event Horizon's principal, with the standard top-up memo, followed by `notify_top_up(block_index)`. Value-moving Ledger calls use guaranteed-response (unbounded-wait) semantics while their deterministic identities remain persisted. The CMC leg deliberately does not use `icrc1_transfer`.
 
 Production surplus diversion is enabled only when immutable install-time `InitArgs.surplus_canister` is `Some(principal)`. The value is persisted once in `InstanceConfig`; ordinary upgrades take no configuration argument and preserve it. `None` resets the policy to level zero, creates no entitlement, and preserves the single-transfer CMC behavior. There is no runtime setter or surplus API. When enabled, the receiver is the designated canister's default all-zero-subaccount ICP account; Event Horizon calls no method on it and has no responsibility for its later treasury or governance behavior. Anonymous, management-canister, and self recipients are rejected at installation.
@@ -236,17 +265,32 @@ Only the minimum durable financial state necessary to avoid duplicate/stranded v
 
 The CMC's integer `xdr_permyriad_per_icp` is the sole pricing input. Event Horizon stores at most one successful observation per UTC day and makes roughly one ordinary observation attempt per day. Before issuing the nonessential CMC query it requires the current liquid cycles balance to cover both `RESERVE_PROTECTION_CYCLES` and the query's current `Call::get_cost()`. A day skipped to protect the reserve is consumed as that day's attempt. Failed, skipped, or missed days cause no retry loop, alternate oracle, or backfill.
 
-The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration, 20 ICP for a range declaration, and 100 ICP for a global declaration.
+The history window contains the current UTC day bucket and the preceding 1,460 UTC day buckets, for at most 1,461 observations. Expired buckets are discarded at pricing maintenance. The first successful observation after a fresh install or an upgrade without pricing state becomes the initial latest rate and rolling floor; initial prices are therefore 10 ICP for an account declaration, 20 ICP for a range declaration, and 1,000 ICP for a global declaration.
 
 For retained floor `F` and selected latest rate `C`, prices are calculated independently with overflow-safe integer arithmetic:
 
 ```text
 account_icp = ceil(10 × F / C)
 range_icp   = ceil(20 × F / C)
-global_icp  = ceil(100 × F / C)
+global_icp  = ceil(1000 × F / C)
 ```
 
-Prices are whole ICP and each economic basis is rounded independently. The range result is not twice the rounded account result. Because `ceil(20F/C) = ceil(ceil(100F/C)/5)`, the public/current range value is derived with overflow-safe ceiling division from the durably stored global value. This leaves the stable internal account/global `Price` encoding unchanged.
+Prices are whole ICP and each economic basis is rounded independently. The
+range result is not twice the rounded account result, and the rounded global
+result need not be exactly 100 times the rounded account result. Because
+`ceil(20F/C) = ceil(ceil(1000F/C)/50)`, the public/current range value is
+derived with overflow-safe ceiling division from the durably stored global
+value. This leaves the stable internal account/global `Price` encoding
+unchanged.
+
+This 100-to-1,000 ICP policy change is a prelaunch pricing-state boundary, not
+a stable-state migration. A stored global price produced under the old basis
+must not be interpreted with the new divisor. The canonical deployment may use
+a controlled reinstall only after operators verify that no subscriptions,
+pending financial state, or other obligations require preservation and
+explicitly approve the destructive reset. Reinstall discards pricing,
+observations, cursors, subscriptions, and pending funding state; subsequent
+ordinary releases remain argument-free state-preserving upgrades.
 
 Prices may become effective only at 00:00:00 UTC on the first day of a month. The next price is frozen exactly seven 24-hour days before that timestamp. Only observations recorded strictly before the freeze timestamp participate in that calculation; later observations can affect a subsequent epoch. A frozen price is immutable. If the latest participating CMC rate timestamp is more than seven 24-hour days old at freeze, the current prices are carried forward and marked stale rather than recalculated. At the effective timestamp the frozen price becomes current.
 

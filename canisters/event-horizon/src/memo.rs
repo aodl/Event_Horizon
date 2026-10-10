@@ -256,6 +256,15 @@ mod tests {
     }
 
     #[test]
+    fn protocol_seed_route_is_not_a_subscription_declaration() {
+        assert!("X.protocol-seed".len() <= 32);
+        assert_eq!(
+            parse_subscription_memo(b"protocol-seed").unwrap_err(),
+            MemoParseError::InvalidPrincipal
+        );
+    }
+
+    #[test]
     fn malformed_ambiguous_forms_reject() {
         for memo in [
             b"r5m5ydiaaaaaaaaqanaacai:".as_slice(),

@@ -54,7 +54,9 @@ instance, across the shared ICP reader and a separate ICRC-3 observed ledger.
 The integration suite builds purpose-specific mock Wasms and exercises:
 
 - prospective first-install bootstrap;
-- exact 10 ICP account and 20 ICP range Historian admission;
+- exact 10 ICP account, 20 ICP range, and 1,000 ICP global Historian
+  admission, including the one-e8s-below global boundary and cumulative
+  600+399/600+400 ICP route totals;
 - maximum 256-target range expansion, including ranges beginning above 255, resource reporting, matching, and upgrade health;
 - range thresholds, overlap order, unfiltered overlap, sorted/deduplicated coalescing, and global precedence;
 - incomplete or faulted Historian rejection and later natural admission on another Faucet payout;
@@ -92,8 +94,13 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - destination-disabled equivalence and zero policy;
 - fresh-install `FundingState::Idle`, CMC-only `None`, split-plan `Some(PlannedSurplus)`, and current-Wasm upgrades of every pending funding phase;
 - subscription, cursor, verified SNS profile, pricing, and scheduler persistence
-  across upgrade, including archive backlog recovery from both current schema
-  and the tracked prepatch debug Wasm fixture;
+  across ordinary current-schema upgrade, including archive backlog recovery;
+- the tracked pre-policy Wasm fixture establishing old 10/20/100 pricing state,
+  including a diagnostic ordinary upgrade that preserves reader state but
+  exposes the unsafe old-global/new-divisor interpretation, followed by a local
+  controlled reinstall that proves the state is discarded, fresh
+  10/20/1,000 pricing is established, and the new prospective reader does not
+  replay historical admission activity;
 - timer-wrapper recovery after real post-await continuation traps in polling, pricing, and funding, including preserved pending funding identity and non-overlapping ownership;
 - Reserve Protection checks at scheduled poll entry, including Economy hysteresis and resumption above 2 T;
 - the certified frontend response, transition asset URLs, revalidation headers, and absence of debug application methods from production Wasm;

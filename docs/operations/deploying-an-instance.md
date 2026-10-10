@@ -4,6 +4,14 @@ This guide is for deploying an additional immutable Event Horizon instance for a
 
 The same reviewed `event_horizon.wasm` serves every compatible instance. Immutable install configuration supplies `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain compiled protocol anchors. A surplus recipient is an independent canister principal; it need not belong to the observed Ledger, an SNS, or Jupiter, and any diverted value remains ICP.
 
+Every fresh instance inherits the common 10 ICP account, 20 ICP range, and
+1,000 ICP global reference bases and the same dynamic monthly pricing formula.
+Its observed token may differ, but subscription endowment, Historian admission,
+raw-payout funding, and CMC conversion remain ICP-based. The canonical
+instance's planned 3,000 ICP protocol endowment does not automatically fund an
+independently deployed instance; that operator must establish its own reviewed
+productive-funding and liquid-cycles plan.
+
 Generic non-SNS:
 
 ```candid
@@ -37,7 +45,15 @@ required before subscriber declarations can be funded or admitted, because
 Jupiter Faucet payout plus matching Historian route evidence is the admission
 mechanism.
 
-Then install and verify the instance, establish Faucet endowment funding, confirm `get_instance` and public CONFIG/HEALTH logs, verify the reviewed generic module hash, set `status_visibility=public`, `log_visibility=public`, and backend `log_memory_limit=16384`, test functionality, and remove every controller. Event Horizon calls this finalized state immutable or blackholed: `controllers = []`; no separate blackhole canister is required and there is no operator afterward.
+Then install and verify the instance, let its prospective ICP admission reader
+bootstrap before accepting endowments, establish Faucet productive-endowment
+funding and a separate liquid-cycles bootstrap, confirm `get_instance`,
+10/20/1,000 initial pricing, and public CONFIG/HEALTH logs, verify the reviewed
+generic module hash, set `status_visibility=public`, `log_visibility=public`,
+and backend `log_memory_limit=16384`, test functionality, and remove every
+controller. Event Horizon calls this finalized state immutable or blackholed:
+`controllers = []`; no separate blackhole canister is required and there is no
+operator afterward.
 
 Canonical frontend listing requires evidence of: a published alias; the reviewed
 fixed legacy ICP protocol plus ICRC-1 metadata for canonical ICP, or ICRC-1,
@@ -52,7 +68,16 @@ The verification tuple is backend canister ID + module hash + empty controllers 
 
 ## Canonical transitions
 
-`X` maps to canonical ICP Event Horizon. The acceptance deployment may eventually be deliberately reinstalled using `canisters/event-horizon/mainnet-icp-install-args.did`, whose three-field constructor currently selects the ICP Ledger, no SNS Root, and no surplus recipient. This is acceptable only because it currently has no subscribers and the project explicitly accepts resetting development state; reinstall is not an ordinary future production operation. Codex does not perform it.
+`X` maps to canonical ICP Event Horizon. The 1,000 ICP global-pricing release
+requires a separately approved prelaunch decision about a controlled reinstall
+using `canisters/event-horizon/mainnet-icp-install-args.did`, whose three-field
+constructor selects the ICP Ledger, no SNS Root, and no surplus recipient. Do
+not infer that reinstall is safe from an earlier zero-subscriber observation.
+The operator must first verify current subscriptions, patron expectations,
+pending financial state, and the accepted loss of all stable state under the
+decision gate in [Deployment](deployment.md). Reinstall is exceptional, is not
+a Ledger-backlog remedy, and is not an ordinary future production operation.
+This source task performs no deployment or reinstall.
 
 `I` is the intended canonical IO alias, not a claim that Jupiter has activated it. After the IO SNS Ledger launches: verify its principal and standards, reserve an IO Event Horizon principal, obtain alias `I`, install the identical generic Wasm with that Ledger, verify query/log/hash, run controlled tests, remove controllers, then change the frontend entry from planned to live. Do not invent IDs beforehand.
 

@@ -7,7 +7,10 @@ Wasm-level fixed protocol anchors are the ICP Ledger, CMC, NNS Governance, Jupit
 Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 
 - Canonical ICP defines Faucet admission for every instance. It also defines observed activity and `chain_length` boundaries only for the ICP instance; non-ICP observed activity and `log_length` boundaries come from the configured ICRC-3 Ledger.
-- Jupiter Faucet origin plus a complete Jupiter Historian exact-route total define admission.
+- Jupiter Faucet origin plus a complete Jupiter Historian exact-route
+  productive-endowment total define admission. Jupiter Faucet's source policy
+  owns alias mappings; Historian verifies history and route totals but does not
+  define those mappings.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - Liquid cycles observed hourly are the only adaptive-surplus health signal.
 - `get_instance` and `get_pricing` are the backend's only production application methods; neither exposes subscription data.
@@ -19,6 +22,14 @@ Event Horizon is a latency aid. Subscriber reconciliation is authoritative.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
+
+Productive endowment principal remains in Jupiter's staking path. Event Horizon
+trusts authorised raw-ICP Faucet payouts and Historian evidence, then converts
+retained incoming ICP through the CMC. It does not guarantee NNS yield, Jupiter
+payout size or cadence, ICP/XDR conversion outcome, or uninterrupted service.
+The planned 3,000 ICP protocol endowment is an intended external funding
+arrangement, not immutable instance configuration or evidence of an existing
+deposit.
 
 Surplus epochs likewise use an observed hourly minimum, not continuous monitoring or a burn forecast. The current-balance gate and retained-first ordering protect service even when the stored level is high. The immutable receiver is trusted only as the destination account owner: Event Horizon calls no receiver endpoint, grants it no control, and makes no claim about how it governs or spends received ICP. Direct donations and Faucet funding share the same pool; funding source never changes subscriber priority.
 

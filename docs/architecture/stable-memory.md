@@ -26,6 +26,18 @@ Subscription values use the final schema `{ subscriber; target : WatchTarget; mi
 
 ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from prior acceptance schemas; the earlier zero-state acceptance transition used reinstall. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
 
-The stable pricing `Price` is `{ account_icp, global_icp }`. Public `get_pricing` values derive `range_icp = ceil(global_icp / 5)` with quotient/remainder arithmetic, exactly equal to `ceil(20F/C)`.
+The stable pricing `Price` remains `{ account_icp, global_icp }`. Under the
+10/20/1,000 ICP reference bases, public `get_pricing` values derive
+`range_icp = ceil(global_icp / 50)` with quotient/remainder arithmetic, exactly
+equal to `ceil(20F/C)`. No persisted range field or new memory ID is required.
+
+That unchanged shape does not make old policy values compatible. A stored
+`global_icp = 100` produced under the former basis would derive range `2` under
+the new divisor. The exceptional prelaunch transition therefore uses a
+controlled reinstall only after current subscriptions, pending financial state,
+and other obligations have been explicitly checked and the destructive reset
+approved. Reinstall clears every stable-memory ID; it is not a migration and is
+not the default for later releases. Ordinary post-reset releases remain
+state-preserving argument-free upgrades.
 
 Durable state includes the Ledger cursor, permanent admissions, cadence mode, deterministic retained/surplus identities, the once-classified financial plan, bounded pricing history, and epoch decisions. Poll match accumulators, timer IDs, single-flight leases, decoded pages, and logging suppression remain transient. Debug liquid-balance overrides are test-only and transient.

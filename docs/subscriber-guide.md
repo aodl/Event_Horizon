@@ -14,6 +14,36 @@ Event Horizon accelerates an application's authoritative Ledger or optional Inde
 8. Use pokes only to accelerate authoritative reconciliation.
 9. Retain an independent periodic reconciliation timer because pokes may be missed, delayed, duplicated, or rejected.
 
+## Funding and permanent admission
+
+Event Horizon prices the minimum qualifying cumulative productive endowment for
+an exact declaration. Initial reference bases are 10 ICP for one account or
+neuron target, 20 ICP for a range, and 1,000 ICP for a global Ledger
+subscription. The 1,000 ICP figure is not a fixed price: current and frozen
+requirements come from `get_pricing` and follow the existing monthly
+`ceil(base × F / C)` policy with independent rounding.
+
+A subscriber or any third-party patron sends ICP to Jupiter Faucet's configured
+NNS neuron staking account with the complete `<alias>.<declaration>` memo. The
+principal stays in Jupiter's productive staking path rather than entering Event
+Horizon's liquid balance. A staking transfer does not immediately admit the
+route. Event Horizon must later observe an authorised Faucet raw-ICP payout
+whose preserved suffix is that declaration and receive complete Historian
+evidence that the exact route's cumulative qualifying endowment meets the
+current requirement.
+
+The reviewed production Faucet has a seven-day stake-recognition delay, and
+payout processing can add more time. Multiple endowments to the identical route
+contribute cumulatively; cumulative principal is distinct from rewards already
+distributed. Once admitted, the subscription is permanent. Extra endowment
+does not increase priority or polling speed.
+
+Subscription funding is always ICP-based, even when the selected Event Horizon
+instance observes another token Ledger. The subscribed Ledger supplies activity
+to match; Jupiter's raw-ICP payouts and Event Horizon's CMC conversion fund the
+common operating cycles pool. The observed token and its transfer thresholds
+remain independent of the ICP admission requirement.
+
 ## Callback and targets
 
 ```candid

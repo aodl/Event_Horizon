@@ -126,7 +126,7 @@ export function createApp({
       const recommended = current === null ? null : Math.max(current, upcoming ?? current);
       help.textContent = `${built.bytes}/32 bytes · ${recommended === null
         ? 'Wait for authoritative pricing to initialize.'
-        : `Endow this exact declaration with ${recommended} ICP through Jupiter Faucet.`}${upcoming > current
+        : `Minimum qualifying cumulative endowment: ${recommended} ICP through Jupiter Faucet.`}${upcoming > current
         ? ` Scheduled requirement rises at ${utc(pricing.next_effective_at)}.`
         : ''}`;
       help.classList.remove('error');

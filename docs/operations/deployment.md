@@ -21,13 +21,38 @@ This mapping is local deployment state and must not be committed as application 
 
 > **Do not run a mainnet deploy until the mapping has been checked. Otherwise a deployment tool may create new canisters rather than use the permanent Event Horizon canisters.**
 
-The canonical ICP backend is already installed. Reader-contract maintenance
-that leaves the stable schema and constructor unchanged is a state-preserving,
-argument-free **upgrade**, not a reinstall. Do not reset the canister to discard
-a reader backlog: retained cursors, subscriptions, pricing, immutable
-configuration, and pending financial state must survive. A genuinely new
-additional instance uses install mode. The operator performs every mainnet
-action manually; the repository provides no automatic deployment script.
+The canonical ICP backend is already installed. This 1,000 ICP global-pricing
+release is an exceptional prelaunch state-policy boundary: old stable global
+prices cannot safely be interpreted using the new range divisor. The selected
+strategy is a controlled reinstall, but only after the decision gate below is
+completed and separately approved. Subsequent ordinary releases return to
+state-preserving, argument-free upgrades. Reinstall must never be used to
+discard a Ledger backlog. A genuinely new additional instance uses install
+mode. The operator performs every mainnet action manually; the repository
+provides no automatic deployment script.
+
+## Exceptional prelaunch pricing-reset decision
+
+Before authorising reinstall, use read-only production records, current
+Historian route evidence, public logs/status, and operator records to verify all
+of the following:
+
+- no subscription has been admitted and no patron has an outstanding
+  expectation based on an existing endowment;
+- no retained CMC transfer, CMC notification, surplus transfer, or other
+  financial obligation needs preservation;
+- loss of pricing observations/frozen prices, Ledger cursors, discovered
+  profile, subscriptions, and all other stable state is explicitly accepted;
+- the immutable constructor tuple remains canonical ICP Ledger, no SNS Root,
+  and no surplus recipient;
+- a separate liquid-cycles bootstrap is ready for the intended cadence while
+  initial productive-endowment payouts are pending.
+
+Production deliberately exposes no subscription/debug status query. If those
+facts cannot be established from operational evidence, stop: this runbook does
+not make reinstall safe and no migration framework is supplied. Obtain a
+separate operator decision rather than upgrading old pricing state or assuming
+the earlier zero-subscriber observation is still current.
 
 ## Operator pre-deployment gate
 
@@ -55,8 +80,20 @@ Review the hashes before continuing. Do not deploy a locally compiled replacemen
 
 Canonical-artifact mode verifies `release-artifacts/release-artifacts.sha256`, does not rebuild, prints the exact artifact hash being handed to `icp deploy`, and copies that Wasm to the CLI-requested output path.
 
-Upgrade and verify the existing canonical backend first. Ordinary upgrades take
-no constructor argument:
+For this pricing-policy transition only, and only after the decision gate and
+explicit approval, reinstall the existing canonical backend with the reviewed
+constructor. Omitting `--yes` preserves the CLI's destructive-action
+confirmation:
+
+```bash
+EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
+  icp deploy event_horizon -e ic --mode reinstall --no-create \
+  --args-file canisters/event-horizon/mainnet-icp-install-args.did
+```
+
+This destroys all backend stable state. Preparing this release does not
+authorise that action. After this exceptional reset has been accepted and
+completed, ordinary backend releases take no constructor argument and use:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
@@ -82,8 +119,8 @@ EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
 ```
 
 Do not assume either frontend state and do not automate this choice. The
-canonical backend instruction above remains an argument-free upgrade. A
-reinstall is destructive and is not a backlog-recovery procedure.
+ordinary backend instruction above remains an argument-free upgrade. The
+exceptional reinstall is destructive and is not a backlog-recovery procedure.
 
 For a fresh additional instance, use `--mode install` and follow
 [Deploying an immutable instance](deploying-an-instance.md). For an SNS-aware
@@ -96,7 +133,10 @@ behavioural/source/security/reproducibility gates
 → canonical Docker build
 → review printed hashes
 → inspect canister mapping/settings
-→ state-preserving argument-free backend upgrade
+→ complete the pricing-reset decision gate
+→ separately approve and perform the exceptional backend reinstall
+→ wait for prospective reader/profile/pricing initialization
+→ verify fresh 10/20/1,000 pricing and new cursor baselines
 → compare live module hash
 → verify backend
 → inspect frontend installed-module state
@@ -165,9 +205,17 @@ Below 1 T, Reserve Protection suspends ordinary Ledger polling but leaves fundin
 
 Higher balances may be appropriate once sustained low-latency service is desired. The 150 T surplus-health threshold is not a polling tier: Continuous polling starts at 100 T, while 150 T applies only to the currently disabled adaptive surplus policy.
 
-Jupiter Faucet endowments are recurring funding and should not be confused with immediately spendable cycles.
+Jupiter Faucet endowments are productive principal and should not be confused
+with immediately spendable cycles. Principal remains in Jupiter's staking path;
+recurring maturity-derived raw-ICP payouts enter Event Horizon and are converted
+into the common cycles pool.
 
-Account, range, and global admission requirements come from `get_pricing`; they begin at 10, 20, and 100 ICP after the first successful CMC observation. Those pooled endowments do not replace the initial cycle balance.
+Account, range, and global admission requirements come from `get_pricing`; they
+begin at 10, 20, and 1,000 ICP after the first successful CMC observation, then
+follow the existing monthly dynamic policy. Those pooled payouts do not replace
+the initial liquid cycle balance. The intended 3,000 ICP protocol endowment is
+a planned productive contribution, not a confirmed deposit or liquid bootstrap.
+Continuous-mode entry requires 100 T liquid cycles and exits below 60 T.
 
 ## Observe cycles and infer cadence
 
@@ -214,6 +262,25 @@ The response fields are:
 - `next_carried_forward_due_to_stale_rate`: whether stale-rate protection carried current prices into the next period.
 
 `next_carried_forward_due_to_stale_rate = true` can legitimately occur on first deployment when the next month's seven-day freeze boundary already passed before Event Horizon had its first successful rate observation. It is not a fault. The response also includes timestamps for the floor and latest observations.
+
+## Post-reinstall ordering
+
+After an explicitly approved reinstall, keep new endowments closed until all of
+the following are observed in order:
+
+1. the constructor tuple and installed backend hash match the reviewed release;
+2. observed-ledger profile discovery succeeds;
+3. the fresh prospective ICP reader has bootstrapped to its then-current tip;
+4. the first successful CMC observation reports current prices of account 10,
+   range 20, and global 1,000 ICP;
+5. sufficient liquid cycles exist for the chosen acceptance cadence;
+6. the rebuilt frontend's static registry contains the installed backend hash
+   and displays the same authoritative prices.
+
+Only then should new subscriber or protocol endowments be accepted. Reinstall
+does not replay historical Faucet payouts, so an endowment sent before the new
+prospective cursor was established might never provide the live payout event
+required for admission.
 
 ## Observation period
 

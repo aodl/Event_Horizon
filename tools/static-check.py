@@ -258,7 +258,7 @@ assert 'deployed permissionlessly' not in frontend_index
 for number, label in [
     ('01', 'Open Source &amp; Verifiable'),
     ('02', 'Blackholed &amp; Immutable'),
-    ('03', 'Perpetually Funded &amp; Immortal'),
+    ('03', 'Productive Endowment Funding'),
     ('04', 'Powered by Internet Computer Protocol'),
 ]:
     assert f'<p><span>{number}</span>{label}</p>' in frontend_index
@@ -368,6 +368,12 @@ for marker in ['## Subscribing to multiple ledgers', 'caller', 'max_amount', 'ne
 
 spec=(root/'SPEC.md').read_text()
 assert 'contain 2 through 256 targets' in spec
+pricing=(root/'canisters/event-horizon/src/pricing.rs').read_text()
+assert 'pub const STANDARD_BASE_ICP: u64 = 10;' in pricing
+assert 'pub const RANGE_BASE_ICP: u64 = 20;' in pricing
+assert 'pub const GLOBAL_BASE_ICP: u64 = 1_000;' in pricing
+assert 'GLOBAL_BASE_ICP / RANGE_BASE_ICP' in pricing
+assert 'ceil(20F/C) = ceil(ceil(1000F/C)/50)' in spec
 for stale in ['range endpoints are limited to 0..255', 'range endpoints must be <=255']:
     assert stale not in spec.lower(), f'normative specification contains stale range rule {stale}'
 

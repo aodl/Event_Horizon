@@ -1,11 +1,11 @@
 # Architecture
 
 ```text
-                         ┌─────────────────────┐
-Jupiter Faucet ICP ─────►│ Admission / funding │
-Canonical ICP Ledger ───►│                     │
-Historian ───────────────►│   Event Horizon     │
-CMC ─────────────────────►│                     │
+Patron ICP ─► Jupiter productive stake ─► Disburser/Faucet payouts ─┐
+                                                                    ▼
+                         ┌─────────────────────┐              raw ICP
+Canonical ICP Ledger ───►│ Admission / funding │◄── Historian evidence
+CMC ◄────────────────────│   Event Horizon     │──► operating cycles
                          │                     │
 Observed Ledger ─────────►│ Trigger reader      │
                          └─────────┬───────────┘
@@ -13,7 +13,16 @@ Observed Ledger ─────────►│ Trigger reader      │
                               subscriber.poke
 ```
 
-The observed asset and optional surplus recipient can differ per immutable instance; the funding and surplus asset never does. Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index. One reviewed Wasm supports every `observed_ledger` / `sns_root` / `surplus_canister` tuple.
+The observed asset and optional surplus recipient can differ per immutable
+instance; the funding and surplus asset never does. Productive endowment
+principal remains in Jupiter's staking path. Only maturity-derived raw-ICP
+payouts reach Event Horizon, where retained ICP is converted through the CMC
+into the common operating cycles pool. The planned 3,000 ICP protocol endowment
+is a separate baseline funding stream from subscriber endowments and from any
+liquid-cycles bootstrap; it is not a confirmed deposit or automatically shared
+with independently deployed Event Horizon instances.
+
+Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index. One reviewed Wasm supports every `observed_ledger` / `sns_root` / `surplus_canister` tuple.
 
 Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
@@ -25,7 +34,7 @@ The reader uses no Index or archive traversal. A proven archived prefix is logge
 
 ## Admission and storage
 
-A Faucet-origin payout memo is parsed as a global declaration or an ordinary/neuron single/range declaration. Historian must confirm the exact route and a complete cumulative total at least equal to the current corresponding price. An admitted ordinary or neuron range expands to at most 256 individual watched-account entries in the existing map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
+A Faucet-origin payout memo is parsed as a global declaration or an ordinary/neuron single/range declaration. The staking transfer is not admission: Historian must confirm the exact route and a complete cumulative productive-endowment total at least equal to the current corresponding price when a later Faucet payout is observed. An admitted ordinary or neuron range expands to at most 256 individual watched-account entries in the existing map; overlaps merge to the least restrictive permanent threshold. Ledger matching remains one destination lookup. Stable memory remains additive:
 
 | ID | Contents |
 |---:|---|

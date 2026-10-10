@@ -26,6 +26,8 @@ mod tests {
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static FRONTEND_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     const SURPLUS_TRANSFER_MEMO: u64 = u64::from_be_bytes(*b"SURPLUS1");
+    const ICP_E8S: u64 = 100_000_000;
+    const GLOBAL_BASE_E8S: u64 = 1_000 * ICP_E8S;
     // Success is driven by the observed subscriber condition, not by this number.
     // The ceiling only bounds a failed PocketIC run and leaves enough deterministic
     // rounds for the outbound one-way request and its callee execution.
@@ -1201,6 +1203,33 @@ mod tests {
                 Some("debug_api"),
             )?)
         }
+        fn reinstall_with_debug_wasm(&self, bytes: Vec<u8>) -> Result<()> {
+            self.pic.advance_time(std::time::Duration::from_secs(300));
+            self.pic.tick();
+            let controller = self
+                .pic
+                .get_controllers(self.event_horizon)
+                .first()
+                .copied()
+                .ok_or_else(|| anyhow!("no controller"))?;
+            self.pic
+                .reinstall_canister(
+                    self.event_horizon,
+                    bytes,
+                    encode_one(DebugInitArgs {
+                        observed_ledger: self.observed_ledger,
+                        icp_ledger: self.ledger,
+                        cmc_canister: self.cmc,
+                        historian_canister: self.historian,
+                        faucet_canister: self.faucet,
+                        surplus_canister: Some(self.subscriber),
+                        sns_root: self.sns_root,
+                    })?,
+                    Some(controller),
+                )
+                .map_err(|e| anyhow!("reinstall event horizon: {e:?}"))?;
+            Ok(())
+        }
     }
 
     #[test]
@@ -1315,9 +1344,9 @@ mod tests {
         assert!(env.subscription_for(env.subscriber, 7)?.is_some());
         assert!(env.subscription_for(env.subscriber_no_args, 7)?.is_some());
 
-        env.admit_global_for(env.subscriber, 10_000_000_000)?;
+        env.admit_global_for(env.subscriber, GLOBAL_BASE_E8S)?;
         let vector_before_second_global = env.subscriber_observation()?.pokes;
-        env.admit_global_for(env.subscriber_no_args, 10_000_000_000)?;
+        env.admit_global_for(env.subscriber_no_args, GLOBAL_BASE_E8S)?;
         env.wait_for_pokes(vector_before_second_global + 1)?;
         assert!(env.global_subscription_for(env.subscriber)?);
         assert!(env.global_subscription_for(env.subscriber_no_args)?);
@@ -2373,7 +2402,7 @@ mod tests {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         env.append_observed_transfer_from(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
@@ -2478,7 +2507,7 @@ mod tests {
     fn archive_only_progress_does_not_poke_a_global_subscriber() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         update::<_, u64>(
             &env.pic,
             env.observed_ledger,
@@ -3116,7 +3145,7 @@ mod tests {
     fn range_matching_overlap_coalescing_and_global_precedence_hold() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         env.admit_range(7, 18, Some("0.1"), 2_000_000_000)?;
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
@@ -3221,7 +3250,7 @@ mod tests {
         let env = Env::new()?;
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         for kind in ["mint", "burn", "approve"] {
             let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
             env.append_legacy_other(kind)?;
@@ -3247,7 +3276,7 @@ mod tests {
         let env = Env::new()?;
         env.poll()?;
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        env.append_global_admission(10_000_000_000)?;
+        env.append_global_admission(GLOBAL_BASE_E8S)?;
         env.poll()?;
         for _ in 0..5 {
             env.pic.tick();
@@ -3267,7 +3296,7 @@ mod tests {
         let env = Env::new()?;
         env.poll()?;
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        env.append_global_admission(10_000_000_000)?;
+        env.append_global_admission(GLOBAL_BASE_E8S)?;
         env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(Principal::from_slice(&[8]), [0; 32]),
@@ -3300,7 +3329,7 @@ mod tests {
             1,
             None,
         )?;
-        env.append_global_admission(10_000_000_000)?;
+        env.append_global_admission(GLOBAL_BASE_E8S)?;
         env.poll()?;
         for _ in 0..5 {
             env.pic.tick();
@@ -3319,7 +3348,7 @@ mod tests {
     fn existing_shared_global_many_blocks_coalesce_to_one_poke() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         for destination in [7u8, 8, 9, 10] {
             env.append(
@@ -3401,7 +3430,7 @@ mod tests {
         let unrelated = account_id(Principal::from_slice(&[93]), [0; 32]);
 
         env.append(source.clone(), unrelated.clone(), 1, None)?;
-        env.append_global_admission(10_000_000_000)?;
+        env.append_global_admission(GLOBAL_BASE_E8S)?;
         env.append(source, unrelated, 1, None)?;
 
         env.set_abort_after_staged_admission(true)?;
@@ -3455,18 +3484,43 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn global_admission_uses_exact_cumulative_historian_total() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+
+        // The mock Historian reports the exact cumulative total for the route at
+        // each Faucet payout opportunity: 600, then 600 + 399, then 600 + 400 ICP.
+        env.admit_global(600 * ICP_E8S)?;
+        assert!(!env.global_subscription()?);
+
+        env.admit_global((600 + 399) * ICP_E8S)?;
+        assert!(
+            !env.global_subscription()?,
+            "600 ICP plus 399 ICP remains insufficient"
+        );
+
+        env.admit_global((600 + 400) * ICP_E8S)?;
+        assert!(
+            env.global_subscription()?,
+            "the cumulative 1,000 ICP route total meets the boundary"
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn global_admission_and_poke_precedence_are_enforced() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
 
-        env.admit_global(9_999_999_999)?;
+        env.admit_global(GLOBAL_BASE_E8S - 1)?;
         assert!(
             !env.global_subscription()?,
             "global price is enforced separately"
         );
 
         let global_memo = env.subscriber.to_text().replace('-', "").into_bytes();
-        env.set_route(global_memo.clone(), 10_000_000_000)?;
+        env.set_route(global_memo.clone(), GLOBAL_BASE_E8S)?;
         env.append(
             account_id(Principal::from_slice(&[99]), [0; 32]),
             account_id(env.event_horizon, [0; 32]),
@@ -3479,7 +3533,7 @@ mod tests {
             "a forged non-Faucet transfer cannot admit"
         );
 
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         assert!(env.global_subscription()?);
         env.admit(7, None, 1_000_000_000)?;
 
@@ -3552,7 +3606,7 @@ mod tests {
             Price {
                 account_icp: 10,
                 range_icp: 20,
-                global_icp: 100
+                global_icp: 1_000
             }
         );
         update::<_, ()>(&env.pic, env.cmc, "debug_set_rate", 30_000u64)?;
@@ -3589,7 +3643,7 @@ mod tests {
             Some(Price {
                 account_icp: 5,
                 range_icp: 10,
-                global_icp: 50
+                global_icp: 500
             })
         );
         assert!(!frozen.next_carried_forward_due_to_stale_rate);
@@ -5105,7 +5159,7 @@ mod tests {
         env.admit(256, Some("0.01"), 1_000_000_000)?;
         env.admit_neuron(1_000_000, 1_000_000_000)?;
         env.admit_range(8, 9, None, 10_000_000_000)?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
         env.set_scheduler_liquid_cycles_override(Some(0))?;
         let retained_cursor = env.state()?.observed_next_block;
         env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
@@ -5187,13 +5241,20 @@ mod tests {
         env.price_once()?;
         env.poll()?;
         env.admit(7, Some("0.01"), 1_000_000_000)?;
-        env.admit_global(10_000_000_000)?;
+        env.admit_global(100 * ICP_E8S)?;
         let start = env.state()?.observed_next_block;
         assert!(
             start > 0,
             "fixture must begin with a nonzero retained cursor"
         );
-        let pricing_before = env.pricing()?;
+        assert_eq!(
+            env.pricing()?.current,
+            Price {
+                account_icp: 10,
+                range_icp: 20,
+                global_icp: 100,
+            }
+        );
         let instance_before: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
         env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
         let boundary = start + 3 * 256;
@@ -5225,7 +5286,17 @@ mod tests {
         assert_eq!(retained.admission_next_block, failed.admission_next_block);
         assert_eq!(retained.subscriptions, 1);
         assert_eq!(retained.global_subscriptions, 1);
-        assert_eq!(env.pricing()?, pricing_before);
+        // This deliberately demonstrates why an ordinary policy-crossing
+        // upgrade is unsafe: the old stored global value survives and the new
+        // divisor interprets its public range value as 2 ICP.
+        assert_eq!(
+            env.pricing()?.current,
+            Price {
+                account_icp: 10,
+                range_icp: 2,
+                global_icp: 100,
+            }
+        );
         assert!(env.subscription(7)?.is_some());
         assert!(env.global_subscription()?);
         let instance_after: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
@@ -5246,6 +5317,93 @@ mod tests {
         assert_eq!(caught_up.admission_next_block, boundary);
         assert_eq!(caught_up.subscriptions, 1);
         assert_eq!(caught_up.global_subscriptions, 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn prepolicy_state_is_replaced_by_the_controlled_pricing_reinstall() -> Result<()> {
+        let baseline = std::fs::read(
+            workspace_root()?
+                .join("tests/fixtures/event_horizon_reader_baseline_dca1caa_debug.wasm"),
+        )?;
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&baseline)),
+            "54578ead9519a5b63372e5d76997adafe1b2da46f2d3fec7568fafd3baeb9092"
+        );
+        let env = Env::with_event_horizon_wasm(baseline, 200_000_000_000_000)?;
+        // Keep the baseline scheduler dormant while the test drives exact polls.
+        env.set_scheduler_liquid_cycles_override(Some(0))?;
+        env.price_once()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit_global(100 * ICP_E8S)?;
+        let old = env.state()?;
+        assert!(old.observed_next_block > 0);
+        assert_eq!(old.subscriptions, 1);
+        assert_eq!(old.global_subscriptions, 1);
+        assert_eq!(
+            env.pricing()?.current,
+            Price {
+                account_icp: 10,
+                range_icp: 20,
+                global_icp: 100,
+            }
+        );
+        let instance_before: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+
+        env.reinstall_with_debug_wasm(wasm(
+            &EVENT_HORIZON_WASM,
+            "event-horizon",
+            Some("debug_api"),
+        )?)?;
+
+        let reset = env.state()?;
+        assert!(!reset.admission_bootstrapped);
+        assert_eq!(reset.admission_next_block, 0);
+        assert!(!reset.observed_bootstrapped);
+        assert_eq!(reset.observed_next_block, 0);
+        assert_eq!(reset.subscriptions, 0);
+        assert_eq!(reset.global_subscriptions, 0);
+        assert!(reset.cmc_state.contains("Idle"));
+        assert!(env.subscription(7)?.is_none());
+        assert!(!env.global_subscription()?);
+        assert_eq!(
+            env.pricing()?.current,
+            Price {
+                account_icp: 10,
+                range_icp: 20,
+                global_icp: 1_000,
+            }
+        );
+        assert!(!env.pricing()?.initialized);
+
+        let instance_after: InstanceInfo = query(&env.pic, env.event_horizon, "get_instance", ())?;
+        assert_eq!(
+            instance_after.observed_ledger,
+            instance_before.observed_ledger
+        );
+        assert_eq!(instance_after.icp_ledger, instance_before.icp_ledger);
+        assert_eq!(instance_after.sns_root, instance_before.sns_root);
+        assert_eq!(
+            instance_after.surplus_canister,
+            instance_before.surplus_canister
+        );
+
+        env.price_once()?;
+        assert!(env.pricing()?.initialized);
+        assert_eq!(env.pricing()?.current.global_icp, 1_000);
+        env.poll()?;
+        let bootstrapped = env.state()?;
+        assert!(bootstrapped.observed_bootstrapped);
+        assert!(bootstrapped.admission_bootstrapped);
+        assert!(bootstrapped.observed_next_block > 0);
+        assert_eq!(
+            bootstrapped.observed_next_block,
+            bootstrapped.admission_next_block
+        );
+        assert_eq!(bootstrapped.subscriptions, 0);
+        assert_eq!(bootstrapped.global_subscriptions, 0);
         Ok(())
     }
 

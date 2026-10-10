@@ -30,9 +30,25 @@ The builder preserves exact declaration text and enforces Jupiter Faucet's compl
 
 ## Pricing display
 
-The page displays current account/range/global prices, current and next UTC boundaries, freeze time, all three frozen prices, stale carry-forward state, and floor/latest CMC observations. Range width does not change the 20-ICP economic basis. CMC integers are formatted for display with four decimal places (`23147` becomes `2.3147 XDR/ICP`) and are described as Event Horizon's retained CMC observations rather than market lows.
+The page displays the backend's authoritative current account/range/global
+prices, current and next UTC boundaries, freeze time, all three frozen prices,
+stale carry-forward state, and floor/latest CMC observations. It does not
+calculate or hardcode admission prices in the browser. A freshly initialized
+backend begins from the 10, 20, and 1,000 ICP reference bases, but independent
+upward rounding means the displayed dynamic prices need not preserve an exact
+ratio. Range width does not change the 20-ICP economic basis. CMC integers are
+formatted for display with four decimal places (`23147` becomes `2.3147
+XDR/ICP`) and are described as Event Horizon's retained CMC observations rather
+than market lows.
 
-When a frozen next price is higher, the builder recommends that amount immediately to account for Faucet delivery delay. When it is lower, it continues recommending the current amount until activation. In every case, backend evaluation is authoritative.
+When a frozen next price is higher, the builder recommends that amount
+immediately to account for Faucet delivery delay. When it is lower, it
+continues recommending the current amount until activation. The amount is the
+minimum qualifying cumulative productive endowment: the principal remains in
+Jupiter's staking path, while attributable raw-ICP payouts help fund Event
+Horizon after conversion to cycles. Admission is permanent, but neither the
+frontend nor that funding design guarantees a payout, cadence, yield, or
+uninterrupted service. In every case, backend evaluation is authoritative.
 
 ## Development
 

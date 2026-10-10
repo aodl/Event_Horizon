@@ -5,7 +5,7 @@ use crate::{clients::cmc, config, state};
 
 pub const STANDARD_BASE_ICP: u64 = 10;
 pub const RANGE_BASE_ICP: u64 = 20;
-pub const GLOBAL_BASE_ICP: u64 = 100;
+pub const GLOBAL_BASE_ICP: u64 = 1_000;
 pub const SECONDS_PER_DAY: u64 = 86_400;
 pub const PRICE_HISTORY_DAYS: u64 = 1_461;
 pub const PRICE_FREEZE_LEAD_SECONDS: u64 = 7 * SECONDS_PER_DAY;
@@ -375,25 +375,29 @@ mod tests {
 
     #[test]
     fn formula_examples_and_independent_rounding() {
-        assert_eq!(calculate_prices(10, 10).unwrap(), Price::BASE);
-        assert_eq!(
-            calculate_prices(10, 20).unwrap(),
-            Price {
-                account_icp: 5,
-                global_icp: 50
-            }
+        for (floor, current, account, range, global) in [
+            (10, 10, 10, 20, 1_000),
+            (10, 20, 5, 10, 500),
+            (10, 50, 2, 4, 200),
+            (10, 16, 7, 13, 625),
+            (21, 100, 3, 5, 210),
+        ] {
+            let internal = calculate_prices(floor, current).unwrap();
+            let public: PublicPrice = internal.into();
+            assert_eq!(public.account_icp, account, "F={floor} C={current}");
+            assert_eq!(public.range_icp, range, "F={floor} C={current}");
+            assert_eq!(public.global_icp, global, "F={floor} C={current}");
+        }
+
+        let independently_rounded: PublicPrice = calculate_prices(10, 16).unwrap().into();
+        assert_ne!(
+            independently_rounded.global_icp,
+            independently_rounded.account_icp * 100
         );
-        assert_eq!(
-            calculate_prices(10, 50).unwrap(),
-            Price {
-                account_icp: 2,
-                global_icp: 20
-            }
+        assert_ne!(
+            independently_rounded.range_icp,
+            independently_rounded.account_icp * 2
         );
-        let rounded = calculate_prices(10, 16).unwrap();
-        assert_eq!(rounded.account_icp, 7);
-        assert_eq!(rounded.global_icp, 63);
-        assert_ne!(rounded.global_icp, rounded.account_icp * 10);
     }
 
     #[test]
@@ -404,14 +408,14 @@ mod tests {
             PublicPrice {
                 account_icp: 10,
                 range_icp: 20,
-                global_icp: 100,
+                global_icp: 1_000,
             }
         );
 
         let boundary: PublicPrice = calculate_prices(21, 100).unwrap().into();
         assert_eq!(boundary.account_icp, 3);
         assert_eq!(boundary.range_icp, 5);
-        assert_eq!(boundary.global_icp, 21);
+        assert_eq!(boundary.global_icp, 210);
         assert_ne!(boundary.range_icp, 2 * boundary.account_icp);
         assert_eq!(
             boundary.range_icp,
@@ -425,30 +429,40 @@ mod tests {
             for current in 1..=1_000u64 {
                 let direct = calculate_price(RANGE_BASE_ICP, floor, current).unwrap();
                 let global = calculate_price(GLOBAL_BASE_ICP, floor, current).unwrap();
-                assert_eq!(direct, ceil_div(global, 5), "F={floor} C={current}");
+                assert_eq!(
+                    direct,
+                    ceil_div(global, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
+                    "F={floor} C={current}"
+                );
             }
         }
 
         for (floor, current) in [
             (1, u64::MAX),
             (u64::MAX, u64::MAX),
-            (u64::MAX / 100, 1),
+            (u64::MAX / 1_000, 1),
             (u64::MAX / 20, u64::MAX / 100),
         ] {
             let direct = calculate_price(RANGE_BASE_ICP, floor, current).unwrap();
             let global = calculate_price(GLOBAL_BASE_ICP, floor, current).unwrap();
-            assert_eq!(direct, ceil_div(global, 5), "F={floor} C={current}");
+            assert_eq!(
+                direct,
+                ceil_div(global, GLOBAL_BASE_ICP / RANGE_BASE_ICP),
+                "F={floor} C={current}"
+            );
         }
+
+        assert!(calculate_price(GLOBAL_BASE_ICP, u64::MAX, 1).is_err());
     }
 
     #[test]
     fn ceiling_division_does_not_add_before_dividing() {
-        assert_eq!(ceil_div(0, 5), 0);
-        assert_eq!(ceil_div(1, 5), 1);
-        assert_eq!(ceil_div(5, 5), 1);
-        assert_eq!(ceil_div(6, 5), 2);
-        assert_eq!(ceil_div(u64::MAX, 5), u64::MAX / 5);
-        assert_eq!(ceil_div(u64::MAX - 1, 5), (u64::MAX - 1) / 5 + 1);
+        assert_eq!(ceil_div(0, 50), 0);
+        assert_eq!(ceil_div(1, 50), 1);
+        assert_eq!(ceil_div(50, 50), 1);
+        assert_eq!(ceil_div(51, 50), 2);
+        assert_eq!(ceil_div(u64::MAX, 50), u64::MAX / 50 + 1);
+        assert_eq!(ceil_div(u64::MAX - 1, 50), (u64::MAX - 1) / 50 + 1);
     }
 
     #[test]

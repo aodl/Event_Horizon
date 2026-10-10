@@ -8,7 +8,9 @@
 - [Trust model](architecture/trust-model.md)
 - [Stable memory](architecture/stable-memory.md)
 - [Production surface](architecture/production-surface.md)
-- [Economics and pricing](architecture/economics-pricing.md)
+- [Funding, economics, and pricing](architecture/economics-pricing.md) — the
+  authoritative explanation of productive endowments, dynamic prices, pooled
+  operating funding, and the planned protocol kickstart
 
 ## Development and testing
 

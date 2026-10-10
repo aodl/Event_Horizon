@@ -21,10 +21,22 @@ Do not continue unless all of the following are true:
 - install-time `surplus_canister` is either deliberately `None` or the final reviewed immutable receiver principal; no destination decision remains open;
 - if surplus is enabled, retained-first ordering, epoch policy, immediate gates, duplicate recovery, and pending-state upgrades have passed against the canonical Wasm;
 - the Jupiter Faucet `X` alias points to this backend canister;
-- pricing has initialized, at least one monthly freeze/activation has been observed, and `get_pricing` agrees with the frontend;
+- the exceptional prelaunch pricing reset, if used, was explicitly approved
+  only after verifying there were no obligations requiring preservation;
+- pricing has initialized under the 10/20/1,000 reference regime, no stale
+  pre-policy pricing state remains, at least one monthly freeze/activation has
+  been observed, and `get_pricing` agrees with the frontend;
+- recurring Faucet receipts and successful retained CMC conversions have been
+  observed, the cycles reserve is adequate for the intended cadence, and the
+  sustainable operating plan is understood from measured receipts, polling,
+  pokes, and burn rather than hypothetical yield alone;
+- the planned 3,000 ICP productive protocol endowment, subscriber endowments,
+  and liquid-cycles bootstrap have been tracked as distinct funding categories;
 - the Wasm export audit permits exactly `canister_query get_instance` and `canister_query get_pricing`, with no update/admin application method;
 - the frontend Wasm export audit permits exactly `canister_query http_request` and rejects `http_request_update`;
 - ordinary single/range, neuron single/range, and global Historian admission paths have been tested against the current prices;
+- backend and frontend artifacts reproduce byte-for-byte and the frontend's
+  reviewed static backend hash equals the installed backend module hash;
 - no remaining operational task requires controller access.
 
 ## Inspect

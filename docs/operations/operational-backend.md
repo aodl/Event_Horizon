@@ -23,11 +23,28 @@ and any new or suppressed failure episode.
 
 ## Admission
 
-Only a payout from the configured Faucet default account to Event Horizon can propose admission. Historian must verify the exact memo route, a complete view, and a total at least equal to the current account/range/global requirement. Pricing must have initialized. A valid ordinary or neuron range expands inclusively into at most 256 watched-account merges. Failed evaluation creates no retry queue; a later Faucet payout is another opportunity.
+Only a payout from the configured Faucet default account to Event Horizon can
+propose admission; the patron's original staking transfer cannot. Historian
+must verify the exact memo route, a complete view, and a cumulative qualifying
+productive-endowment total at least equal to the current account/range/global
+requirement. Pricing must have initialized. Repeated exact-route endowments may
+raise that total, but cumulative principal is not cumulative rewards
+distributed. A valid ordinary or neuron range expands inclusively into at most
+256 watched-account merges. Failed evaluation creates no retry queue; a later
+Faucet payout is another opportunity. Admission is permanent and extra funding
+creates no priority or faster cadence.
 
 ## Pricing lane
 
 An independent one-shot timer handles daily CMC observations and exact freeze/effective timestamps. It prunes observations older than the 1,461 UTC-day window before epoch work, records no more than one success per UTC date, and persists one attempt per date to avoid same-day retry loops. Upgrade startup replaces timer slots and resumes this lane once.
+
+A fresh pricing state starts from 10 ICP account, 20 ICP range, and 1,000 ICP
+global reference bases after its first successful CMC observation. The range
+requirement remains the independent 20 ICP basis even though the stable
+`Price` stores only account and global values. Old 100 ICP global pricing state
+must not cross this policy boundary through an ordinary upgrade; the
+exceptional prelaunch decision and destructive-reset preconditions are in the
+[deployment runbook](deployment.md).
 
 ## Polling cadence
 
@@ -54,7 +71,14 @@ A successful CMC mint immediately reevaluates cadence from the newly available l
 
 ## Funding lane
 
-Hourly funding remains separate and is the only money-moving worker. Each opportunity records the current liquid balance into the surplus policy's seven-day observed minimum, then resumes the single durable `FundingState` before considering any new raw balance. A successful mint immediately recalculates polling cadence from liquid cycles. Pricing queries do not alter funding state.
+Hourly funding remains separate and is the only money-moving worker. Productive
+endowment principal remains in Jupiter's staking path; Event Horizon receives
+raw-ICP maturity-derived payouts and pools them with other eligible incoming
+raw ICP. Each opportunity records the current liquid balance into the surplus
+policy's seven-day observed minimum, then resumes the single durable
+`FundingState` before considering any new raw balance. A successful mint
+immediately recalculates polling cadence from liquid cycles. Pricing queries do
+not alter funding state. Neither payout amount nor cadence is guaranteed.
 
 With `InstanceConfig.surplus_canister = None`, the policy resets to level zero and the legacy single CMC transfer is unchanged. When an immutable recipient is configured and liquid cycles are currently at least 150 T, a new balance may be split after reserving two current Ledger fees. The exact retained amount, surplus amount, fees, destination account identifier, and fixed memo are persisted before the retained legacy transfer. CMC `Processing` keeps the notification and plan pending. Recovery never re-reads instance configuration to redirect a persisted plan. Refund or terminal error cancels the planned surplus.
 
