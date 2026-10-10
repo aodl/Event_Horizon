@@ -77,9 +77,35 @@ all 104 PocketIC cases before execution. Formatting passed, locked workspace
 Clippy passed with warnings denied, and the security gate passed with its four
 existing reviewed/allowed warnings and no unfiltered advisory or vulnerability.
 
-Canonical artifact hashes and the artifact-source revision are added after the
-clean-commit reproducibility builds so that those values describe measured
-outputs rather than a dirty working tree.
+The three new integration scenarios can be rerun individually with:
+
+```sh
+POCKET_IC_MUTE_SERVER=1 cargo test --locked -p event-horizon-pocketic --lib -- --ignored --exact tests::generated_subscriber_entrypoints_obey_candid_argument_compatibility
+POCKET_IC_MUTE_SERVER=1 cargo test --locked -p event-horizon-pocketic --lib -- --ignored --exact tests::shared_icp_mixed_receiver_styles_cover_global_specific_and_coalescing
+POCKET_IC_MUTE_SERVER=1 cargo test --locked -p event-horizon-pocketic --lib -- --ignored --exact tests::generic_icrc3_specific_activity_executes_both_receiver_styles
+```
+
+## Canonical artifacts
+
+The implementation was committed cleanly at artifact-source revision
+`a01ac6b9b77e47b8048f5cd027a93bc27f6f65d6`. Two independent no-cache builds
+from that revision were byte-identical. The subsequent evidence revision
+changes only this report and the generated source manifest.
+
+| Measured item | SHA-256 |
+| --- | --- |
+| `event_horizon.wasm` | `9775fa94617e4c089e9b7420129de0392e870d1d8ea4281f426bd1890c72721a` |
+| `event_horizon_frontend.wasm` | `4f2a5b873f4ebef34d15cfc60f6185c9e40ab9dc70af4f3de0ddde1f3a871cde` |
+| `build-info.json` | `d40c68e141665c8fd73ad098fe0fed7623f868123c8094896dc0f242f2a1f037` |
+| artifact checksum manifest | `eb39713fd273fdb2c2e7c97428a5a9a19d34859d9d3836e5931006a18a16cb00` |
+| artifact-source `MANIFEST.sha256` | `0d25a466e0ee8144bfccc0ec5b4963e68c4301c03f0ac44fdd9e970ef843cb03` |
+
+`npm run verify:reproducible-artifacts`, `./tools/scripts/docker-build`, and
+the subsequent `sha256sum -c release-artifacts.sha256` verification all
+passed. The backend and frontend WebAssembly export audits passed with their
+canonical 10 and 7 exports respectively; no fixture/debug method was present
+in either production artifact. The production backend Candid file and frontend
+Candid file are unchanged from the starting revision.
 
 ## Limitations
 
