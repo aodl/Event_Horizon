@@ -18,8 +18,6 @@
 html {
   overflow-x: clip;
   scroll-behavior: smooth;
-  scrollbar-color: rgba(255, 252, 244, .78) rgba(140, 137, 132, .16);
-  scrollbar-width: thin;
 }
 body {
   margin: 0;
@@ -33,17 +31,13 @@ html::-webkit-scrollbar-track {
   background: rgba(140, 137, 132, .16);
   box-shadow: inset 0 0 .38rem rgba(255, 255, 255, .07);
 }
-html::-webkit-scrollbar-thumb {
+html::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb:hover {
   border: 2px solid transparent;
   border-radius: 999px;
   background: rgba(255, 252, 244, .76);
   background-clip: padding-box;
   box-shadow: inset 0 0 .35rem rgba(255, 255, 255, .9), 0 0 .45rem rgba(255, 248, 218, .54);
-}
-html::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, .94);
-  background-clip: padding-box;
-  box-shadow: inset 0 0 .4rem #fff, 0 0 .65rem rgba(255, 248, 218, .76);
 }
 html::-webkit-scrollbar-button:single-button {
   height: .72rem;
