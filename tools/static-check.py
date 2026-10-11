@@ -4,9 +4,9 @@ import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
-expected_svg='2352f30e66de1d2be306b7338a0f3c28836c3b7356cddbc8063681df7487ea56'
+expected_svg='9f91f109527b0d591c959456dc24690e580f3f53d76b03400bb3969f7c3acd46'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
-assert len(svg)==953_853 and len(svg)<1_000_000
+assert len(svg)==952_382 and len(svg)<1_000_000
 static_svg=(root/'canisters/frontend/public/event-horizon-static.svg').read_bytes()
 expected_static_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
 assert hashlib.sha256(static_svg).hexdigest()==expected_static_svg
@@ -44,7 +44,8 @@ assert svg_by_id['ehm-pMidRight'].get('d')==svg_by_id['r10-lower_midright'].get(
 motion=svg_by_id['ehm-animation']
 motion_uses=[element for element in motion.iter() if local_name(element.tag)=='use']
 assert len([element for element in motion if local_name(element.tag)=='g'])==7
-assert len(motion_uses)==23
+assert len(motion_uses)==18
+assert sum(element.get('filter')=='url(#ehm-blurHuge)' for element in motion_uses)==2
 assert all(
     all(name.startswith('ehm-') for name in element.get('class','').split())
     for element in motion.iter() if element.get('class')
@@ -153,6 +154,7 @@ animation_css=next(
     if local_name(element.tag)=='style' and '#ehm-animation' in (element.text or '')
 )
 assert '@media(prefers-reduced-motion:reduce)' in animation_css
+assert '.ehm-paused #ehm-animation *{animation-play-state:paused!important}' in animation_css
 assert not re.search(r'(?<!ehm-)\.(?:gA|gB|gC|gD|u1o|l1o)\b',animation_css)
 planet_css=next(
     (element.text or '') for element in svg_root.iter()
@@ -241,15 +243,17 @@ for marker in ['safeGetCanisterEnv', 'PUBLIC_CANISTER_ID:event_horizon', 'ic_env
 assert 'public, max-age=31536000, immutable' not in frontend
 assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
+frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
 assert 'styles.css?v=9' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
 assert '<link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">' in frontend_index
 assert '<link rel="preload" href="/event-horizon-static.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: reduce)">' in frontend_index
-assert '<source media="(prefers-reduced-motion: reduce)" srcset="/event-horizon-static.svg" type="image/svg+xml">' in frontend_index
-assert '<img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">' in frontend_index
+assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true"' in frontend_index
+assert 'data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>' in frontend_index
 assert 'event_horizon_animated.svg' not in frontend_index
-assert 'Event-driven infra that notifies canisters about token transfers' in frontend_index
+assert 'Event-driven infrastructure that notifies canisters about relevant transactions' in frontend_index
+assert 'font-size: clamp(.88rem, 1.12vw, 1rem);' in frontend_styles
 assert '>Open deployment</p>' in frontend_index
 assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index
 assert '>EVH<span class="wordmark__dot">.</span></a>' in frontend_index

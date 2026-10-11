@@ -183,7 +183,7 @@ h1 span:first-child { margin-bottom: .13em; }
   max-width: 35rem;
   margin: clamp(1.75rem, 4vh, 3.25rem) 0 0;
   color: rgba(238, 233, 225, .78);
-  font-size: clamp(.94rem, 1.3vw, 1.12rem);
+  font-size: clamp(.88rem, 1.12vw, 1rem);
   line-height: 1.7;
 }
 .hero__action {

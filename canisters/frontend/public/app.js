@@ -12,20 +12,38 @@ import { registryMarkup, verifyInstanceConfiguration } from './instance-view.js'
 import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
 
-export function initHeroArtwork(documentRef, schedule = callback => callback()) {
+export function initHeroArtwork(documentRef, windowRef, schedule = callback => callback()) {
   const detail = documentRef.querySelector('.hero__detail');
   if (!detail) return;
-  let started = false;
-  const reveal = () => {
-    if (started) return;
-    started = true;
-    const decoded = typeof detail.decode === 'function'
-      ? detail.decode().catch(() => undefined)
-      : Promise.resolve();
-    decoded.then(() => schedule(() => detail.classList.add('hero__detail--loaded')));
+  let loaded = false;
+  let windowFocused = documentRef.hasFocus?.() ?? true;
+  const syncAnimationState = () => {
+    if (!loaded) return;
+    const svg = detail.contentDocument?.documentElement;
+    if (!svg) return;
+    const paused = Boolean(documentRef.hidden) || !windowFocused;
+    svg.classList.toggle('ehm-paused', paused);
+    if (paused) svg.pauseAnimations?.();
+    else svg.unpauseAnimations?.();
   };
-  if (detail.complete && detail.naturalWidth > 0) reveal();
-  else detail.addEventListener('load', reveal, { once: true });
+  const reveal = () => {
+    if (loaded) return;
+    loaded = true;
+    syncAnimationState();
+    schedule(() => detail.classList.add('hero__detail--loaded'));
+  };
+  detail.addEventListener('load', reveal, { once: true });
+  documentRef.addEventListener('visibilitychange', syncAnimationState);
+  windowRef?.addEventListener?.('blur', () => {
+    windowFocused = false;
+    syncAnimationState();
+  });
+  windowRef?.addEventListener?.('focus', () => {
+    windowFocused = true;
+    syncAnimationState();
+  });
+  const reducedMotion = windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  detail.data = reducedMotion ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
 }
 
 export function initHeroBackdrop(documentRef, windowRef) {
@@ -185,7 +203,7 @@ export function createApp({
 }
 
 if (typeof document !== 'undefined') {
-  initHeroArtwork(document, callback => window.requestAnimationFrame(callback));
+  initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
   initHeroBackdrop(document, window);
   createApp({ documentRef: document });
 }

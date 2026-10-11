@@ -57,16 +57,14 @@
           <use href="#s" fill="#fcfffd" transform="matrix(55.8 45.2 -61.7 76.1 1047.2 378.9)" opacity=".9018"/>
         </g>
       </svg>
-      <picture>
-        <source media="(prefers-reduced-motion: reduce)" srcset="/event-horizon-static.svg" type="image/svg+xml">
-        <img class="hero__detail" src="/event-horizon.svg" alt="" fetchpriority="high" decoding="async">
-      </picture>
+      <object class="hero__detail" type="image/svg+xml" aria-hidden="true"
+        data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>
     </div>
 
     <div class="hero__body">
       <p class="kicker">Ledger signals at the edge of finality</p>
       <h1><span>Event</span><span>Horizon</span></h1>
-      <p class="hero__lead">Event-driven infra that notifies canisters about token transfers</p>
+      <p class="hero__lead">Event-driven infrastructure that notifies canisters about relevant transactions</p>
       <a class="hero__action" href="#builder">Build a subscription memo <span aria-hidden="true">&#8595;</span></a>
     </div>
 
