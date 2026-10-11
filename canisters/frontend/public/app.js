@@ -12,6 +12,8 @@ import { registryMarkup, verifyInstanceConfiguration } from './instance-view.js'
 import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
 
+const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
+
 export function initHeroArtwork(documentRef, windowRef, schedule = callback => callback()) {
   const detail = documentRef.querySelector('.hero__detail');
   if (!detail) return;
@@ -57,7 +59,7 @@ export function initHeroBackdrop(documentRef, windowRef) {
   let queued = false;
   const update = () => {
     queued = false;
-    if (!windowRef.matchMedia('(max-aspect-ratio: 1/1)').matches) {
+    if (!windowRef.matchMedia(COMPACT_HERO_QUERY).matches) {
       art.style.removeProperty('--hero-art-scroll-opacity');
       return;
     }

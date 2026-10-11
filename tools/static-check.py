@@ -254,6 +254,8 @@ assert 'data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-s
 assert 'event_horizon_animated.svg' not in frontend_index
 assert 'Event-driven infrastructure that notifies canisters about relevant transactions' in frontend_index
 assert 'font-size: clamp(.88rem, 1.12vw, 1rem);' in frontend_styles
+assert '@media (max-width: 81.25rem), (max-aspect-ratio: 1/1)' in frontend_styles
+assert "const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';" in frontend_app
 assert "object-src 'self'; base-uri 'none'; frame-ancestors 'none'" in frontend
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '>Open deployment</p>' in frontend_index

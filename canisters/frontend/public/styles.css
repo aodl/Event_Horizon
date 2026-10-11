@@ -414,7 +414,7 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   .instances-note > div { grid-template-columns: 1fr; }
 }
 
-@media (max-aspect-ratio: 1/1) {
+@media (max-width: 81.25rem), (max-aspect-ratio: 1/1) {
   .hero { display: flex; min-height: 0; padding-top: 80.398vw; overflow: visible; background: transparent; }
   .hero__art {
     position: fixed;
