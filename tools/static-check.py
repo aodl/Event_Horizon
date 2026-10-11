@@ -4,13 +4,13 @@ import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
 svg=(root/'canisters/frontend/public/event-horizon.svg').read_bytes()
-expected_svg='9f91f109527b0d591c959456dc24690e580f3f53d76b03400bb3969f7c3acd46'
+expected_svg='ba40d4e74ad8f133f12caf47902fedfcc8c3b7fa2807e8db862b50c1981c0694'
 assert hashlib.sha256(svg).hexdigest()==expected_svg
-assert len(svg)==952_382 and len(svg)<1_000_000
+assert len(svg)==952_419 and len(svg)<1_000_000
 static_svg=(root/'canisters/frontend/public/event-horizon-static.svg').read_bytes()
-expected_static_svg='9abc4732605502cebd0932d3a66f20071161f06332abe54cd5272fe96ab7e6de'
+expected_static_svg='a12307b9f8dafa53a09274e2b4290ac9ee0379f1f14e0ad211994a8cb86b1e8f'
 assert hashlib.sha256(static_svg).hexdigest()==expected_static_svg
-assert len(static_svg)==936_294 and len(static_svg)<1_000_000
+assert len(static_svg)==936_331 and len(static_svg)<1_000_000
 svg_root=ET.fromstring(svg)
 static_svg_root=ET.fromstring(static_svg)
 local_name=lambda tag: tag.rsplit('}',1)[-1]
@@ -25,6 +25,7 @@ assert set(svg_ids)-static_svg_ids=={
     'ehp-shade','ehp-surface','ehp-travel',
 }
 assert svg_root.get('viewBox')==static_svg_root.get('viewBox')=='0 0 1672 941'
+assert svg_root.get('preserveAspectRatio')==static_svg_root.get('preserveAspectRatio')=='xMaxYMid slice'
 title=next(element for element in svg_root if local_name(element.tag)=='title')
 description=next(element for element in svg_root if local_name(element.tag)=='desc')
 assert title.text=='Black hole and accretion disc'
