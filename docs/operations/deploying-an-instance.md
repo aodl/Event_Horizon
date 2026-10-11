@@ -34,7 +34,7 @@ SNS-aware:
 
 Use `surplus_canister = null` to disable diversion. For example, a CHAT-observing instance may name an entirely independent ICP treasury canister. The constructor rejects anonymous, management-canister, and self recipients. Installation writes the tuple once; ordinary upgrade has no configuration argument, and no production method can change it.
 
-For an SNS-aware instance, externally verify the observed token Ledger and SNS Root tuple against canonical SNS-WASM inventory or reviewed primary evidence. Confirm Root `list_sns_canisters` reports that Root, Ledger, and SNS Governance and that Ledger `icrc1_minting_account` is Governance's default account. Install with those immutable principals, wait for profile initialization, then verify `get_instance` reports the Ledger, SNS Root, neuron Governance, and expected Wasm hash. Perform controlled tests, remove all controllers, and only then propose frontend listing. Event Horizon never calls SNS-WASM and, after profile caching, does not call Root or Governance. ICP and non-SNS generic installs use `sns_root = null`.
+For an SNS-aware instance, externally verify the observed token Ledger and SNS Root tuple against canonical SNS-WASM inventory or reviewed primary evidence. Confirm Root `list_sns_canisters` reports that Root, Ledger, and SNS Governance and that Ledger `icrc1_minting_account` is Governance's default account. Install with those immutable principals, wait for profile initialization, then verify `get_instance` reports the Ledger, SNS Root, surplus recipient, and observed Ledger profile, including neuron Governance. Perform controlled tests, remove all controllers, and only then propose frontend listing. Event Horizon never calls SNS-WASM and, after profile caching, does not call Root or Governance. ICP and non-SNS generic installs use `sns_root = null`.
 
 Before opening the instance for subscriber use, obtain a dedicated Jupiter Faucet alias through the Jupiter Faucet community review process: identify the target Ledger (canonical ICP, or a non-ICP ledger supporting ICRC-1, ICRC-3, and `1xfer`), reserve the Event Horizon canister principal, submit a Faucet source pull request for the alias mapping, raise the community discussion/proposal required by Jupiter governance, and wait for approval/activation planning. Do not modify Jupiter as part of an Event Horizon deployment.
 
@@ -65,6 +65,14 @@ entry and expected hash. Listing provides discoverability, not authority and
 does not broaden legacy support beyond canonical ICP.
 
 The verification tuple is backend canister ID + module hash + empty controllers + observed Ledger + SNS Root + surplus recipient from `get_instance`/logs + Jupiter alias. A module hash alone is insufficient.
+
+`get_instance` reports the backend's immutable instance configuration and its
+observed Ledger profile; it does not return or independently authenticate the
+installed Wasm module hash. Verify that hash separately through the Internet
+Computer's native canister status, and independently verify empty controllers
+plus public status and log visibility. The reviewed Wasm hash, immutable
+configuration, and actual installed state must all agree before declaring an
+instance verified.
 
 ## Canonical transitions
 

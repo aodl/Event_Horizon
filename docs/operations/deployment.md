@@ -80,6 +80,12 @@ Review the hashes before continuing. Do not deploy a locally compiled replacemen
 
 Canonical-artifact mode verifies `release-artifacts/release-artifacts.sha256`, does not rebuild, prints the exact artifact hash being handed to `icp deploy`, and copies that Wasm to the CLI-requested output path.
 
+The protective `--no-create` option requires `icp-cli` 1.2.0 or newer; it makes
+deployment fail if the mapped canister does not exist instead of creating a
+different canister. Confirm the installed version and `icp deploy --help`
+before proceeding. If the option is unavailable, update or otherwise verify
+the deployment tooling; do not silently omit the flag.
+
 For this pricing-policy transition only, and only after the decision gate and
 explicit approval, reinstall the existing canonical backend with the reviewed
 constructor. Omitting `--yes` preserves the CLI's destructive-action

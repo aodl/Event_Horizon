@@ -235,7 +235,11 @@ Because Event Horizon reads the Ledger directly, a poke may arrive before the IC
 
 All Event Horizon cycles are a common operating pool. There is no attribution of cycles expenditure to individual subscriptions.
 
-Account, range, and global endowments enter the same pool. Their different admission prices do not create subscriber-specific cycle allowances.
+Recurring Jupiter Faucet payouts attributable to account, range, and global
+endowments enter Event Horizon's common operating pool. Endowed principal
+remains in Jupiter's productive staking arrangement and is not directly
+available for Event Horizon to spend. Different admission tiers create no
+subscriber-specific cycle allowances or priority.
 
 Larger endowments do not buy priority or lower latency.
 

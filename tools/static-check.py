@@ -257,7 +257,7 @@ assert 'Return to top &#8593;' in frontend_index
 assert 'deployed permissionlessly' not in frontend_index
 for number, label in [
     ('01', 'Open Source &amp; Verifiable'),
-    ('02', 'Blackholed &amp; Immutable'),
+    ('02', 'Designed for Immutability'),
     ('03', 'Productive Endowment Funding'),
     ('04', 'Powered by Internet Computer Protocol'),
 ]:
