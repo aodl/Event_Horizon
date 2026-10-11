@@ -253,8 +253,13 @@ assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true" dat
 assert 'data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>' in frontend_index
 assert 'event_horizon_animated.svg' not in frontend_index
 assert 'Event-driven infrastructure that notifies canisters about relevant transactions' in frontend_index
+assert '<a class="hero__compact-mark" href="#hero-title" aria-label="Jump to the Event Horizon title">EVH.</a>' in frontend_index
+assert '<a class="wordmark" href="#hero-title" aria-label="Jump to the Event Horizon title">EVH<span class="wordmark__dot">.</span></a>' in frontend_index
+assert '<h1 id="hero-title"><span>Event</span><span>Horizon</span></h1>' in frontend_index
 assert 'font-size: clamp(.88rem, 1.12vw, 1rem);' in frontend_styles
 assert '@media (max-width: 81.25rem), (max-aspect-ratio: 1/1)' in frontend_styles
+assert '@media (max-width: 81.25rem) and (min-aspect-ratio: 6/5)' in frontend_styles
+assert 'scroll-margin-top: calc(clamp(5rem, 10svh, 7rem) + 2.77rem);' in frontend_styles
 assert "const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';" in frontend_app
 assert "object-src 'self'; base-uri 'none'; frame-ancestors 'none'" in frontend
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend

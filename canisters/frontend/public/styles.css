@@ -114,6 +114,7 @@ a { color: inherit; }
   transition: opacity 1.4s cubic-bezier(.22, 1, .36, 1);
 }
 .hero__detail--loaded { opacity: 1; }
+.hero__compact-mark { display: none; }
 .hero::after {
   position: absolute;
   inset: 0;
@@ -163,9 +164,9 @@ footer a:focus-visible { color: var(--paper); }
   text-transform: uppercase;
 }
 .kicker { margin: 0 0 1.75rem clamp(.25rem, .35vw, .45rem); color: rgba(238, 233, 225, .82); }
-h1 {
+h1,
+.hero__compact-mark {
   margin: 0;
-  max-width: 100%;
   font-size: clamp(3rem, calc(1rem + 5.3vw), 8.5rem);
   font-weight: 300;
   letter-spacing: .075em;
@@ -177,6 +178,7 @@ h1 {
     0 0 .36em rgb(205 158 126 / .55),
     0 0 .75em rgb(155 106 78 / .35);
 }
+h1 { max-width: 100%; scroll-margin-top: calc(clamp(5rem, 10svh, 7rem) + 2.77rem); }
 h1 span { display: block; width: max-content; max-width: 100%; }
 h1 span:first-child { margin-bottom: .13em; }
 .hero__lead {
@@ -432,6 +434,22 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   .hero__facts { order: 4; align-self: stretch; padding-bottom: 1.5rem; }
   h1 { font-size: clamp(2.75rem, calc(1rem + 8.9vw), 5.25rem); }
   .hero__lead { max-width: 40rem; }
+}
+
+@media (max-width: 81.25rem) and (min-aspect-ratio: 6/5) {
+  .hero__compact-mark {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    z-index: 2;
+    display: block;
+    color: var(--paper);
+    text-decoration: none;
+  }
+  .hero__compact-mark:focus-visible {
+    outline: 1px solid var(--paper);
+    outline-offset: .2em;
+  }
 }
 
 @media (max-width: 44rem) {
