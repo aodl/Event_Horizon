@@ -97,6 +97,8 @@ a { color: inherit; }
   overflow: hidden;
   pointer-events: none;
   background: var(--space);
+  opacity: 1;
+  will-change: opacity;
 }
 .hero__placeholder,
 .hero__detail {
@@ -115,16 +117,6 @@ a { color: inherit; }
 }
 .hero__detail--loaded { opacity: 1; }
 .hero__compact-mark { display: none; }
-.hero::after {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  content: "";
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(4, 3, 3, .34) 0%, transparent 46%),
-    linear-gradient(180deg, rgba(4, 3, 3, .3) 0%, transparent 22%, transparent 75%, rgba(4, 3, 3, .62) 100%);
-}
 
 footer a {
   text-decoration: none;
@@ -217,11 +209,19 @@ h1 span:first-child { margin-bottom: .13em; }
 }
 .hero__facts span { margin-right: .5rem; color: var(--ember); }
 
-main {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(4, 3, 3, .78) 0, rgba(4, 3, 3, .9) 32rem, rgba(4, 3, 3, .94) 100%);
+@keyframes hero-art-scroll-fade {
+  from { opacity: 1; }
+  to { opacity: .14; }
 }
+@supports (animation-timeline: scroll()) and (animation-range: 0 100svh) {
+  .hero__art {
+    animation: hero-art-scroll-fade 1ms linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 100svh;
+  }
+}
+
+main { position: relative; overflow: hidden; }
 main::before {
   position: absolute;
   top: 15rem;
@@ -425,15 +425,18 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
     height: auto;
     aspect-ratio: calc(1672 * .7) / 941;
     margin: 0;
-    opacity: var(--hero-art-scroll-opacity, 1);
-    will-change: opacity;
   }
   .hero__detail { object-position: 100% 50%; }
-  .hero::after { display: none; }
   .hero__body { order: 3; width: 100%; padding-block: 0 clamp(2.5rem, 8svh, 5rem); }
   .hero__facts { order: 4; align-self: stretch; padding-bottom: 1.5rem; }
   h1 { font-size: clamp(2.75rem, calc(1rem + 8.9vw), 5.25rem); }
   .hero__lead { max-width: 40rem; }
+}
+
+@supports (animation-timeline: scroll()) and (animation-range: 0 100svh) {
+  @media (max-width: 81.25rem), (max-aspect-ratio: 1/1) {
+    .hero__art { animation-range: 0 80.398vw; }
+  }
 }
 
 @media (max-width: 81.25rem) and (min-aspect-ratio: 6/5) {

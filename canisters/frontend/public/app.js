@@ -56,26 +56,21 @@ export function initHeroArtwork(documentRef, windowRef, schedule = callback => c
 export function initHeroBackdrop(documentRef, windowRef) {
   const art = documentRef.querySelector('.hero__art');
   if (!art || !windowRef) return;
-  let queued = false;
+  const supportsNativeFade = windowRef.CSS?.supports?.('animation-timeline: scroll()')
+    && windowRef.CSS.supports('animation-range: 0 100svh');
+  if (supportsNativeFade) return;
   const update = () => {
-    queued = false;
-    if (!windowRef.matchMedia(COMPACT_HERO_QUERY).matches) {
-      art.style.removeProperty('--hero-art-scroll-opacity');
-      return;
-    }
-    const fadeDistance = Math.max(windowRef.innerWidth * 941 / (1672 * .7), 1);
+    const compact = windowRef.matchMedia(COMPACT_HERO_QUERY).matches;
+    const fadeDistance = Math.max(
+      compact ? windowRef.innerWidth * 941 / (1672 * .7) : windowRef.innerHeight,
+      1,
+    );
     const progress = Math.min(Math.max(windowRef.scrollY / fadeDistance, 0), 1);
-    const eased = progress * progress * (3 - 2 * progress);
-    art.style.setProperty('--hero-art-scroll-opacity', (1 - .86 * eased).toFixed(3));
-  };
-  const queueUpdate = () => {
-    if (queued) return;
-    queued = true;
-    windowRef.requestAnimationFrame(update);
+    art.style.opacity = (1 - .86 * progress).toFixed(3);
   };
   update();
-  windowRef.addEventListener('scroll', queueUpdate, { passive: true });
-  windowRef.addEventListener('resize', queueUpdate, { passive: true });
+  windowRef.addEventListener('scroll', update, { passive: true });
+  windowRef.addEventListener('resize', update, { passive: true });
 }
 
 export function createApp({

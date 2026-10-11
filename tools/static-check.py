@@ -261,6 +261,11 @@ assert '@media (max-width: 81.25rem), (max-aspect-ratio: 1/1)' in frontend_style
 assert '@media (max-width: 81.25rem) and (min-aspect-ratio: 6/5)' in frontend_styles
 assert 'scroll-margin-top: calc(clamp(5rem, 10svh, 7rem) + 2.77rem);' in frontend_styles
 assert "const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';" in frontend_app
+assert 'animation-timeline: scroll(root block);' in frontend_styles
+assert 'animation-range: 0 100svh;' in frontend_styles
+assert '.hero__art { animation-range: 0 80.398vw; }' in frontend_styles
+assert 'background: linear-gradient(180deg, rgba(4, 3, 3, .78)' not in frontend_styles
+assert '.hero::after' not in frontend_styles
 assert "object-src 'self'; base-uri 'none'; frame-ancestors 'none'" in frontend
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '>Open deployment</p>' in frontend_index
