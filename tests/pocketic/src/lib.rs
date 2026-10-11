@@ -6063,6 +6063,12 @@ mod tests {
                     name.eq_ignore_ascii_case("content-type") && value == "image/svg+xml"
                 }));
                 assert!(response.headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-security-policy")
+                        && value.contains("style-src 'unsafe-inline'")
+                        && value.contains("object-src 'none'")
+                        && value.contains("frame-ancestors 'self'")
+                }));
+                assert!(response.headers.iter().any(|(name, value)| {
                     name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
                 }));
                 if response.status_code == 206 {
@@ -6189,6 +6195,11 @@ mod tests {
         };
         let index = request("/")?;
         assert_eq!(index.status_code, 200);
+        assert!(index.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("content-security-policy")
+                && value.contains("object-src 'self'")
+                && value.contains("frame-ancestors 'none'")
+        }));
         let html = String::from_utf8(index.body)?;
         assert!(html.contains("styles.css?v=9"));
         assert!(html.contains("app.bundle.js?v=3"));

@@ -247,13 +247,14 @@ frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
 assert 'styles.css?v=9' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
-assert '<link rel="preload" href="/event-horizon.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">' in frontend_index
-assert '<link rel="preload" href="/event-horizon-static.svg" as="image" type="image/svg+xml" media="(prefers-reduced-motion: reduce)">' in frontend_index
-assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true"' in frontend_index
+assert '<link rel="preload"' not in frontend_index
+assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true" data="/event-horizon.svg"' in frontend_index
 assert 'data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>' in frontend_index
 assert 'event_horizon_animated.svg' not in frontend_index
 assert 'Event-driven infrastructure that notifies canisters about relevant transactions' in frontend_index
 assert 'font-size: clamp(.88rem, 1.12vw, 1rem);' in frontend_styles
+assert "object-src 'self'; base-uri 'none'; frame-ancestors 'none'" in frontend
+assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '>Open deployment</p>' in frontend_index
 assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index
 assert '>EVH<span class="wordmark__dot">.</span></a>' in frontend_index

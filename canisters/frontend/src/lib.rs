@@ -17,6 +17,8 @@ thread_local! {
 static ASSETS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/public");
 const NO_CACHE: &str = "public, no-cache, no-store";
 const REVALIDATE: &str = "public, no-cache";
+const PAGE_CSP: &str = "default-src 'self'; connect-src 'self' https://icp-api.io; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'";
+const SVG_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'";
 
 #[init]
 fn init() {
@@ -48,12 +50,12 @@ fn collect_assets<'content, 'path>(
     }
 }
 
-fn headers(cache_control: &str) -> Vec<HeaderField> {
+fn headers(cache_control: &str, content_security_policy: &str) -> Vec<HeaderField> {
     vec![
         ("cache-control".to_string(), cache_control.to_string()),
         (
             "content-security-policy".to_string(),
-            "default-src 'self'; connect-src 'self' https://icp-api.io; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'".to_string(),
+            content_security_policy.to_string(),
         ),
         ("x-content-type-options".to_string(), "nosniff".to_string()),
         ("referrer-policy".to_string(), "no-referrer".to_string()),
@@ -65,7 +67,7 @@ fn certify_all_assets() {
         AssetConfig::File {
             path: "index.html".to_string(),
             content_type: Some("text/html".to_string()),
-            headers: headers(NO_CACHE),
+            headers: headers(NO_CACHE, PAGE_CSP),
             fallback_for: vec![],
             aliased_by: vec!["/".to_string()],
             encodings: vec![],
@@ -73,7 +75,7 @@ fn certify_all_assets() {
         AssetConfig::File {
             path: "404.html".to_string(),
             content_type: Some("text/html".to_string()),
-            headers: headers(NO_CACHE),
+            headers: headers(NO_CACHE, PAGE_CSP),
             fallback_for: vec![AssetFallbackConfig {
                 scope: "/".to_string(),
                 status_code: Some(StatusCode::NOT_FOUND),
@@ -84,31 +86,31 @@ fn certify_all_assets() {
         AssetConfig::Pattern {
             pattern: "**/*.js".to_string(),
             content_type: Some("text/javascript".to_string()),
-            headers: headers(REVALIDATE),
+            headers: headers(REVALIDATE, PAGE_CSP),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.css".to_string(),
             content_type: Some("text/css".to_string()),
-            headers: headers(REVALIDATE),
+            headers: headers(REVALIDATE, PAGE_CSP),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.svg".to_string(),
             content_type: Some("image/svg+xml".to_string()),
-            headers: headers(REVALIDATE),
+            headers: headers(REVALIDATE, SVG_CSP),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.png".to_string(),
             content_type: Some("image/png".to_string()),
-            headers: headers(REVALIDATE),
+            headers: headers(REVALIDATE, PAGE_CSP),
             encodings: vec![],
         },
         AssetConfig::Pattern {
             pattern: "**/*.ico".to_string(),
             content_type: Some("image/x-icon".to_string()),
-            headers: headers(REVALIDATE),
+            headers: headers(REVALIDATE, PAGE_CSP),
             encodings: vec![],
         },
     ];

@@ -43,7 +43,12 @@ export function initHeroArtwork(documentRef, windowRef, schedule = callback => c
     syncAnimationState();
   });
   const reducedMotion = windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  detail.data = reducedMotion ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
+  const selectedSrc = reducedMotion ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
+  const sourceChanged = detail.getAttribute?.('data') !== selectedSrc;
+  if (sourceChanged) detail.data = selectedSrc;
+  else if (detail.contentDocument?.documentElement?.namespaceURI === 'http://www.w3.org/2000/svg') {
+    reveal();
+  }
 }
 
 export function initHeroBackdrop(documentRef, windowRef) {
