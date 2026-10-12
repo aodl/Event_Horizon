@@ -10,6 +10,7 @@ Event Horizon uses the same test vocabulary as Jupiter Faucet where the projects
 | Repository and unit tests | `cargo run -p xtask -- test_unit` |
 | Ignored PocketIC integration suite | `cargo run -p xtask -- test_pocketic_integration` |
 | Complete behavioural suite | `POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all` |
+| Opt-in cadence calibration | `./tools/scripts/calibrate-cadence smoke` |
 
 The test commands automatically run `npm ci` when `node_modules` is absent or stale relative to `package.json` and `package-lock.json`. No preliminary manual npm command is required.
 
@@ -29,6 +30,12 @@ integration process. The managed command sets `POCKET_IC_MUTE_SERVER=1` and
 `RUST_TEST_THREADS=1`; discovery returning no ignored tests is a failure.
 
 PocketIC is supplied by the Rust dependency and test harness; Event Horizon has no separately managed local-replica integration layer.
+
+The resource-intensive cadence experiments are a separate binary, not ignored
+tests, so `test_all` does not discover or execute them. See
+[cadence calibration](cadence-calibration.md) for bounded smoke/full
+measurements, offline modelling, report generation, and the tracked example
+input.
 
 The runner streams child output, records suite durations and parsed Cargo/libtest or Node counts, continues to later independent suites after safe failures, and prints all failure details and rerun commands again in a final `Failures:` section. A successful zero-test selection is rejected.
 

@@ -1,0 +1,15 @@
+[package]
+name = "event-horizon-cadence-calibration"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+event-horizon = { version = "0.1.0", path = "../../canisters/event-horizon" }
+hex = { workspace = true }
+pocket-ic = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }

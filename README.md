@@ -118,6 +118,11 @@ The final command leaves canonical deployable Wasms in `release-artifacts/`, ver
 
 See the [`xtask` testing guide](tools/xtask/README.md), [testing documentation](docs/development/testing.md), and [reproducible-build documentation](docs/operations/reproducible-builds.md).
 
+Cycles-based cadence thresholds can be measured and modelled locally through
+the opt-in [cadence calibration framework](docs/development/cadence-calibration.md).
+It uses PocketIC and synthetic cycles only; it is not part of ordinary tests and
+does not change the production threshold table.
+
 `Dockerfile.repro` is the canonical production build environment. See [`SPEC.md`](SPEC.md) for the normative protocol and [`CHECKPOINT.md`](CHECKPOINT.md) for provenance stages.
 
 ## Documentation

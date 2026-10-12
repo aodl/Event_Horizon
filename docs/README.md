@@ -15,6 +15,7 @@
 ## Development and testing
 
 - [Testing](development/testing.md)
+- [Cadence calibration](development/cadence-calibration.md)
 - [xtask commands](../tools/xtask/README.md)
 - [Backend canister README](../canisters/event-horizon/README.md)
 - [Frontend canister README](../canisters/frontend/README.md)

@@ -26,4 +26,7 @@ windows. A planned 3,000 ICP protocol endowment and 1,000 ICP global reference
 prices are not evidence of sufficient yield by themselves. Synthetic fan-out
 or one-second polling figures are planning illustrations, not mainnet burn.
 Current cadence thresholds are not economically proven; this controlled period
-exists to calibrate them using the existing read-only observation tooling.
+exists to calibrate them using the existing read-only observation tooling. Use
+the [local cadence-calibration guide](../development/cadence-calibration.md) to
+compare these observations with PocketIC measurements and offline projections;
+do not recreate the synthetic workload by spending real ICP.

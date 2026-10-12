@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+export DFX_IDENTITY=codex_local
+export POCKET_IC_MUTE_SERVER=1
+
+exec cargo run --locked -p event-horizon-cadence-calibration -- "$@"

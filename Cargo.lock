@@ -385,6 +385,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-horizon-cadence-calibration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "event-horizon",
+ "hex",
+ "pocket-ic",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "event-horizon-frontend"
 version = "0.1.0"
 dependencies = [
