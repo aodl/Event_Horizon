@@ -351,3 +351,59 @@ Selecting another live instance immediately clears the previous memo and
 funding instruction and disables construction while the new configuration is
 pending. The existing generation guard prevents either stale successes or
 stale failures from restoring an older instance's output.
+
+The landing hero independently displays the selected reviewed observed ledger's
+complete history total, including history predating Event Horizon. Canonical
+ICP is labelled **ICP ledger transactions** (all transaction kinds); a reviewed
+generic entry is labelled **<registry name> ledger records**. This is neither a
+backend processing count nor evidence of catch-up, active polling, notification
+delivery or service health. The prospective backend cursor cannot substitute
+for a processing count: it begins at the installation tip and may advance over
+explicitly proved archive gaps.
+
+The static registry explicitly selects `icp-chain-length`, `icrc3-log-length`
+or no counter. The browser queries only that entry's `observedLedgerCanisterId`
+through the configured API host, using `query_blocks({start:0,length:0})`
+(`nat64`) or `icrc3_get_blocks([{start:0,length:0}])` (`nat`). `chain_length`
+and `log_length` are counts, without index adjustment. No transaction bodies,
+archive callbacks, Index, proxy, aggregator or alternative-method discovery are
+used. IO remains planned and makes no ledger request. Missing or unknown source
+modes fail closed. The mainnet root key and normal SDK verification remain in
+force; static frontend certification does not certify the runtime total.
+
+The first accepted total is displayed directly. Subsequent increases interpolate
+linearly in exact integer arithmetic over about 15 seconds, never decreasing
+within a selection or exceeding the highest accepted total. Equal samples
+refresh the accepted-response timestamp without extending animation. Quiet data
+stops moving. A placeholder precedes success; a retrieved zero is valid. Display
+lag and replica freshness limits are explained through a keyboard-accessible
+control. The numeral is not a live announcement; assistive technology receives
+the latest exact sample once.
+
+Sampling is single flight: immediately, one warm-up approximately two seconds
+after the first accepted baseline, then approximately 15 seconds after each
+attempt completes. Each attempt has a ten-second deadline covering initialization
+and query transport; SDK transport retries are disabled in this client. Failures
+back off 30/60/120 seconds (capped), preserving the last accepted value and time.
+After 45 seconds without acceptance the display is marked delayed. Lower totals
+are rejected without refreshing time or resetting backoff; three such responses
+since the last acceptance produce an explicit inconsistent-data state. A later
+nondecreasing sample recovers it.
+
+Hidden pages and the native **Pause live effects / Resume live effects** control
+suspend polling and numeric animation and retire owned requests. Selection
+changes clear the statistic immediately. Resuming or recovering delayed data
+establishes a direct baseline instead of animating unseen history, while
+retaining the same-ledger high-water check across suspension. Dynamic reduced
+motion shows accepted samples directly and selects static artwork, while keeping
+sampling unless paused or hidden. Artwork additionally pauses on blur; blur alone
+does not suspend ledger sampling. Manual pause takes precedence over automatic
+resume conditions. Repeated SVG loads synchronize both CSS and SVG timelines.
+
+The counter starts from the reviewed registry independently of pricing. Positive
+configuration mismatch disables it without following an unexpected principal.
+Transport failures remain isolated from configuration verification, pricing and
+the fail-closed memo builder. The component owns its transport cancellation,
+timers, animation frames and listeners; disposal prevents late work from changing
+any current selection. No backend method, stable state or production protocol
+change is involved.

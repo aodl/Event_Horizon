@@ -139,3 +139,50 @@ npm run verify:reproducible-artifacts
 ```
 
 See [dependency scanning](../security/dependency-scanning.md), [reproducible builds](../operations/reproducible-builds.md), and the [xtask guide](../../tools/xtask/README.md).
+
+## Landing ledger counter
+
+```bash
+npm run build:frontend
+npm run test:frontend-unit
+node tools/scripts/validate-ledger-counter.mjs
+# Explicitly opt in to anonymous, read-only mainnet queries:
+node tools/scripts/check-ledger-count.mjs --live
+node tools/scripts/validate-ledger-counter.mjs --live
+```
+
+The focused Node suites inject clocks, timers, frames, queries and transport.
+They run offline without real sleeps. They cover independent full Candid wire
+schemas using the pinned SDK decoder, request scalar/arity checks, exact BigInt
+interpolation and deterministic property cases, single-flight deadlines,
+initialization eviction, real fetch abort ownership, late completions, freshness,
+contradictory samples, selection races, pricing isolation and artwork lifecycle.
+The shared page fixtures preserve the existing memo/pricing race assertions.
+
+The browser harness uses development-only Playwright 1.61.1. Install its browser
+with `npx playwright install chromium` when needed, or set
+`COUNTER_BROWSER_EXECUTABLE` to an available Chromium executable. OS libraries
+must already be available; the script does not install system packages or use
+privilege escalation. Set `TMPDIR` to a suitable writable temporary directory.
+The harness starts a loopback server with production CSP/cache headers and serves
+the actual built bundle for offline failure/planned/artwork checks. A separately
+compiled **test-only** entry invokes production DOM integration with injected
+queries and clocks for deterministic state/layout checks. It has no place in
+`public/`, the production bundle, or certified assets, and never bypasses SDK
+verification. Synthetic generic samples are protocol integration evidence, not a
+claim that IO or another generic instance is live. `--live` additionally opens
+the unmodified built page with real production-verification ledger queries.
+
+Screenshots, request/console evidence, accessibility snapshot and browser result
+are written to ignored `observations/ledger-counter/browser/`. The optional
+Node live smoke makes exactly two logical attempts, with ten-second deadlines
+and a two-second gap, using the existing registry and pinned agent. Its JSON
+records UTC receipt time, principal, method, request shape and successful totals
+or failures. No transactions, wallet connection or backend operation are used.
+
+The existing PocketIC certified-frontend test asserts the new hero markup and
+compares query-suffixed served bundle/CSS bytes with the source assets while
+retaining certificate, CSP and revalidation assertions. Run the complete
+`test_all` gate after rebuilding; pure JavaScript tests alone do not prove what
+the frontend Wasm embeds. See the [validation report](../codex/ledger-counter-validation.md)
+for browser/device limits and retained evidence.

@@ -68,6 +68,22 @@
       <a class="hero__action" href="#builder">Build a subscription memo <span aria-hidden="true">&#8595;</span></a>
     </div>
 
+    <section class="ledger-stat" aria-labelledby="ledger-label">
+      <h2 id="ledger-label">ICP ledger transactions</h2>
+      <p id="ledger-count" class="ledger-stat__number" aria-hidden="true">—</p>
+      <p id="ledger-sample" class="visually-hidden">ICP ledger transactions: unavailable</p>
+      <p id="ledger-status">Ledger count requires JavaScript and an available ledger.</p>
+      <p id="ledger-checked"></p>
+      <div class="ledger-stat__controls">
+        <details>
+          <summary>About this count</summary>
+          <p>Total transactions or records reported by the selected ledger, including history before Event Horizon. This is not a count of Event Horizon processing or notifications, or an indication that it is caught up or polling.</p>
+          <p>The display is periodically refreshed and may lag the latest retrieved total while smoothing. Reduced motion shows samples directly. Last checked is the time of an accepted response; it does not prove the responding replica had the freshest state. Runtime totals are separate from frontend asset certification.</p>
+        </details>
+        <button id="live-effects" type="button" aria-pressed="false" hidden>Pause live effects</button>
+      </div>
+    </section>
+
     <div class="hero__facts" aria-label="Protocol summary">
       <p><span>01</span>Open Source &amp; Verifiable</p>
       <p><span>02</span>Designed for Immutability</p>

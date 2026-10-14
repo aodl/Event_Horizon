@@ -59,3 +59,77 @@ npm run test:frontend-unit
 ```
 
 See the [architecture overview](../../docs/architecture/overview.md), [production surface](../../docs/architecture/production-surface.md), [deployment guide](../../docs/operations/deployment.md), and [subscriber guide](../../docs/subscriber-guide.md).
+
+## Landing ledger total
+
+The hero's **ICP ledger transactions** total is the entire ICP ledger history,
+including activity before Event Horizon and transaction kinds beyond transfers.
+A future reviewed ICRC-3 entry uses **<registry name> ledger records**. This does
+not measure Event Horizon processing, cursor lag, notifications, current backend
+polling or health. A backend cursor starts prospectively and may skip explicitly
+proved archive intervals; it is not a true processing count.
+
+`ledger-counter-client.js` uses the selected registry entry's observed ledger
+and explicit `ledgerCountSource`. ICP opts into `icp-chain-length`; IO remains
+planned with `null` and no request. To add a reviewed live generic entry, verify
+its principal and zero-length ICRC-3 interface, set `icrc3-log-length`, and retain
+records wording unless its transaction semantics are separately reviewed. Never
+infer this mode from a token symbol, alias, SNS association or endpoint probe.
+
+The only requests are `query_blocks({start:0n,length:0n})` with `nat64` fields,
+or `icrc3_get_blocks([{start:0n,length:0n}])` with `nat` fields. The returned
+`chain_length` / `log_length` is already a count. Response width projection is
+wire-tested against independent full schemas, including recursive values and
+archive function references; no callback is executed or body requested.
+Unsupported calls and malformed or decreasing totals become component failures.
+
+| Setting | Default |
+| --- | --- |
+| First sample | Immediately |
+| One warm-up | 2 seconds after the first accepted baseline |
+| Steady sample | 15 seconds after the previous attempt finishes |
+| Linear interpolation | 15 seconds |
+| Logical attempt deadline, including initialization | 10 seconds |
+| Failure retry | 30, 60, then at most 120 seconds |
+| Delayed indication | 45 seconds without an accepted sample |
+| Inconsistent indication | Three lower responses since acceptance |
+
+`ledger-counter.js` separates accepted total, displayed integer, target,
+monotonic sample time, wall-clock receipt timestamp and status. BigInt arithmetic
+preserves even generic totals above `u64::MAX`. The first sample is direct,
+equal samples do not extend smoothing, and no value is extrapolated. Once the
+latest target is reached there are no numeric animation frames. Digit grouping
+preserves every integer; long values wrap rather than overflow or truncate.
+
+The visible explanation describes smoothing lag and that **Last checked** means
+accepted-response time, not proof of freshest replica state. Failures retain the
+last known number and timestamp; stale status has its own timer. A lower sample
+never silently becomes an accepted high-water value. A later nondecreasing reply
+can recover. After a delayed episode or suspension the next sample is direct.
+
+The native **Pause live effects** button freezes numbers and polling and pauses
+both CSS animation and the artwork's SVG timeline. Hidden pages also suspend;
+visible but unfocused pages keep ledger sampling while artwork pauses. Resuming
+coalesces events into one refresh. Dynamic reduced motion shows direct samples
+with **Periodically refreshed** copy and static artwork. Removing it never
+cancels manual pause. Repeated object loads honor the current pause state. The
+visual numeral is hidden from the accessibility tree; a quiet text alternative
+exposes the latest exact sampled total. No samples or totals are persisted.
+
+The client lazily reuses an agent and actor, uses the embedded mainnet root key
+and default verification, and sets `retryTimes: 0`. Its abort-aware fetch covers
+query and signature-key requests, including initialization. On retirement or
+failure the session is permanently aborted and evicted; it cannot borrow the
+next attempt's signal. Pricing has separate ownership. The DOM integration starts
+without waiting for pricing, and only a typed positive configuration mismatch
+retires the statistic. Failure or absence of the optional component leaves the
+builder operational, still requiring successful configuration verification.
+
+Certification covers the static bundle and markup, **not** a separately queried
+runtime ledger total. No proof-backed tip-certificate feature is claimed. This
+release changes only frontend assets and tests; backend settings, state, Candid,
+principals and reviewed backend hash stay unchanged.
+
+For deterministic tests, real-browser checks, opt-in read-only live smoke and
+limitations, see [testing](../../docs/development/testing.md) and the
+[ledger-counter validation report](../../docs/codex/ledger-counter-validation.md).

@@ -31,6 +31,17 @@ discard a Ledger backlog. A genuinely new additional instance uses install
 mode. The operator performs every mainnet action manually; the repository
 provides no automatic deployment script.
 
+## Frontend-only ledger-counter release
+
+The landing ledger total is a browser feature. Only the separately controlled
+frontend is a deployment candidate after release gates and separate operator
+authorization. It requires no backend module, migration, settings change,
+pricing reset, reinstall, transfer or controller action. Do not apply the earlier
+exceptional backend pricing-reset procedure to this release. Compare the backend
+canonical hash with its reviewed baseline and retain its existing registry pin.
+No deployment is part of counter validation. See the
+[validation report](../codex/ledger-counter-validation.md).
+
 ## Exceptional prelaunch pricing-reset decision
 
 Before authorising reinstall, use read-only production records, current

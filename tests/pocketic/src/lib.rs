@@ -6203,6 +6203,9 @@ mod tests {
         let html = String::from_utf8(index.body)?;
         assert!(html.contains("styles.css?v=9"));
         assert!(html.contains("app.bundle.js?v=3"));
+        assert!(html.contains("id=\"ledger-count\""));
+        assert!(html.contains("ICP ledger transactions"));
+        assert!(html.contains("id=\"live-effects\""));
         assert!(!html.contains("href=\"styles.css\""));
         assert!(!html.contains("src=\"app.bundle.js\""));
 

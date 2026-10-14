@@ -8,49 +8,116 @@ import {
 import { queryBackendPricing } from './pricing-client.js';
 import { pricingMarkup, utc } from './pricing-view.js';
 import { INSTANCES } from './instances.js';
-import { registryMarkup, verifyInstanceConfiguration } from './instance-view.js';
+import { ConfigurationMismatchError, registryMarkup, verifyInstanceConfiguration } from './instance-view.js';
 import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
+
+import { createLedgerCounterClient } from './ledger-counter-client.js';
+import { createLedgerCounter, formatTotal } from './ledger-counter.js';
 
 const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
 
 export function initHeroArtwork(documentRef, windowRef, schedule = callback => callback()) {
   const detail = documentRef.querySelector('.hero__detail');
-  if (!detail) return;
-  let loaded = false;
+  if (!detail) return { setPaused() {}, dispose() {} };
+  let disposed = false, manuallyPaused = false;
   let windowFocused = documentRef.hasFocus?.() ?? true;
+  const media = windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)');
   const syncAnimationState = () => {
-    if (!loaded) return;
+    if (disposed) return;
     const svg = detail.contentDocument?.documentElement;
     if (!svg) return;
-    const paused = Boolean(documentRef.hidden) || !windowFocused;
+    const paused = manuallyPaused || Boolean(media?.matches) || Boolean(documentRef.hidden) || !windowFocused;
     svg.classList.toggle('ehm-paused', paused);
     if (paused) svg.pauseAnimations?.();
     else svg.unpauseAnimations?.();
   };
   const reveal = () => {
-    if (loaded) return;
-    loaded = true;
+    if (disposed) return;
     syncAnimationState();
-    schedule(() => detail.classList.add('hero__detail--loaded'));
+    schedule(() => { if (!disposed) detail.classList.add('hero__detail--loaded'); });
   };
-  detail.addEventListener('load', reveal, { once: true });
+  const source = () => {
+    const src = media?.matches ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
+    if (detail.getAttribute?.('data') !== src) detail.data = src;
+    syncAnimationState();
+  };
+  const blur = () => { windowFocused = false; syncAnimationState(); };
+  const focus = () => { windowFocused = true; syncAnimationState(); };
+  detail.addEventListener('load', reveal);
   documentRef.addEventListener('visibilitychange', syncAnimationState);
-  windowRef?.addEventListener?.('blur', () => {
-    windowFocused = false;
-    syncAnimationState();
+  windowRef?.addEventListener?.('blur', blur);
+  windowRef?.addEventListener?.('focus', focus);
+  media?.addEventListener?.('change', source);
+  const initialSrc = media?.matches ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
+  if (detail.getAttribute?.('data') !== initialSrc) detail.data = initialSrc;
+  else if (detail.contentDocument?.documentElement?.namespaceURI === 'http://www.w3.org/2000/svg') reveal();
+  return {
+    setPaused(value) { manuallyPaused = value; syncAnimationState(); },
+    dispose() {
+      manuallyPaused = true; syncAnimationState(); disposed = true;
+      detail.removeEventListener?.('load', reveal);
+      documentRef.removeEventListener?.('visibilitychange', syncAnimationState);
+      windowRef?.removeEventListener?.('blur', blur);
+      windowRef?.removeEventListener?.('focus', focus);
+      media?.removeEventListener?.('change', source);
+    },
+  };
+}
+
+export function initLedgerCounter(documentRef, windowRef, { query, artwork, dependencies = {} } = {}) {
+  const node = id => documentRef.getElementById(id);
+  if (!['ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked', 'live-effects'].every(id => node(id))
+      || !windowRef?.AbortController || !windowRef?.requestAnimationFrame) return null;
+  const write = (id, text) => { if (node(id).textContent !== text) node(id).textContent = text; };
+  const client = query ? null : createLedgerCounterClient();
+  let manual = false;
+  const media = windowRef.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const controller = createLedgerCounter({
+    query: query ?? client.query,
+    render(state) {
+      const icp = state.entry?.ledgerCountSource === 'icp-chain-length';
+      const label = icp ? 'ICP ledger transactions' : `${state.entry?.name ?? 'Selected'} ledger records`;
+      write('ledger-label', label);
+      const text = state.displayed === null ? '—' : formatTotal(state.displayed);
+      write('ledger-count', text);
+      write('ledger-sample', state.accepted === null ? `${label}: unavailable`
+        : `${label}: ${formatTotal(state.accepted)} (latest retrieved total)`);
+      const messages = {
+        loading: 'Checking selected ledger…', current: state.reduced ? 'Periodically refreshed' : 'Periodically refreshed · Smoothed display',
+        unavailable: 'Ledger count unavailable · Retrying', unsupported: 'Ledger count unavailable for this instance',
+        planned: 'Count unavailable until launch', paused: 'Live effects paused', hidden: 'Refresh suspended while hidden',
+        retrying: 'Refresh failed · Last known total · Retrying', delayed: 'Data delayed · Last known total · Retrying',
+        inconsistent: 'Inconsistent ledger responses · Last known total · Retrying',
+        configuration: 'Count unavailable · Instance configuration mismatch',
+      };
+      write('ledger-status', messages[state.status]);
+      write('ledger-checked', state.checked === null ? '' : `Last checked ${new Date(state.checked).toISOString()}`);
+    },
+    ...dependencies,
   });
-  windowRef?.addEventListener?.('focus', () => {
-    windowFocused = true;
-    syncAnimationState();
-  });
-  const reducedMotion = windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const selectedSrc = reducedMotion ? detail.dataset.staticSrc : detail.dataset.animatedSrc;
-  const sourceChanged = detail.getAttribute?.('data') !== selectedSrc;
-  if (sourceChanged) detail.data = selectedSrc;
-  else if (detail.contentDocument?.documentElement?.namespaceURI === 'http://www.w3.org/2000/svg') {
-    reveal();
-  }
+  const lifecycle = () => controller.setLifecycle({ hidden: documentRef.hidden, paused: manual, reduced: media?.matches });
+  const toggle = () => {
+    manual = !manual;
+    node('live-effects').textContent = manual ? 'Resume live effects' : 'Pause live effects';
+    node('live-effects').setAttribute('aria-pressed', String(manual));
+    artwork?.setPaused(manual); lifecycle();
+  };
+  node('live-effects').hidden = false;
+  node('live-effects').addEventListener('click', toggle);
+  documentRef.addEventListener('visibilitychange', lifecycle);
+  media?.addEventListener?.('change', lifecycle);
+  lifecycle();
+  return {
+    select: entry => controller.select(entry),
+    configurationMismatch: () => controller.configurationMismatch(),
+    dispose() {
+      controller.dispose(); client?.dispose();
+      node('live-effects').removeEventListener('click', toggle);
+      documentRef.removeEventListener('visibilitychange', lifecycle);
+      media?.removeEventListener?.('change', lifecycle);
+    },
+  };
 }
 
 export function initHeroBackdrop(documentRef, windowRef) {
@@ -78,6 +145,7 @@ export function createApp({
   instances = INSTANCES,
   queryBackend = queryBackendPricing,
   autoLoad = true,
+  counter = null,
 } = {}) {
   const doc = documentRef ?? document;
   const $ = id => doc.getElementById(id);
@@ -161,6 +229,7 @@ export function createApp({
     const generation = ++loadGeneration;
     const requested = instances.find(instance => instance.id === $('instance').value);
     selected = requested;
+    try { counter?.select(requested); } catch { /* Counter failure is isolated from the builder. */ }
     $('instance-info').innerHTML = registryMarkup(requested);
     pricing = null;
     profile = null;
@@ -185,6 +254,9 @@ export function createApp({
       $('pricing').innerHTML = pricingMarkup(result.pricing);
     } catch (error) {
       if (generation !== loadGeneration) return;
+      if (error instanceof ConfigurationMismatchError) {
+        try { counter?.configurationMismatch(); } catch { /* Keep the builder fail closed. */ }
+      }
       renderRuntimeError($('pricing'), error.message);
     }
     if (generation !== loadGeneration) return;
@@ -201,11 +273,16 @@ export function createApp({
   $('memo-form').addEventListener('input', render);
   $('instance').addEventListener('change', load);
   if (autoLoad) load();
-  return { load };
+  return { load, dispose() { ++loadGeneration; counter?.dispose(); $('memo-form').removeEventListener?.('input', render); $('instance').removeEventListener?.('change', load); } };
 }
 
 if (typeof document !== 'undefined') {
-  initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
+  const artwork = initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
   initHeroBackdrop(document, window);
-  createApp({ documentRef: document });
+  let counter = null;
+  try { counter = initLedgerCounter(document, window, { artwork }); } catch { /* Optional statistic. */ }
+  const app = createApp({ documentRef: document, counter });
+  window.addEventListener('pagehide', event => {
+    if (!event.persisted) { app.dispose(); artwork.dispose(); }
+  });
 }

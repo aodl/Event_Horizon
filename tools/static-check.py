@@ -247,6 +247,16 @@ frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
 assert 'styles.css?v=9' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
+assert 'id="ledger-count"' in frontend_index
+assert 'ICP ledger transactions' in frontend_index
+assert 'id="live-effects" type="button"' in frontend_index
+counter_client=(root/'canisters/frontend/public/ledger-counter-client.js').read_text()
+for marker in ['fetchRootKey', 'verifyQuerySignatures: false', 'shouldFetchRootKey', 'localStorage']:
+    assert marker not in counter_client, f'counter client contains forbidden marker {marker}'
+assert 'retryTimes: 0' in counter_client
+assert "ledgerCountSource:'icp-chain-length'" in registry
+assert "ledgerCountSource:null" in registry
+
 assert '<link rel="icon" href="/favicon.ico?v=1">' in frontend_index
 assert '<link rel="preload"' not in frontend_index
 assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true" data="/event-horizon.svg"' in frontend_index

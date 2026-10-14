@@ -1,3 +1,5 @@
+export class ConfigurationMismatchError extends Error {}
+
 const optionalPrincipal = value => value.length ? value[0].toText() : null;
 
 export function verifyInstanceConfiguration(registry, instance) {
@@ -7,17 +9,17 @@ export function verifyInstanceConfiguration(registry, instance) {
   if (observedLedger !== registry.observedLedgerCanisterId
       || snsRoot !== registry.snsRootCanisterId
       || surplusCanister !== registry.surplusCanisterId) {
-    throw new Error(
+    throw new ConfigurationMismatchError(
       `Configuration mismatch: backend reports observed ledger ${observedLedger}, `
       + `SNS Root ${snsRoot ?? 'none'}, and surplus recipient ${surplusCanister ?? 'none'}.`,
     );
   }
   if (!instance.observed_profile.length) {
-    throw new Error('Configuration mismatch: backend observed-ledger profile is not initialized.');
+    throw new ConfigurationMismatchError('Configuration mismatch: backend observed-ledger profile is not initialized.');
   }
   const profile = instance.observed_profile[0];
   if (profile.symbol !== registry.symbol) {
-    throw new Error(`Configuration mismatch: backend symbol is ${profile.symbol}.`);
+    throw new ConfigurationMismatchError(`Configuration mismatch: backend symbol is ${profile.symbol}.`);
   }
   return profile;
 }

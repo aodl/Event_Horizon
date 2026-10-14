@@ -38,6 +38,7 @@
 
 - [Subscriber guide](subscriber-guide.md)
 - [Checkpoint history](../CHECKPOINT.md)
+- [Landing ledger-counter validation](codex/ledger-counter-validation.md)
 - [PocketIC process-isolation validation](codex/pocketic-process-isolation-validation.md)
 - [Jupiter workflow alignment validation](codex/jupiter-workflow-alignment-validation.md)
 - [`docs/codex/`](codex/)
