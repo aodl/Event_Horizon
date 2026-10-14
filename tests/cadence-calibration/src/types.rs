@@ -395,14 +395,32 @@ pub struct SimulationResult {
     pub reserve_protection_seconds: Option<u64>,
     pub ending_backlog_blocks: u128,
     pub maximum_backlog_blocks: u128,
+    pub maximum_active_pre_poll_pending_blocks: u128,
+    pub maximum_active_post_poll_outstanding_blocks: u128,
+    pub outstanding_blocks_at_first_downgrade: Option<u128>,
+    pub outstanding_blocks_at_first_reserve: Option<u128>,
+    pub additional_reserve_backlog_blocks: u128,
     pub projected_latency_seconds: u64,
     pub funding_shortfall_cycles: u128,
     pub funding_surplus_cycles: u128,
     pub liquidity_maintained: bool,
-    pub sustainable: bool,
+    pub window_funding_covers_expenditure: bool,
     pub exhausted: bool,
     pub continuous_runway_seconds: Option<u64>,
     pub notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct FixedTierEconomics {
+    pub workload_id: String,
+    pub mode: Mode,
+    pub effective_poll_interval_seconds: u64,
+    pub payout_cadence_days: u64,
+    pub annual_generated_blocks: u128,
+    pub annual_processed_blocks: u128,
+    pub mature_annual_income_cycles: u128,
+    pub annualized_operating_expenditure_cycles: u128,
+    pub steady_state_annual_margin_cycles: i128,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -420,6 +438,7 @@ pub struct SimulationSet {
     pub equal_starting_balances_cycles: Vec<u128>,
     pub continuous_runway_targets_days: Vec<u64>,
     pub lower_tier_runway_targets_days: [u64; 4],
+    pub fixed_tier_economics: Vec<FixedTierEconomics>,
     pub results: Vec<SimulationResult>,
     pub limitations: Vec<String>,
 }

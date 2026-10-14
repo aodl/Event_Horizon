@@ -9,8 +9,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use crate::{
     measurement::{read_measurements, validate_measurements},
     types::{
-        CostCalibration, FundingAssumptions, MeasurementSet, Mode, ModelConfig, Policy,
-        ProductiveEndowmentBacking, SimulationResult, SimulationSet, Thresholds, Workload,
+        CostCalibration, FixedTierEconomics, FundingAssumptions, MeasurementSet, Mode, ModelConfig,
+        Policy, ProductiveEndowmentBacking, SimulationResult, SimulationSet, Thresholds, Workload,
     },
     TRILLION,
 };
@@ -50,6 +50,11 @@ struct SimState {
     first_downgrade: Option<u64>,
     first_reserve: Option<u64>,
     maximum_backlog: u128,
+    maximum_pre_poll: u128,
+    maximum_post_poll: u128,
+    downgrade_backlog: Option<u128>,
+    reserve_backlog: Option<u128>,
+    reserve_generated: u128,
     exhausted: bool,
 }
 
@@ -64,6 +69,8 @@ struct Batch {
     global_notifications: u128,
     specific_notifications: u128,
     coalesced_notification_dispatches: u128,
+    maximum_pre_poll: u128,
+    maximum_post_poll: u128,
     burn: u128,
     block_remainder: u128,
     specific_matching_remainder: u128,
@@ -279,8 +286,32 @@ pub fn run(
     {
         limitations.push("Input measurements lacked integrated scheduler evidence; offline maintenance cost is zero and reported as unmeasured for this dataset.".into());
     }
+    let mut fixed_tier_economics = Vec::new();
+    for workload in &workloads {
+        let calibration = calibrations
+            .iter()
+            .find(|c| c.architecture == workload.architecture)
+            .expect("filtered architecture");
+        for mode in Mode::ACTIVE {
+            let intervals = if mode == Mode::Continuous {
+                vec![1, 2, 5, 10]
+            } else {
+                vec![mode.delay_seconds(1).expect("active mode")]
+            };
+            for interval in intervals {
+                fixed_tier_economics.push(fixed_tier_economics_for(
+                    workload,
+                    calibration,
+                    &assumptions,
+                    mode,
+                    interval,
+                    7,
+                )?);
+            }
+        }
+    }
     let set = SimulationSet {
-        schema_version: 2,
+        schema_version: 3,
         source_measurements: input.display().to_string(),
         seed,
         calibration,
@@ -296,6 +327,7 @@ pub fn run(
         equal_starting_balances_cycles: model_config.equal_starting_balances_cycles.clone(),
         continuous_runway_targets_days: model_config.continuous_runway_targets_days,
         lower_tier_runway_targets_days: model_config.lower_tier_runway_targets_days,
+        fixed_tier_economics,
         results,
         limitations,
     };
@@ -303,26 +335,51 @@ pub fn run(
         output.join("simulations.json"),
         serde_json::to_vec_pretty(&set)?,
     )?;
-    let copied_measurements = output.join("measurements.json");
-    if input != copied_measurements {
-        fs::copy(input, &copied_measurements).with_context(|| {
-            format!(
-                "copy {} to {}",
-                input.display(),
-                copied_measurements.display()
-            )
-        })?;
-    }
+    copy_measurement(input, &output.join("measurements.json"))?;
     if let Some(parent) = input.parent() {
         let source_csv = parent.join("measurements.csv");
-        if source_csv.is_file() {
-            fs::copy(&source_csv, output.join("measurements.csv")).with_context(|| {
-                format!("copy {} to {}", source_csv.display(), output.display())
-            })?;
+        match fs::metadata(&source_csv) {
+            Ok(metadata) if metadata.is_file() => {
+                copy_measurement(&source_csv, &output.join("measurements.csv"))?;
+            }
+            Ok(_) => bail!("measurement CSV is not a file: {}", source_csv.display()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("inspect {}", source_csv.display()))
+            }
         }
     }
     write_threshold_csv(&set, output)?;
     Ok(set)
+}
+
+// Resolve existing aliases before opening a destination for writing. On Unix,
+// inode identity also catches hard links, which canonical paths cannot detect.
+fn copy_measurement(source: &Path, destination: &Path) -> Result<()> {
+    let context = || format!("copy {} to {}", source.display(), destination.display());
+    let source_path = fs::canonicalize(source).with_context(context)?;
+    match fs::canonicalize(destination) {
+        Ok(destination_path) => {
+            if source_path == destination_path {
+                return Ok(());
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let source_metadata = fs::metadata(source).with_context(context)?;
+                let destination_metadata = fs::metadata(destination).with_context(context)?;
+                if source_metadata.dev() == destination_metadata.dev()
+                    && source_metadata.ino() == destination_metadata.ino()
+                {
+                    return Ok(());
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error).with_context(context),
+    }
+    fs::copy(source, destination).with_context(context)?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -646,7 +703,13 @@ fn simulate(
         first_downgrade: None,
         first_reserve: (initial_mode == Mode::ReserveProtection).then_some(0),
         maximum_backlog: u128::from(workload.initial_backlog_blocks),
-        exhausted: false,
+        maximum_pre_poll: 0,
+        maximum_post_poll: 0,
+        downgrade_backlog: None,
+        reserve_backlog: (initial_mode == Mode::ReserveProtection)
+            .then_some(u128::from(workload.initial_backlog_blocks)),
+        reserve_generated: 0,
+        exhausted: initial_cycles == 0,
     };
 
     while state.now < end {
@@ -783,11 +846,9 @@ fn simulate(
         .unwrap_or(u64::MAX)
         .saturating_mul(delay)
         .saturating_add(delay);
-    let liquidity_maintained = !state.exhausted
-        && state.backlog <= capacity
-        && state.first_reserve.is_none()
-        && state.balance >= TRILLION;
-    let sustainable = liquidity_maintained && state.funded >= state.spent;
+    let liquidity_maintained =
+        !state.exhausted && state.first_reserve.is_none() && state.balance >= TRILLION;
+    let window_funding_covers_expenditure = state.funded >= state.spent;
     Ok(SimulationResult {
         scenario_id: format!(
             "{}_{}_{}_{}_{}d_{}s_{}t",
@@ -825,11 +886,16 @@ fn simulate(
         reserve_protection_seconds: state.first_reserve,
         ending_backlog_blocks: state.backlog,
         maximum_backlog_blocks: state.maximum_backlog,
+        maximum_active_pre_poll_pending_blocks: state.maximum_pre_poll,
+        maximum_active_post_poll_outstanding_blocks: state.maximum_post_poll,
+        outstanding_blocks_at_first_downgrade: state.downgrade_backlog,
+        outstanding_blocks_at_first_reserve: state.reserve_backlog,
+        additional_reserve_backlog_blocks: state.reserve_generated,
         projected_latency_seconds: projected_latency,
         funding_shortfall_cycles: funding_shortfall,
         funding_surplus_cycles: funding_surplus,
         liquidity_maintained,
-        sustainable,
+        window_funding_covers_expenditure,
         exhausted: state.exhausted,
         continuous_runway_seconds: if initial_mode == Mode::Continuous {
             state.first_downgrade
@@ -925,6 +991,8 @@ impl Batch {
             global_notifications: 0,
             specific_notifications: 0,
             coalesced_notification_dispatches: 0,
+            maximum_pre_poll: 0,
+            maximum_post_poll: 0,
             burn: 0,
             block_remainder: 0,
             specific_matching_remainder: 0,
@@ -978,6 +1046,8 @@ impl Batch {
         add!(specific_notifications);
         add!(coalesced_notification_dispatches);
         add!(burn);
+        self.maximum_pre_poll = self.maximum_pre_poll.max(other.maximum_pre_poll);
+        self.maximum_post_poll = self.maximum_post_poll.max(other.maximum_post_poll);
         Ok(())
     }
 }
@@ -1104,6 +1174,8 @@ fn project_single_poll(
         global_notifications,
         specific_notifications,
         coalesced_notification_dispatches,
+        maximum_pre_poll: available,
+        maximum_post_poll: available - processed,
         burn,
         block_remainder,
         specific_matching_remainder,
@@ -1128,7 +1200,12 @@ fn apply_batch(state: &mut SimState, batch: Batch) {
     state.specific_matching_basis_remainder = batch.specific_matching_remainder;
     state.specific_subscriber_milli_remainder = batch.specific_subscriber_remainder;
     state.overlap_notification_remainder = batch.overlap_notification_remainder;
-    state.maximum_backlog = state.maximum_backlog.max(state.backlog);
+    state.maximum_backlog = state
+        .maximum_backlog
+        .max(state.backlog)
+        .max(batch.maximum_pre_poll);
+    state.maximum_pre_poll = state.maximum_pre_poll.max(batch.maximum_pre_poll);
+    state.maximum_post_poll = state.maximum_post_poll.max(batch.maximum_post_poll);
     state.global_notifications = state
         .global_notifications
         .saturating_add(batch.global_notifications);
@@ -1151,6 +1228,7 @@ fn apply_burn(state: &mut SimState, burn: u128) {
     } else {
         state.balance -= burn;
     }
+    state.exhausted |= state.balance == 0;
     state.minimum_balance = state.minimum_balance.min(state.balance);
 }
 
@@ -1167,6 +1245,9 @@ fn accrue_without_poll(state: &mut SimState, workload: &Workload, elapsed: u64) 
     );
     let generated_specific_matching = specific_matching / 10_000;
     state.specific_matching_basis_remainder = specific_matching % 10_000;
+    if state.mode == Mode::ReserveProtection {
+        state.reserve_generated = state.reserve_generated.saturating_add(generated);
+    }
     state.backlog = state.backlog.saturating_add(generated);
     state.specific_matching_backlog = state
         .specific_matching_backlog
@@ -1183,9 +1264,11 @@ fn change_mode(state: &mut SimState, policy: &Policy, continuous_interval_second
     state.transitions.push(state.now);
     if rank(next) < rank(previous) && state.first_downgrade.is_none() {
         state.first_downgrade = Some(state.now);
+        state.downgrade_backlog = Some(state.backlog);
     }
     if next == Mode::ReserveProtection && state.first_reserve.is_none() {
         state.first_reserve = Some(state.now);
+        state.reserve_backlog = Some(state.backlog);
     }
     state.mode = next;
     state.next_poll = next
@@ -1211,13 +1294,14 @@ fn funding_schedule(
     let annual_payout_e8s = annual_payout_e8s(assumptions, workload, yield_basis_points)?;
     let start = assumptions
         .initial_recognition_delay_seconds
-        .saturating_add(assumptions.conversion_delay_seconds);
+        .checked_add(assumptions.conversion_delay_seconds)
+        .ok_or_else(|| anyhow!("recognition delay overflow"))?;
     let cadence_days = match profile {
         "regular_daily" => 1,
         "regular_monthly" => 30,
         _ => 7,
     };
-    let mut base = regular_schedule(start, end, cadence_days, annual_payout_e8s);
+    let mut base = regular_schedule(start, end, cadence_days, annual_payout_e8s)?;
     let payouts = match profile {
         "no_incoming_funding" | "zero_effective_yield" => Vec::new(),
         "regular_daily" | "regular_weekly" | "regular_monthly" | "low_yield_2_8_percent" => base,
@@ -1230,9 +1314,19 @@ fn funding_schedule(
                     .wrapping_mul(6_364_136_223_846_793_005)
                     .wrapping_add(1);
                 let days = 3 + (state % 16);
-                let amount = annual_payout_e8s.saturating_mul(u128::from(days)) / YEAR_DAYS;
-                out.push((time, amount));
-                time = time.saturating_add(days.saturating_mul(DAY));
+                let amount = annual_payout_e8s
+                    .checked_mul(u128::from(days))
+                    .ok_or_else(|| anyhow!("irregular payout overflow"))?
+                    / YEAR_DAYS;
+                time = time
+                    .checked_add(
+                        days.checked_mul(DAY)
+                            .ok_or_else(|| anyhow!("payout time overflow"))?,
+                    )
+                    .ok_or_else(|| anyhow!("payout time overflow"))?;
+                if time <= end {
+                    out.push((time, amount));
+                }
             }
             out
         }
@@ -1262,6 +1356,107 @@ fn funding_schedule(
         .into_iter()
         .map(|(time, payout_e8s)| Ok((time, payout_cycles(assumptions, payout_e8s)?)))
         .collect()
+}
+
+// Hypothetical continuing tier: no adaptive downgrade or startup backlog.
+// Annual income is the mature payout rate, net of one conversion fee per
+// cadence, annualized with integer rounding. Recognition delay affects only
+// finite-window receipts, never productive principal or the mature rate.
+fn fixed_tier_economics_for(
+    workload: &Workload,
+    calibration: &CostCalibration,
+    assumptions: &FundingAssumptions,
+    mode: Mode,
+    interval: u64,
+    payout_cadence_days: u64,
+) -> Result<FixedTierEconomics> {
+    if interval == 0 || payout_cadence_days == 0 {
+        bail!("fixed-tier intervals must be positive");
+    }
+    let annual = annual_payout_e8s(
+        assumptions,
+        workload,
+        assumptions.effective_payout_apy_basis_points,
+    )?;
+    let per_payout = annual
+        .checked_mul(u128::from(payout_cadence_days))
+        .ok_or_else(|| anyhow!("annual payout overflow"))?
+        / YEAR_DAYS;
+    let income = payout_cycles(assumptions, per_payout)?
+        .checked_mul(YEAR_DAYS)
+        .ok_or_else(|| anyhow!("annual income overflow"))?
+        / u128::from(payout_cadence_days);
+    let mut continuing = workload.clone();
+    continuing.initial_backlog_blocks = 0;
+    let state = SimState {
+        now: 0,
+        balance: u128::MAX,
+        minimum_balance: u128::MAX,
+        mode,
+        next_poll: Some(interval),
+        next_funding_maintenance: FUNDING_MAINTENANCE_SECONDS,
+        next_pricing_maintenance: PRICING_MAINTENANCE_SECONDS,
+        backlog: 0,
+        specific_matching_backlog: 0,
+        block_milli_remainder: 0,
+        specific_matching_basis_remainder: 0,
+        specific_subscriber_milli_remainder: 0,
+        overlap_notification_remainder: 0,
+        spent: 0,
+        ordinary_polling_spent: 0,
+        maintenance_spent: 0,
+        funded: 0,
+        funding_maintenance_runs: 0,
+        pricing_maintenance_runs: 0,
+        global_notifications: 0,
+        specific_notifications: 0,
+        coalesced_notification_dispatches: 0,
+        seconds_in_modes: [0; 6],
+        transitions: Vec::new(),
+        first_downgrade: None,
+        first_reserve: None,
+        maximum_backlog: 0,
+        maximum_pre_poll: 0,
+        maximum_post_poll: 0,
+        downgrade_backlog: None,
+        reserve_backlog: None,
+        reserve_generated: 0,
+        exhausted: false,
+    };
+    let year_seconds = 365 * DAY;
+    let polls = year_seconds / interval;
+    let batch = project_batch(&state, &continuing, calibration, interval, polls, interval)?;
+    let polling = batch.burn;
+    let maintenance = calibration
+        .funding_maintenance_cycles
+        .unwrap_or_default()
+        .checked_mul(u128::from(year_seconds / FUNDING_MAINTENANCE_SECONDS))
+        .and_then(|value| {
+            value.checked_add(
+                calibration
+                    .pricing_maintenance_cycles
+                    .unwrap_or_default()
+                    .checked_mul(u128::from(year_seconds / PRICING_MAINTENANCE_SECONDS))?,
+            )
+        })
+        .ok_or_else(|| anyhow!("annual maintenance overflow"))?;
+    let expenditure = polling
+        .checked_add(maintenance)
+        .ok_or_else(|| anyhow!("annual expenditure overflow"))?;
+    let margin = i128::try_from(income)?
+        .checked_sub(i128::try_from(expenditure)?)
+        .ok_or_else(|| anyhow!("annual margin overflow"))?;
+    Ok(FixedTierEconomics {
+        workload_id: workload.id.clone(),
+        mode,
+        effective_poll_interval_seconds: interval,
+        payout_cadence_days,
+        annual_generated_blocks: batch.generated,
+        annual_processed_blocks: batch.processed,
+        mature_annual_income_cycles: income,
+        annualized_operating_expenditure_cycles: expenditure,
+        steady_state_annual_margin_cycles: margin,
+    })
 }
 
 fn annual_payout_e8s(
@@ -1299,12 +1494,18 @@ fn annual_payout_e8s(
         .checked_mul(u128::from(yield_basis_points))
         .ok_or_else(|| anyhow!("yield calculation overflow"))?
         / 10_000;
-    let after_shortfall = payout_e8s.saturating_mul(u128::from(
-        10_000_u64.saturating_sub(assumptions.delivery_shortfall_basis_points),
-    )) / 10_000;
-    Ok(after_shortfall.saturating_mul(u128::from(
-        10_000_u64.saturating_sub(assumptions.surplus_diversion_basis_points),
-    )) / 10_000)
+    let after_shortfall = payout_e8s
+        .checked_mul(u128::from(
+            10_000_u64.saturating_sub(assumptions.delivery_shortfall_basis_points),
+        ))
+        .ok_or_else(|| anyhow!("payout shortfall overflow"))?
+        / 10_000;
+    Ok(after_shortfall
+        .checked_mul(u128::from(
+            10_000_u64.saturating_sub(assumptions.surplus_diversion_basis_points),
+        ))
+        .ok_or_else(|| anyhow!("payout diversion overflow"))?
+        / 10_000)
 }
 
 fn rounded_admission_price(reference_e8s: u128, basis_points: u64) -> Result<u128> {
@@ -1327,16 +1528,34 @@ fn payout_cycles(assumptions: &FundingAssumptions, payout_e8s: u128) -> Result<u
         .ok_or_else(|| anyhow!("ICP/XDR conversion overflow"))
 }
 
-fn regular_schedule(start: u64, end: u64, cadence_days: u64, annual: u128) -> Vec<(u64, u128)> {
-    let interval = cadence_days.saturating_mul(DAY);
-    let amount = annual.saturating_mul(u128::from(cadence_days)) / YEAR_DAYS;
+fn regular_schedule(
+    start: u64,
+    end: u64,
+    cadence_days: u64,
+    annual: u128,
+) -> Result<Vec<(u64, u128)>> {
+    let interval = cadence_days
+        .checked_mul(DAY)
+        .ok_or_else(|| anyhow!("payout interval overflow"))?;
+    if interval == 0 {
+        bail!("payout interval must be positive");
+    }
+    let amount = annual
+        .checked_mul(u128::from(cadence_days))
+        .ok_or_else(|| anyhow!("payout overflow"))?
+        / YEAR_DAYS;
     let mut out = Vec::new();
-    let mut time = start;
+    // Pay completed accrual periods, rather than crediting a period in advance.
+    let mut time = start
+        .checked_add(interval)
+        .ok_or_else(|| anyhow!("payout time overflow"))?;
     while time <= end {
         out.push((time, amount));
-        time = time.saturating_add(interval);
+        time = time
+            .checked_add(interval)
+            .ok_or_else(|| anyhow!("payout time overflow"))?;
     }
-    out
+    Ok(out)
 }
 
 fn interrupt(schedule: &[(u64, u128)], start: u64, duration: u64) -> Vec<(u64, u128)> {
@@ -1646,10 +1865,10 @@ fn median(mut values: Vec<u128>) -> u128 {
 }
 
 fn write_threshold_csv(set: &SimulationSet, output: &Path) -> Result<()> {
-    let mut csv = String::from("scenario_id,simulation_kind,policy,workload,funding_profile,horizon_days,initial_cycles,initial_mode,continuous_interval_seconds,funding_cycles,expenditure_cycles,ordinary_polling_cycles,maintenance_cycles,funding_maintenance_runs,pricing_maintenance_runs,global_notification_matches,specific_notification_matches,coalesced_notification_dispatches,ending_cycles,minimum_cycles,transitions,max_transitions_7d,first_downgrade_seconds,reserve_protection_seconds,ending_backlog,projected_latency_seconds,liquidity_maintained,sustainable\n");
+    let mut csv = String::from("scenario_id,simulation_kind,policy,workload,funding_profile,horizon_days,initial_cycles,initial_mode,continuous_interval_seconds,funding_cycles,expenditure_cycles,ordinary_polling_cycles,maintenance_cycles,funding_maintenance_runs,pricing_maintenance_runs,global_notification_matches,specific_notification_matches,coalesced_notification_dispatches,ending_cycles,minimum_cycles,transitions,max_transitions_7d,first_downgrade_seconds,reserve_protection_seconds,ending_backlog,projected_latency_seconds,liquidity_maintained,window_funding_covers_expenditure,maximum_active_pre_poll_pending,maximum_active_post_poll_outstanding,first_downgrade_outstanding,first_reserve_outstanding,reserve_arrivals,maximum_backlog,funding_surplus,funding_shortfall,reserve_suspended_seconds,exhausted\n");
     for result in &set.results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             result.scenario_id,
             result.simulation_kind,
             result.policy_id,
@@ -1681,7 +1900,17 @@ fn write_threshold_csv(set: &SimulationSet, output: &Path) -> Result<()> {
             result.ending_backlog_blocks,
             result.projected_latency_seconds,
             result.liquidity_maintained,
-            result.sustainable,
+            result.window_funding_covers_expenditure,
+            result.maximum_active_pre_poll_pending_blocks,
+            result.maximum_active_post_poll_outstanding_blocks,
+            result.outstanding_blocks_at_first_downgrade.map_or(String::new(), |v| v.to_string()),
+            result.outstanding_blocks_at_first_reserve.map_or(String::new(), |v| v.to_string()),
+            result.additional_reserve_backlog_blocks,
+            result.maximum_backlog_blocks,
+            result.funding_surplus_cycles,
+            result.funding_shortfall_cycles,
+            result.seconds_in_modes[0],
+            result.exhausted,
         ));
     }
     fs::write(output.join("threshold-comparison.csv"), csv)?;
@@ -1690,9 +1919,18 @@ fn write_threshold_csv(set: &SimulationSet, output: &Path) -> Result<()> {
 
 pub fn read_simulations(path: &Path) -> Result<SimulationSet> {
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    #[derive(serde::Deserialize)]
+    struct SchemaVersion {
+        schema_version: u32,
+    }
+    let version: SchemaVersion =
+        serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))?;
+    if version.schema_version != 3 {
+        bail!("unsupported simulation schema; regenerate schema 3 outputs from unchanged raw measurements");
+    }
     let set: SimulationSet =
         serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))?;
-    if set.schema_version != 2 || set.results.is_empty() {
+    if set.schema_version != 3 || set.results.is_empty() {
         bail!("invalid or empty simulation dataset")
     }
     Ok(set)
@@ -1796,8 +2034,514 @@ mod tests {
             first_downgrade: None,
             first_reserve: None,
             maximum_backlog: 0,
+            maximum_pre_poll: 0,
+            maximum_post_poll: 0,
+            downgrade_backlog: None,
+            reserve_backlog: None,
+            reserve_generated: 0,
             exhausted: false,
         }
+    }
+
+    struct TestDirectory(PathBuf);
+    impl TestDirectory {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../observations/cadence")
+                .join(format!(
+                    "regression-{}-{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                ));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn model_and_report_preserve_measurements_in_place_and_separate_outputs() {
+        use sha2::{Digest, Sha256};
+        let directory = TestDirectory::new();
+        let config_path = directory.0.join("config.json");
+        let mut config = default_model_config();
+        config.policies.retain(|policy| policy.id == "current");
+        config
+            .workloads
+            .retain(|workload| workload.id == "expected");
+        config.workloads[0].blocks_per_second_milli = 0;
+        fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
+        let input = directory.0.join("measurements.json");
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/example-measurements.json"),
+            &input,
+        )
+        .unwrap();
+        let csv = directory.0.join("measurements.csv");
+        fs::write(&csv, b"original CSV\n").unwrap();
+        let hashes = || {
+            [
+                Sha256::digest(fs::read(&input).unwrap()),
+                Sha256::digest(fs::read(&csv).unwrap()),
+            ]
+        };
+        let before = hashes();
+        let metadata = [
+            fs::metadata(&input).unwrap().modified().unwrap(),
+            fs::metadata(&csv).unwrap().modified().unwrap(),
+        ];
+        fs::create_dir(directory.0.join("child")).unwrap();
+        let absolute = fs::canonicalize(&directory.0).unwrap();
+        let relative = directory
+            .0
+            .strip_prefix(std::env::current_dir().unwrap())
+            .unwrap()
+            .join("child/../.");
+        let first = run(&input, &directory.0, 77, Some(&config_path)).unwrap();
+        let report = crate::report::run(&directory.0).unwrap();
+        assert_eq!(
+            first,
+            run(&input, &directory.0, 77, Some(&config_path)).unwrap()
+        );
+        assert_eq!(report, crate::report::run(&directory.0).unwrap());
+        for output in [&absolute, &relative] {
+            copy_measurement(&input, &output.join("measurements.json")).unwrap();
+            copy_measurement(&csv, &output.join("measurements.csv")).unwrap();
+            assert_eq!(before, hashes());
+        }
+        #[cfg(unix)]
+        {
+            let alias = directory.0.join("alias");
+            std::os::unix::fs::symlink(&absolute, &alias).unwrap();
+            copy_measurement(&input, &alias.join("measurements.json")).unwrap();
+            copy_measurement(&csv, &alias.join("measurements.csv")).unwrap();
+            let separate = directory.0.join("symlink-destination");
+            fs::create_dir(&separate).unwrap();
+            std::os::unix::fs::symlink(&input, separate.join("measurements.json")).unwrap();
+            std::os::unix::fs::symlink(&csv, separate.join("measurements.csv")).unwrap();
+            copy_measurement(&input, &separate.join("measurements.json")).unwrap();
+            copy_measurement(&csv, &separate.join("measurements.csv")).unwrap();
+            let hard = directory.0.join("hard.json");
+            fs::hard_link(&input, &hard).unwrap();
+            copy_measurement(&input, &hard).unwrap();
+        }
+        let separate = directory.0.join("separate");
+        run(&input, &separate, 77, Some(&config_path)).unwrap();
+        crate::report::run(&separate).unwrap();
+        for name in [
+            "measurements.json",
+            "measurements.csv",
+            "simulations.json",
+            "threshold-comparison.csv",
+            "report.md",
+        ] {
+            assert!(separate.join(name).is_file());
+        }
+        assert_eq!(
+            fs::read(&input).unwrap(),
+            fs::read(separate.join("measurements.json")).unwrap()
+        );
+        assert_eq!(
+            fs::read(&csv).unwrap(),
+            fs::read(separate.join("measurements.csv")).unwrap()
+        );
+        assert_eq!(before, hashes());
+        assert_eq!(
+            metadata,
+            [
+                fs::metadata(&input).unwrap().modified().unwrap(),
+                fs::metadata(&csv).unwrap().modified().unwrap()
+            ]
+        );
+        let failure = directory.0.join("failure");
+        fs::create_dir_all(failure.join("measurements.csv")).unwrap();
+        let error = run(&input, &failure, 77, Some(&config_path)).unwrap_err();
+        assert!(format!("{error:#}").contains("copy"));
+        assert_eq!(before, hashes());
+    }
+
+    #[test]
+    fn active_queue_peaks_and_growing_lag_match_reference() {
+        for interval in [1, 10, 120, 600, 3_600] {
+            for initial in [0, 1_000, 10_000] {
+                for arrival in [0, 1_000, 2_000] {
+                    let mut state = test_state();
+                    state.backlog = initial;
+                    let mut workload = test_workload(arrival, 0, 1, 0, 0);
+                    if interval == 3_600 && arrival == 1_000 && initial == 0 {
+                        workload.assumed_blocks_per_poll_capacity = 3_600;
+                    }
+                    let batch =
+                        project_batch(&state, &workload, &calibration(), interval, 20, interval)
+                            .unwrap();
+                    let mut pending = initial;
+                    let mut pre = 0;
+                    let mut post = 0;
+                    for _ in 0..20 {
+                        pending += u128::from(arrival) * u128::from(interval) / 1_000;
+                        pre = pre.max(pending);
+                        pending = pending
+                            .saturating_sub(u128::from(workload.assumed_blocks_per_poll_capacity));
+                        post = post.max(pending);
+                    }
+                    assert_eq!(batch.maximum_pre_poll, pre);
+                    assert_eq!(batch.maximum_post_poll, post);
+                    apply_batch(&mut state, batch);
+                    assert_eq!(state.backlog, pending);
+                    assert_eq!(state.now, 20 * interval);
+                    if initial == 0 && arrival == 1_000 {
+                        assert_eq!(post, 0);
+                        assert_eq!(pre, u128::from(interval));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn downgrade_reserve_and_top_up_capture_queue_and_timing() {
+        let mut state = test_state();
+        let workload = test_workload(1_000, 0, 0, 0, 0);
+        state.now = 100;
+        state.backlog = 123;
+        state.balance = 59 * TRILLION;
+        change_mode(&mut state, &policy(), 1);
+        assert_eq!(state.mode, Mode::VeryFast);
+        assert_eq!(state.next_poll, Some(110));
+        assert_eq!(state.first_downgrade, Some(100));
+        assert_eq!(state.downgrade_backlog, Some(123));
+        state.balance = TRILLION - 1;
+        change_mode(&mut state, &policy(), 1);
+        assert_eq!(state.first_reserve, Some(100));
+        assert_eq!(state.reserve_backlog, Some(123));
+        assert_eq!(state.next_poll, None);
+        accrue_without_poll(&mut state, &workload, 3_600);
+        state.now += 3_600;
+        assert_eq!(state.backlog, 3_723);
+        assert_eq!(state.reserve_generated, 3_600);
+        assert_eq!(state.seconds_in_modes[0], 3_600);
+        state.balance = 100 * TRILLION;
+        change_mode(&mut state, &policy(), 1);
+        assert_eq!(state.next_poll, Some(3_701));
+        let batch = project_batch(&state, &workload, &calibration(), 3_701, 1, 1).unwrap();
+        apply_batch(&mut state, batch);
+        assert_eq!(state.backlog, 0);
+        assert_eq!(state.reserve_generated, 3_600);
+        assert_eq!(state.reserve_backlog, Some(123));
+    }
+
+    #[test]
+    fn adaptive_batch_transitions_match_bounded_poll_reference() {
+        let assumptions = assumptions();
+        let mut calibration = calibration();
+        calibration.empty_poll_cycles = TRILLION;
+        calibration.funding_maintenance_cycles = Some(0);
+        calibration.pricing_maintenance_cycles = Some(0);
+        let mut workload = test_workload(1_000, 0, 1, 0, 0);
+        workload.initial_backlog_blocks = 10_000;
+        let context = SimulationContext {
+            calibration: &calibration,
+            assumptions: &assumptions,
+            seed: 1,
+            continuous_interval_seconds: 1,
+        };
+        let projected = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "reference",
+            "no_incoming_funding",
+            1,
+            100 * TRILLION,
+        )
+        .unwrap();
+        let mut reference = test_state();
+        reference.backlog = 10_000;
+        reference.maximum_backlog = 10_000;
+        while let Some(time) = reference.next_poll.filter(|time| *time <= DAY) {
+            let batch = project_single_poll(&reference, &workload, &calibration, time).unwrap();
+            apply_batch(&mut reference, batch);
+            reference.next_poll = reference
+                .mode
+                .delay_seconds(1)
+                .map(|delay| reference.now + delay);
+            change_mode(&mut reference, &policy(), 1);
+        }
+        let elapsed = DAY - reference.now;
+        accrue_without_poll(&mut reference, &workload, elapsed);
+        assert_eq!(projected.first_downgrade_seconds, reference.first_downgrade);
+        assert_eq!(
+            projected.reserve_protection_seconds,
+            reference.first_reserve
+        );
+        assert_eq!(
+            projected.outstanding_blocks_at_first_downgrade,
+            reference.downgrade_backlog
+        );
+        assert_eq!(
+            projected.outstanding_blocks_at_first_reserve,
+            reference.reserve_backlog
+        );
+        assert_eq!(projected.ending_backlog_blocks, reference.backlog);
+        assert_eq!(
+            projected.maximum_active_pre_poll_pending_blocks,
+            reference.maximum_pre_poll
+        );
+        assert_eq!(
+            projected.maximum_active_post_poll_outstanding_blocks,
+            reference.maximum_post_poll
+        );
+        assert_eq!(
+            projected.additional_reserve_backlog_blocks,
+            reference.reserve_generated
+        );
+        assert_eq!(projected.seconds_in_modes, reference.seconds_in_modes);
+        assert_eq!(
+            projected.total_projected_expenditure_cycles,
+            reference.spent
+        );
+    }
+
+    #[test]
+    fn identical_receipts_on_different_schedules_change_simulated_minimum() {
+        let mut assumptions = assumptions();
+        assumptions.initial_recognition_delay_seconds = 0;
+        assumptions.conversion_delay_seconds = 0;
+        assumptions.conversion_fee_e8s = 0;
+        assumptions.effective_payout_apy_basis_points = 10_000;
+        let mut workload = test_workload(0, 0, 0, 0, 0);
+        workload
+            .productive_endowment_backing
+            .protocol_endowment_icp_e8s = 365 * ICP_E8S;
+        let mut calibration = calibration();
+        calibration.empty_poll_cycles = 30_000_000;
+        let context = SimulationContext {
+            calibration: &calibration,
+            assumptions: &assumptions,
+            seed: 1,
+            continuous_interval_seconds: 1,
+        };
+        let daily = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "test",
+            "regular_daily",
+            360,
+            100 * TRILLION,
+        )
+        .unwrap();
+        let monthly = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "test",
+            "regular_monthly",
+            360,
+            100 * TRILLION,
+        )
+        .unwrap();
+        assert_eq!(daily.total_funding_cycles, monthly.total_funding_cycles);
+        assert_ne!(daily.minimum_cycles, monthly.minimum_cycles);
+    }
+
+    #[test]
+    fn mature_margin_window_coverage_and_liquidity_are_independent() {
+        let mut assumptions = assumptions();
+        assumptions.conversion_fee_e8s = 0;
+        assumptions.conversion_delay_seconds = 0;
+        let mut workload = test_workload(0, 0, 0, 0, 0);
+        workload
+            .productive_endowment_backing
+            .protocol_endowment_icp_e8s = 10_000 * ICP_E8S;
+        let mut calibration = calibration();
+        calibration.empty_poll_cycles = 30_000_000;
+        let economics = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Continuous,
+            1,
+            7,
+        )
+        .unwrap();
+        assert!(economics.steady_state_annual_margin_cycles > 0);
+        assumptions.initial_recognition_delay_seconds = 180 * DAY;
+        let context = SimulationContext {
+            calibration: &calibration,
+            assumptions: &assumptions,
+            seed: 1,
+            continuous_interval_seconds: 1,
+        };
+        let delayed = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "test",
+            "regular_weekly",
+            365,
+            2_000 * TRILLION,
+        )
+        .unwrap();
+        assert!(!delayed.window_funding_covers_expenditure);
+        assert!(delayed.liquidity_maintained);
+        assumptions.initial_recognition_delay_seconds = 0;
+        assert_eq!(
+            economics,
+            fixed_tier_economics_for(
+                &workload,
+                &calibration,
+                &assumptions,
+                Mode::Continuous,
+                1,
+                7
+            )
+            .unwrap()
+        );
+        let context = SimulationContext {
+            calibration: &calibration,
+            assumptions: &assumptions,
+            seed: 1,
+            continuous_interval_seconds: 1,
+        };
+        let immediate = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "test",
+            "regular_weekly",
+            365,
+            2_000 * TRILLION,
+        )
+        .unwrap();
+        assert!(immediate.window_funding_covers_expenditure);
+        assert!(immediate.total_funding_cycles > delayed.total_funding_cycles);
+        let low_liquidity = simulate(
+            &policy(),
+            &workload,
+            &context,
+            "test",
+            "regular_monthly",
+            365,
+            TRILLION / 2,
+        )
+        .unwrap();
+        assert!(low_liquidity.window_funding_covers_expenditure);
+        assert!(!low_liquidity.liquidity_maintained);
+        assert!(low_liquidity.reserve_protection_seconds.is_some());
+        // Equal gross receipts: five daily periods and one five-day period.
+        let daily = regular_schedule(0, 5 * DAY, 1, 365 * ICP_E8S).unwrap();
+        let spaced = regular_schedule(0, 5 * DAY, 5, 365 * ICP_E8S).unwrap();
+        assert_eq!(
+            daily.iter().map(|x| x.1).sum::<u128>(),
+            spaced.iter().map(|x| x.1).sum::<u128>()
+        );
+        let minimum = |schedule: Vec<(u64, u128)>| {
+            let mut balance = 10 * ICP_E8S;
+            let mut minimum = balance;
+            let mut previous = 0;
+            for (time, amount) in schedule {
+                balance -= u128::from(time - previous) * ICP_E8S / DAY as u128;
+                minimum = minimum.min(balance);
+                balance += amount;
+                previous = time;
+            }
+            minimum
+        };
+        assert!(minimum(daily) > minimum(spaced));
+    }
+
+    #[test]
+    fn fixed_tier_economics_respect_fees_yield_conversion_and_affordability() {
+        let mut assumptions = assumptions();
+        let workload = workloads()[1].clone();
+        let calibration = calibration();
+        let continuous = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Continuous,
+            1,
+            7,
+        )
+        .unwrap();
+        let economy = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Economy,
+            3_600,
+            7,
+        )
+        .unwrap();
+        assert!(
+            economy.annualized_operating_expenditure_cycles
+                < continuous.annualized_operating_expenditure_cycles
+        );
+        assumptions.effective_payout_apy_basis_points = 10;
+        let continuous = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Continuous,
+            1,
+            7,
+        )
+        .unwrap();
+        let economy = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Economy,
+            3_600,
+            7,
+        )
+        .unwrap();
+        assert!(continuous.steady_state_annual_margin_cycles < 0);
+        assert!(economy.steady_state_annual_margin_cycles > 0);
+        let annual = annual_payout_e8s(&assumptions, &workload, 10).unwrap();
+        assert_eq!(
+            economy.mature_annual_income_cycles,
+            payout_cycles(&assumptions, annual * 7 / 365).unwrap() * 365 / 7
+        );
+        assumptions.effective_payout_apy_basis_points = 0;
+        assert_eq!(
+            fixed_tier_economics_for(
+                &workload,
+                &calibration,
+                &assumptions,
+                Mode::Continuous,
+                1,
+                7
+            )
+            .unwrap()
+            .mature_annual_income_cycles,
+            0
+        );
+        assumptions.effective_payout_apy_basis_points = 560;
+        assumptions.delivery_shortfall_basis_points = 1_000;
+        assumptions.surplus_diversion_basis_points = 2_000;
+        let reduced = fixed_tier_economics_for(
+            &workload,
+            &calibration,
+            &assumptions,
+            Mode::Continuous,
+            1,
+            1,
+        )
+        .unwrap();
+        assert!(reduced.mature_annual_income_cycles < continuous.mature_annual_income_cycles * 56);
+        assert!(payout_cycles(&assumptions, u128::MAX).is_err());
+        let mut enormous = workload;
+        enormous
+            .productive_endowment_backing
+            .protocol_endowment_icp_e8s = u128::MAX;
+        assert!(annual_payout_e8s(&assumptions, &enormous, 560).is_err());
     }
 
     #[test]

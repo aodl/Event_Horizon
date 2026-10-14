@@ -254,8 +254,16 @@ pub fn run(directory: &Path) -> Result<String> {
         decimal_basis_points(simulations.funding_assumptions.effective_payout_apy_basis_points),
         decimal_permyriad(simulations.funding_assumptions.xdr_per_icp_permyriad),
     ));
+    report.push_str(&format!(
+        "Funding assumptions: recognition delay {} s, conversion delay {} s, conversion fee {} ICP e8s per receipt, delivery shortfall {} basis points and diversion {} basis points. The configured effective payout APY, rather than gross maturity APY, determines receipts.\n\n",
+        simulations.funding_assumptions.initial_recognition_delay_seconds,
+        simulations.funding_assumptions.conversion_delay_seconds,
+        simulations.funding_assumptions.conversion_fee_e8s,
+        simulations.funding_assumptions.delivery_shortfall_basis_points,
+        simulations.funding_assumptions.surplus_diversion_basis_points,
+    ));
     report.push_str("Canonical workload rows are alternative scenarios for one planned launch, with separate simulated balances; their protocol seeds and payouts are never pooled.\n\n");
-    report.push_str("| 365-day funding profile (current policy, expected workload) | Funding | Polling | Maintenance | Total spend | Ending | Minimum | First downgrade | Reserve | Sustainable |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
+    report.push_str("| 365-day funding profile (current policy, expected workload) | Funding | Polling | Maintenance | Total spend | Ending | Minimum | First downgrade | Reserve | Window covered |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
     for result in simulations.results.iter().filter(|result| {
         result.simulation_kind == "funding_profile"
             && result.policy_id == "current"
@@ -273,7 +281,50 @@ pub fn run(directory: &Path) -> Result<String> {
             trillions(result.minimum_cycles),
             optional_days(result.first_downgrade_seconds),
             optional_days(result.reserve_protection_seconds),
-            yes_no(result.sustainable),
+            yes_no(result.window_funding_covers_expenditure),
+        ));
+    }
+
+    report.push_str("\nWindow coverage compares actual receipts with expenditure over the same horizon, independently of liquidity. Reserve entry and exhaustion are separate safety outcomes.\n\n");
+    report.push_str("## Hypothetical fixed-tier mature economics\n\n");
+    report.push_str("These continuing workload rates exclude startup backlog and recognition delay. They assume weekly completed-period payouts, deduct conversion fees per payout, apply configured effective APY, delivery shortfall, diversion and ICP/XDR conversion, and include hourly funding and daily pricing maintenance. They are separate from the adaptive simulation path. Capacity-limited rows may process fewer blocks than arrive; a positive financial margin does not establish throughput adequacy. A small positive annual margin does not establish short-term liquidity or indefinite Continuous operation.\n\n");
+    report.push_str("| Workload | Fixed tier | Interval | Mature income | Annual expenditure | Annual margin | Processed / generated blocks |\n|---|---|---:|---:|---:|---:|---:|\n");
+    for result in &simulations.fixed_tier_economics {
+        let margin = result.steady_state_annual_margin_cycles;
+        report.push_str(&format!(
+            "| {} | {} | {} s | {} T | {} T | {}{} T | {} / {} |\n",
+            result.workload_id,
+            result.mode.label(),
+            result.effective_poll_interval_seconds,
+            trillions(result.mature_annual_income_cycles),
+            trillions(result.annualized_operating_expenditure_cycles),
+            if margin < 0 { "-" } else { "" },
+            trillions(margin.unsigned_abs()),
+            result.annual_processed_blocks,
+            result.annual_generated_blocks
+        ));
+    }
+    report.push_str("\n## Queue and reserve decomposition\n\n");
+    report.push_str("Pre-poll pending blocks measure waiting for service. Post-poll outstanding blocks measure active processing lag; both maxima include peaks inside batches. Reserve arrivals count all blocks generated while polling is suspended, including repeated reserve episodes; they may later be drained. Transition snapshots record outstanding blocks at the first event. Ending backlog alone establishes neither throughput incapacity nor archival loss.\n\n");
+    report.push_str("| Scenario | Active pre-poll max | Active post-poll max | First downgrade outstanding | First reserve outstanding | Reserve arrivals | Ending | Suspended seconds | Liquidity | Window surplus / deficit |\n|---|---:|---:|---:|---:|---:|---:|---:|---|---:|\n");
+    for result in &simulations.results {
+        report.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} / {} |\n",
+            result.scenario_id,
+            result.maximum_active_pre_poll_pending_blocks,
+            result.maximum_active_post_poll_outstanding_blocks,
+            result
+                .outstanding_blocks_at_first_downgrade
+                .map_or_else(|| "not reached".into(), integer),
+            result
+                .outstanding_blocks_at_first_reserve
+                .map_or_else(|| "not reached".into(), integer),
+            result.additional_reserve_backlog_blocks,
+            result.ending_backlog_blocks,
+            result.seconds_in_modes[0],
+            yes_no(result.liquidity_maintained),
+            trillions(result.funding_surplus_cycles),
+            trillions(result.funding_shortfall_cycles)
         ));
     }
 
@@ -344,7 +395,7 @@ pub fn run(directory: &Path) -> Result<String> {
             ));
         }
     }
-    report.push_str("\nThe lower tiers cannot be judged on runway alone. Lower frequency can accumulate substantial one-block-per-second backlog before downgrade. These mixed service and architecture results support provisional retention, not a lower-tier threshold change.\n");
+    report.push_str("\nThe lower tiers cannot be judged on runway alone. At one block per second, Economy, Standard and Fast clear each poll under the configured capacity: pre-poll waiting is distinct from persistent post-poll lag. Ending backlog can instead accumulate after Reserve Protection suspends polling. Backlog alone does not prove archived transactions were missed. These mixed service and architecture results support provisional retention, not a lower-tier threshold change.\n");
 
     report.push_str("\n### Equal-balance policy comparison\n\n");
     report.push_str("Every policy below receives the same physical balance, expected workload, no funding, and 90-day horizon. This comparison is separate from entry-to-exit runway.\n\n");
@@ -377,8 +428,8 @@ pub fn run(directory: &Path) -> Result<String> {
     }
 
     report.push_str("\n### Continuous completed-poll-rate sensitivity\n\n");
-    report.push_str("Every interval is an assumption. Runway starts at each policy's own Continuous entry; weekly sustainability includes that workload's productive backing.\n\n");
-    report.push_str("| Policy | Interval | No-funding runway | Weekly spend | Weekly ending/minimum | Sustainable |\n|---|---:|---:|---:|---:|---|\n");
+    report.push_str("Every interval is an assumption. Runway starts at each policy's own Continuous entry; weekly window funding coverage includes that workload's productive backing.\n\n");
+    report.push_str("| Policy | Interval | No-funding runway | Weekly spend | Weekly ending/minimum | Window covered |\n|---|---:|---:|---:|---:|---|\n");
     for candidate in &simulations.policies {
         for &interval in &simulations.continuous_effective_poll_intervals_seconds {
             let no_funding = find_result(
@@ -409,7 +460,7 @@ pub fn run(directory: &Path) -> Result<String> {
                 trillions(weekly.total_projected_expenditure_cycles),
                 trillions(weekly.ending_cycles),
                 trillions(weekly.minimum_cycles),
-                yes_no(weekly.sustainable),
+                yes_no(weekly.window_funding_covers_expenditure),
             ));
         }
     }

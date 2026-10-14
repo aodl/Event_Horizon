@@ -2,20 +2,19 @@
 
 ## Scope and provenance
 
-This validation supersedes the calibration model conclusions previously
-generated from the same raw PocketIC dataset. Review found that the first
-model coupled global notifications to specific matches, gave candidates
-different starting resources without a separate equal-balance comparison,
-and used one assumed Continuous completion rate. Those conclusions, including
-the former 125 T Continuous-entry recommendation, are withdrawn.
-
+This validation uses the retained PocketIC evidence from the reviewed baseline
+`1d04faf9d0df58b551f54323fd651b57ab147440`. Schema 3 corrects measurement
+self-copy handling, queue interpretation and financial classification. It
+supersedes the previous simulator interpretation, while retaining the original
+raw measurements and the earlier notification/coalescing corrections. The
+125 T candidate remains an experimental comparison.
 Production thresholds, polling delays, funding behaviour, notification
 semantics, stable memory, Candid, and immutable configuration remain
 unchanged. No mainnet call, deployment, reinstall, upgrade, top-up, ICP/cycles
 transfer, or controller operation was performed.
 
 The final review output is locally available at
-`observations/cadence/final-20261012/` and is intentionally ignored.
+`observations/cadence/review-final/` and is intentionally ignored.
 Its `measurements.json` and `measurements.csv` are byte-identical copies of the
 previously completed full measurement dataset:
 
@@ -33,15 +32,27 @@ previously completed full measurement dataset:
   truncation, or omitted measurement failure; and
 - 205 final deterministic simulations from the complete dataset.
 
-Final ignored output hashes are `8f72f435b5da84407ab35cf65fa1a634e26d72f55ce4f6696c8f3b8223d527ff`
-for `simulations.json`, `3b8facbf4f0f07d63588f8602b18f74e8d99e46d849a7a80ae042facf6694010`
-for `threshold-comparison.csv`, and `2a5ee58fd9b28babb742de49aa96824f0dff0b283afe2c159fa07e3af64d0c64`
-for `report.md`. The copied final `measurements.json` still has the raw hash above.
+Final output hashes and gate results are recorded below. The full raw
+measurement matrix was not rerun: no empirical cost coefficient changed. A
+fresh smoke run completed nine scenarios and all 50 threshold observations at
+`observations/cadence/smoke-final/`. All 205 adaptive scenarios and 40 separate
+fixed-tier economic comparisons were generated from the retained full dataset.
 
-Rerunning the full PocketIC matrix was unnecessary because the corrections
-required no new empirical coefficient. A fresh final smoke run completed nine
-scenarios and all 50 threshold observations at
-`observations/cadence/smoke-final-20261012/`.
+## Measurement integrity
+
+The former CSV copy could open its own input for writing; the JSON guard only
+compared textual paths. Both copies now resolve existing canonical paths and,
+on Unix, device/inode identity before copying. Identical files are skipped,
+including directory/file symlinks and hard links. Separate destinations remain
+supported. Resolution/copy errors include paths and fail the command; unexpected
+CSV metadata errors are no longer treated as an absent optional CSV.
+
+Regression tests check JSON/CSV SHA-256 and modification times through in-place
+and repeated model/report runs, relative/absolute dot-component paths,
+directory and destination-file symlinks, hard links, separate output copies,
+and a destination directory that causes a copy failure. A disposable copy of
+the full raw measurements was also modelled in place. The original dataset
+was never used for destructive-path experiments and retains both hashes above.
 
 ## Corrected notification model
 
@@ -136,11 +147,69 @@ one-second assumption. At two seconds the current policy already exceeds 30
 days. Because the effective production completion rate is not yet measured,
 the local evidence cannot justify choosing 125 T or another replacement.
 
-Under illustrative weekly payouts, the current policy's annual sustainability
-also changes with the assumed Continuous interval: it is not average
-sustainable at one or two seconds, and is sustainable at five and ten seconds
-under the configured funding and traffic assumptions. This is sensitivity,
-not a mainnet prediction.
+## Window coverage, liquidity and mature economics
+
+Schema 3 removes `sustainable`, whose old definition combined liquidity and
+finite-window receipts. `window_funding_covers_expenditure` is the arithmetic
+receipt/spend comparison, independently of liquidity. Minimum/ending cycles,
+reserve entry, exhaustion, time in each mode and suspended seconds describe
+safety. Backlog is excluded from the liquidity classifier.
+
+The expected canonical principal remains 4,070 ICP: planned protocol backing
+3,000 ICP, one global 1,000 ICP, three accounts 30 ICP and two ranges 40 ICP.
+The illustrative effective 5.6% APY yields 227.92 ICP or 455.84 T annually before
+conversion fees at 2 XDR/ICP. The checked integer calculation annualizes the
+fee-net weekly payout rate to **455.829571100000 T/year**. These inputs are
+assumptions, not confirmed principal, guaranteed income or measured Faucet yield.
+
+The fixed-tier rows exclude startup backlog and assume a continuing workload
+with independent hourly funding and daily pricing maintenance. They include
+empty polls, processed blocks, additional pages and coalesced global/specific
+notifications. They are separate from the actual adaptive path. Annual processed/generated counts also identify capacity-limited fixed-tier rows: high-activity Economy and stress Economy/Standard do not process all arrivals. A positive financial margin in those rows does not establish adequate service.
+
+| Continuous completed-poll interval | Fixed annual expenditure (T) | Mature annual margin (T) |
+|---|---:|---:|
+| 1 second | 884.523468394825 | -428.693897294825 |
+| 2 seconds | 449.983563274825 | +5.846007825175 |
+| 5 seconds | 189.259620202825 | +266.569950897175 |
+| 10 seconds | 102.351639178825 | +353.477931921175 |
+
+The two-second mature margin is about 1.3% of expenditure. It does not prove
+indefinite Continuous operation or sufficient bootstrap liquidity. Fixed
+Economy, Standard and Fast expected-workload annual costs are respectively
+8.083570181665, 10.376553906745 and 21.243595024825 T; affordability depends
+on the selected continuing tier, traffic and fan-out assumptions.
+
+Regular payouts now follow a completed accrual period, rather than paying
+one period in advance at recognition. The fixture retains its illustrative
+14-day recognition delay plus one-hour conversion delay, weekly cadence and
+10,000-e8s conversion fee; this is a model input, not a change to Jupiter's
+reviewed seven-day recognition policy. A delayed lump sum retains the existing
+per-delivery fee semantics. Startup delay changes receipts, not principal or
+the mature recurring rate.
+
+| Current policy, weekly funding, 365 days | Receipts (T) | Adaptive expenditure (T) | Window surplus / deficit (T) | Minimum cycles (T) |
+|---|---:|---:|---:|---:|
+| 1-second assumption | 437.096849000000 | 469.567284777780 | -32.470435777780 | 58.728159934480 |
+| 2-second assumption | 437.096849000000 | 449.983529809520 | -12.886680809520 | 74.059222107300 |
+| 5-second assumption | 437.096849000000 | 189.259586109920 | +247.837262890080 | 89.089541370900 |
+| 10-second assumption | 437.096849000000 | 102.351604039920 | +334.745244960080 | 94.099648628900 |
+
+All four maintain liquidity without reserve entry or exhaustion. At two
+seconds, a first-year deficit coexists with positive mature economics. At one
+second, adaptive downgrades reduce actual expenditure far below the hypothetical
+fixed Continuous rate; beginning in Continuous does not imply remaining there.
+Small phase differences between annual fixed rates and adaptive expenditure
+reflect maintenance/poll ordering at the horizon boundary.
+
+Before this correction, weekly first-year receipts were 445.838785980000 T.
+Paying completed periods reduces them by one weekly receipt, 8.741936980000 T.
+At two seconds, projected spend remains 449.983529809520 T and window coverage
+remains negative, but the former combined classification concealed the positive
+mature margin. At one second, later receipts change the adaptive path: spend
+falls from 479.353830873720 to 469.567284777780 T. No-funding expenditure,
+runway and ending backlog remain unchanged; the new queue metrics correct
+interpretation and include previously unsampled peaks.
 
 Equal-balance comparisons start every policy at 75, 100, 125, and 160 T. At
 100 T, for example, the current policy immediately enters Continuous and
@@ -159,28 +228,37 @@ The current lower-tier entry-to-exit results for the expected workload are:
 | Fast | 68.73 d | 58.99 d | Both meet |
 | Very Fast | 35.66 d | 29.51 d | Generic misses narrowly |
 
-Economy, Standard, and Fast build substantial backlog at one block per second,
-so their balance runway alone is not evidence for lowering thresholds. The
-mixed architecture and service results do not justify changing any lower-tier
-threshold.
+Economy, Standard and Fast clear their normal between-poll arrivals at one
+block/second under the configured 4,096-block capacity. The projector retains
+maximum pre-poll waiting and maximum post-poll outstanding blocks across each
+batch, plus first-downgrade/reserve snapshots and arrivals during reserve episodes.
 
-The generic instance's annual weekly-payout assumption fell from 445.84 T to
-117.20 T when the incorrectly inherited canonical seed was removed. Its
-projected annual expenditure also fell from 465.21 T to 159.11 T as the lower
-balance selected slower modes. Correcting the high-activity admission
-multiplier from 125% to 100% reduced its assumed annual payouts from
-1,054.36 T to 909.22 T; the resulting mode history reduced projected global
-notifications from 98.19 million to 83.83 million. Burst coalescing changed
-notification counts and backlog projections where activity was concentrated
-in fewer polls. Expected canonical Continuous entry-to-exit runway changed
-by less than the displayed 0.01 day because one block per poll already matched
-the former aggregate assumption. The PocketIC coefficients and raw scenarios
-did not change.
+| Starting tier, canonical no funding | Whole active-path pre-poll maximum | Post-poll maximum | First downgrade / reserve outstanding | Reserve arrivals = ending backlog |
+|---|---:|---:|---:|---:|
+| Economy | 3,600 | 0 | 0 / 0 | 27,633,600 |
+| Standard | 3,600 | 0 | 0 / 0 | 17,652,600 |
+| Fast | 3,600 | 0 | 0 / 0 | 8,675,520 |
+
+The whole-path maxima include later Economy operation. Before the first
+downgrade, Standard waits up to 600 blocks and Fast up to 120; both clear each
+poll. The large ending queues above arise entirely after reserve suspension,
+not active throughput incapacity. Very Fast's no-funding path ends with 800
+waiting blocks without reserve entry or post-poll lag. Excess-capacity scenarios
+instead show persistent post-poll growth. Recovery can drain reserve arrivals;
+that cumulative metric is not the remaining queue. Backlog does not prove
+archived records were missed. Live retention and explicit archive evidence
+remain limitations of the best-effort reader, with no archive traversal added.
+These service and architecture results do not justify changing lower thresholds.
+
+Earlier removal of the generic instance's incorrectly inherited protocol seed
+and correction of the high-activity admission multiplier remain in force.
+They are separate corrections from this pass. The raw PocketIC coefficients,
+scenario provenance and no-funding runway table above are unchanged.
 
 Interruption comparisons reached no Reserve Protection event from their own
 candidate entry balances, but produced materially different minima and
-responsiveness. Stress workloads remained unsustainable and accumulated large
-backlogs for every candidate. Rolling seven-day transition counts remained
+responsiveness. Stress workloads show window deficits and large queues for every candidate;
+active lag and reserve arrivals must be assessed separately. Rolling seven-day transition counts remained
 bounded; the raw 50-case PocketIC hysteresis parity result is unchanged.
 
 ## Conclusion
@@ -199,30 +277,81 @@ and Faucet receipts is required before reconsidering the thresholds.
 
 ```bash
 ./tools/scripts/calibrate-cadence smoke --seed 20261011 \
-  --output observations/cadence/smoke-final-20261012
+  --output observations/cadence/smoke-final
 ./tools/scripts/calibrate-cadence model \
   --input observations/cadence/full-20261011/measurements.json \
   --config tests/cadence-calibration/fixtures/model-config.json \
-  --output observations/cadence/final-20261012 \
+  --output observations/cadence/review-final \
   --seed 20261011
 ./tools/scripts/calibrate-cadence report \
-  --input observations/cadence/final-20261012
+  --input observations/cadence/review-final
 ```
+
+## Dependency security and production isolation
+
+Targeted updates resolve the nine reviewed actionable findings:
+`RUSTSEC-2026-0338` through `RUSTSEC-2026-0342` in `quinn-proto` (0.11.15 →
+0.11.18), and `RUSTSEC-2026-0346` through `RUSTSEC-2026-0349` in `rustls`
+(0.23.45 → 0.23.46). Quinn requires rand 0.10: rand 0.9.3 → 0.10.3,
+rand_core 0.9.5 → 0.10.1, new rand_pcg 0.10.2, chacha20 0.10.2 and
+cpufeatures 0.3.1. getrandom 0.3.4, r-efi 5.3.0 and rand_chacha 0.9.0
+become unnecessary; existing getrandom 0.4.2 gains the corresponding features.
+PocketIC remains pinned at 15.0.0. No broad update or new exception was used.
+
+Cargo metadata closure traversal and Wasm-target normal/build trees show no
+changed package in either production canister closure. Rustls is used through
+PocketIC → reqwest → hyper-rustls/tokio-rustls. Quinn's optional HTTP/3 closure
+is locked but not enabled in the current native build, so the ordinary reverse
+tree reports nothing for it; the published reqwest dependency declaration and
+lockfile identify its origin. These are test-tooling changes. Production source,
+interfaces, configuration, frontend registry and pricing policy are unchanged.
+
+`security-scan` passes cargo-audit, cargo-deny advisories/licenses/bans/sources,
+npm audit and OSV with zero unfiltered findings. The existing maintenance-only
+exceptions remain separately identifiable: RUSTSEC-2025-0012 (backoff),
+RUSTSEC-2024-0384 (instant), RUSTSEC-2024-0436 (paste), and RUSTSEC-2021-0127
+(serde_cbor). Scan scripts, workflow and allowlists are unchanged.
 
 ## Validation gates
 
-The following final-source gates completed successfully:
+Completed local evidence:
 
-- `cargo test -p event-horizon-cadence-calibration --locked`: 24 tests;
-- `./tools/scripts/calibrate-cadence smoke ...`: 9 complete scenarios and 50 threshold observations;
-- corrected full model and report: 205 simulations;
-- `cargo fmt --all -- --check`;
-- `cargo clippy --locked --workspace --all-targets -- -D warnings`;
-- `cargo run -p xtask -- test_unit`: 5 suites, 142 passed tests, 106 intentionally ignored PocketIC tests;
-- `POCKET_IC_MUTE_SERVER=1 DFX_IDENTITY=codex_local cargo run -p xtask -- test_all`: 111 suites, 248 passed tests, including all 106 PocketIC scenarios;
-- `./tools/scripts/security-scan`: no unfiltered finding;
-- source-manifest generation and verification.
+- `cargo test --locked -p event-horizon-cadence-calibration`: 31 tests passed;
+- smoke: nine complete scenarios and 50 threshold observations;
+- full offline output: 205 unique adaptive scenarios and 40 fixed-tier rows;
+- all horizon sums, expenditure components, margins, coverage and liquidity
+  classifications checked for internal consistency;
+- disposable full-dataset in-place and directory-symlink runs: both measurement
+  hashes unchanged (a narrowed zero-traffic config isolates file handling);
+- formatting, Clippy and diff checks pass;
+- security scan passes with zero unfiltered findings and four named existing
+  maintenance exceptions;
+- final `xtask test_unit`: five suites, 149 passed tests (119 Rust and 30 frontend), including 31 calibration tests; static validation, canonical-context fixture checks and source manifest pass;
+- final `POCKET_IC_MUTE_SERVER=1 DFX_IDENTITY=codex_local xtask test_all`: 111 suites, 255 passed tests, including all 106 fresh PocketIC scenarios; zero failures.
 
-Clean-commit canonical release checks are recorded in the final handover; the
-source revision for those checks is created only after this validation report
-and the final source manifest are staged.
+The model/report commands also ran directly through the same CLI after a locked
+build, avoiding long-held Cargo build locks during repeated offline simulations.
+The opt-in wrapper is unchanged. Repeated final model/report output hashes are
+checked byte for byte, not merely by comparing rounded report values.
+
+Final research output SHA-256 values:
+
+| Output in `observations/cadence/review-final/` | SHA-256 |
+|---|---|
+| `measurements.json` | `d7ec1ed90b8390188df62dd8cab882705ad2353e1b5e8ec006aba5c12f505797` |
+| `measurements.csv` | `92942cc93b53f1a54355678857c8e4ff25082abd25412d6cea98604df0620eb9` |
+| `simulations.json` | `34655a6bd443c280b5e3ecdd1c370398669d6642e211ab9ac6924c2e9b5808a3` |
+| `threshold-comparison.csv` | `b0accbaef77cf7ebf11ff30b11af967b878c0b6dacd86f81b5118c8e7880d29b` |
+| `report.md` | `f0b23dc75c5d9bbe4b75ec91ec10aed19d7b6c84d4ccfbddbc9927b519802cc4` |
+
+Repository hygiene found no redundant tracked file requiring removal. The
+compact fixture, opt-in runner, separate methodology/validation documents and
+historical provenance are retained. Temporary outputs from interrupted file
+regressions are removed; generated research remains ignored. Both production
+normal/build dependency closures are unchanged, and source-manifest membership
+covers the final tracked source.
+The remote Dependency Security run remains pending: no push is authorized.
+Canonical two-build reproducibility, artifact hashes, manifests and production
+export audits are checked from the clean focused commit after these source and
+documentation changes are committed; those post-commit results accompany the
+handover rather than altering its already-validated commit.

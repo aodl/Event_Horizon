@@ -22,7 +22,7 @@ Correlate, without treating any one item as sufficient proof:
 - productive-endowment evidence separately from rewards already distributed.
 
 Compare observed long-term receipts with observed expenditure over equivalent
-windows. A planned 3,000 ICP protocol endowment and 1,000 ICP global reference
+windows. Distinguish startup funding coverage, minimum liquid cycles and mature recurring economics; between-poll waiting, persistent reader lag and reserve suspension also have different causes. See the [calibration validation](../codex/cadence-calibration-validation.md). A planned 3,000 ICP protocol endowment and 1,000 ICP global reference
 prices are not evidence of sufficient yield by themselves. Synthetic fan-out
 or one-second polling figures are planning illustrations, not mainnet burn.
 Current cadence thresholds are not economically proven; this controlled period
