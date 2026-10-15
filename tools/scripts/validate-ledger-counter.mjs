@@ -18,19 +18,27 @@ const svgCsp = rust.match(/const SVG_CSP: &str = "([^"]+)"/)[1];
 const fixture = await build({ stdin: { contents: `
 import { createApp, initHeroArtwork, initHeroBackdrop, initLedgerCounter } from './canisters/frontend/public/app.js';
 import { initCompactHeading } from './canisters/frontend/public/compact-heading.js';
+import { initOperatingStatus } from './canisters/frontend/public/operating-status.js';
 import { INSTANCES } from './canisters/frontend/public/instances.js';
 import { backendResult } from './canisters/frontend/test/helpers.mjs';
 import { clock, flush } from './canisters/frontend/test/counter-clock.mjs';
 const doc = globalThis.document, time = clock();
 let total = 123456789n, fail = false, calls = 0;
+let operatingFail = false, operatingCalls = 0;
+const operating = initOperatingStatus(doc, window, {dependencies:time, query:async () => {
+  operatingCalls++; if (operatingFail) throw Error('status fixture failure');
+  return {mode:'Economy',liquidCycles:4450000000000n,balanceCycles:4860000000000n,reported:true,
+    observedAt:'2026-10-15T00:00:00.000Z',checkedAt:'2026-10-15T19:00:00.000Z'};
+}});
 const artwork = initHeroArtwork(doc, window);
 initHeroBackdrop(doc, window);
 const compact = initCompactHeading(doc, window);
 const counter = initLedgerCounter(doc, window, { dependencies: time,
   query: async () => { calls++; if (fail) throw Error('fixture failure'); return total; } });
 const reviewedFixture = { ...INSTANCES[0], id: 'generic-fixture', name: 'Reviewed fixture', ledgerCountSource: 'icrc3-log-length' };
-const app = createApp({ documentRef: doc, counter, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10) });
+const app = createApp({ documentRef: doc, counter, operating, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10) });
 globalThis.counterFixture = { time, flush, calls: () => calls,
+  operatingCalls:() => operatingCalls, operatingFail:value => {operatingFail = value;},
   sample: value => { total = BigInt(value); }, fail: value => { fail = value; },
   dispose: () => { app.dispose(); artwork.dispose(); compact.dispose(); } };
 `, resolveDir: root }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022',
@@ -279,6 +287,30 @@ try {
   assert.equal(evidence.console.filter(e => e.type === 'pageerror').length, 0);
   assert.equal(evidence.console.filter(e => /Content Security Policy|violates.*directive/.test(e.text)).length, 0);
   assert.ok(evidence.requests.every(r => r.url.startsWith(origin) || r.url.startsWith('https://icp-api.io/')));
+  await page.goto(`${origin}/fixture.html`);
+  await page.waitForFunction(() => document.getElementById('operating-tier').textContent === 'Economy');
+  assert.equal(await page.locator('#operating-balance').textContent(), '4.860 T');
+  assert.match(await page.locator('#operating-next').textContent(), /0.550 T to Standard/);
+  assert.equal(await page.locator('#operating-progress').getAttribute('aria-valuetext'), '89% of the Standard entry threshold');
+  for (const [width,height,label] of [[1440,900,'desktop'],[390,844,'phone'],[320,568,'narrow']]) {
+    await page.setViewportSize({width,height});
+    await page.locator('.operating-status').scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({path:resolve(output, `operating-${label}.png`)});
+    evidence.screenshots.push(`operating-${label}.png`);
+  }
+  await writeFile(resolve(output, 'operating-accessibility.yml'), await page.locator('.operating-status').ariaSnapshot());
+  await page.evaluate(async () => {counterFixture.operatingFail(true); await counterFixture.time.tick(60000);});
+  assert.equal(await page.locator('#operating-tier').textContent(), 'Unavailable');
+  assert.equal(await page.locator('#operating-balance').textContent(), '—');
+  assert.equal(await page.locator('#scope').isDisabled(), false);
+  await page.evaluate(async () => {counterFixture.operatingFail(false); await counterFixture.time.tick(60000);});
+  assert.equal(await page.locator('#operating-tier').textContent(), 'Economy');
+  await page.selectOption('#instance','io');
+  await page.evaluate(async () => {const n=counterFixture.operatingCalls(); await counterFixture.time.tick(120000); if(n!==counterFixture.operatingCalls())throw Error('planned status query');});
+  assert.equal(await page.locator('#operating-tier').textContent(), 'Planned');
+  assert.equal(await page.locator('#operating-progress').isVisible(), false);
+  evidence.fixtures.operatingStatus = {datedLiquidProgress:true, currentTotalBalance:true, responsive:true, failureIsolated:true, recovery:true, plannedNoRequests:true};
   if (process.argv.includes('--live')) {
     const liveContext = await browser.newContext();
     const livePage = await liveContext.newPage(), liveRequests = [];
@@ -291,6 +323,10 @@ try {
     evidence.liveBrowser = { first, second: await livePage.locator('#ledger-sample').textContent(),
       checked: await livePage.locator('#ledger-checked').textContent(), requests: liveRequests };
     await livePage.screenshot({ path: resolve(output, 'production-live.png') });
+    await livePage.waitForFunction(() => document.getElementById('operating-balance').textContent !== '—', null, {timeout:15000});
+    evidence.liveBrowser.operatingStatus = await livePage.locator('.operating-status').innerText();
+    await livePage.locator('.operating-status').scrollIntoViewIfNeeded();
+    await livePage.screenshot({path:resolve(output,'operating-production-live.png')});
     await liveContext.close();
   }
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: {width:844,height:390} });

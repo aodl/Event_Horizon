@@ -18,9 +18,50 @@ The committed static instance registry identifies each reviewed backend, observe
 
 The production agent uses the embedded mainnet root key. It performs no runtime canister discovery and never fetches a root key. Before accepting runtime pricing, `get_instance` verifies the backend's reported observed Ledger, SNS Root, surplus recipient, and discovered profile against the static registry. The information panel displays the reviewed recipient or `none`. `get_pricing` then supplies authoritative current and frozen admission pricing. Selecting another live instance synchronously replaces the previous memo with the placeholder, removes its funding instruction, and disables the builder until verification finishes. A monotonically increasing selection generation binds each response to the captured registry entry; a late success or failure from an earlier selection cannot change verification state, pricing, information, or builder controls.
 
-This browser comparison verifies reported configuration only. Installed module hash and controller state remain separate operator/reviewer checks; the frontend makes no runtime management-canister call.
+This browser comparison verifies reported configuration only. Installed module hash and controller state remain separate operator/reviewer checks. The operating-status panel separately uses read-only native management queries for public cycles and existing log reports; it does not perform management updates.
 
 Production exposes only certified `http_request`. There is no HTTP update endpoint, pricing proxy, runtime registry mutation, root-key fetch, or administrative application API. Runtime query values are deliberately not inserted into the frontend's static certificate tree.
+
+## Instance operating status
+
+The Network panel shows the selected instance's current queried **total cycles
+balance**, its **last reported polling tier**, and progress toward the next tier's
+liquid-cycle entry threshold. `T` means one trillion cycles; displayed balances
+are truncated to three decimals, while deficits/progress use BigInt arithmetic.
+The reported liquid balance and its UTC timestamp are shown separately. Total
+cycles are not interchangeable with immediately liquid cycles. Hysteresis also
+means a balance alone cannot identify the operating tier.
+
+`operating-status-client.js` reuses a separate anonymous pinned-SDK agent and
+management actor, with normal signature verification and the embedded mainnet
+root key. It invokes native **query** methods `canister_status` and
+`fetch_canister_logs` with `{canister_id: selected.backendCanisterId}`, using that
+same principal for effective routing. It does not call management updates, read
+private operator credentials, change visibility, query another instance, or add
+a backend endpoint. The existing deployment already publishes status and logs;
+other instances lacking these permissions show unavailable.
+
+The mode/liquid snapshot comes from the newest retained `HEALTH` (matching the
+reviewed observed Ledger) or `POLL_MODE_CHANGE` record, ordered by log index.
+It can be older than the current total balance. Missing reports or incompatible
+log formats fail closed. Never use the older liquid reading as an exact current
+top-up requirement. Entry thresholds remain Economy 2 T, Standard 5 T, Fast
+10 T, Very fast 25 T and Continuous 100 T. The next threshold depends on the
+reported mode, including Reserve Protection's 2 T re-entry to Economy. At the
+highest tier there is no next threshold; a reached threshold does not itself
+claim that the scheduler has changed mode.
+
+Sampling is immediate, then 60 seconds after completion, with a 10-second
+abortable deadline and zero SDK transport retries. Hidden pages abort/suspend
+work; resume makes one refresh. Planned selection, disposal and positive
+configuration mismatch retire requests and timers. Failures hide the readings
+and retry independently, leaving the memo builder, pricing and hero ledger
+counter unaffected. No animation or persistence is involved. These runtime
+queries are not covered by static asset certification and do not establish
+polling completion or notification delivery.
+
+See the [operating-status validation](../../docs/codex/operating-status-validation.md)
+and the ICP [management query documentation](https://docs.internetcomputer.org/references/management-canister/).
 
 ## Declaration builder
 

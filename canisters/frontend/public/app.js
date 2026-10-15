@@ -13,6 +13,8 @@ import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
 
 import { createLedgerCounterClient } from './ledger-counter-client.js';
+import { createOperatingStatusClient } from './operating-status-client.js';
+import { initOperatingStatus } from './operating-status.js';
 import { initCompactHeading } from './compact-heading.js';
 
 import { createLedgerCounter, formatTotal } from './ledger-counter.js';
@@ -143,6 +145,7 @@ export function createApp({
   queryBackend = queryBackendPricing,
   autoLoad = true,
   counter = null,
+  operating = null,
 } = {}) {
   const doc = documentRef ?? document;
   const $ = id => doc.getElementById(id);
@@ -226,6 +229,7 @@ export function createApp({
     const generation = ++loadGeneration;
     const requested = instances.find(instance => instance.id === $('instance').value);
     selected = requested;
+    try { operating?.select(requested); } catch { /* Operating status failure is isolated from the builder. */ }
     try { counter?.select(requested); } catch { /* Counter failure is isolated from the builder. */ }
     $('instance-info').innerHTML = registryMarkup(requested);
     pricing = null;
@@ -252,6 +256,7 @@ export function createApp({
     } catch (error) {
       if (generation !== loadGeneration) return;
       if (error instanceof ConfigurationMismatchError) {
+        try { operating?.configurationMismatch(); } catch { /* Keep the builder fail closed. */ }
         try { counter?.configurationMismatch(); } catch { /* Keep the builder fail closed. */ }
       }
       renderRuntimeError($('pricing'), error.message);
@@ -270,7 +275,7 @@ export function createApp({
   $('memo-form').addEventListener('input', render);
   $('instance').addEventListener('change', load);
   if (autoLoad) load();
-  return { load, dispose() { ++loadGeneration; counter?.dispose(); $('memo-form').removeEventListener?.('input', render); $('instance').removeEventListener?.('change', load); } };
+  return { load, dispose() { ++loadGeneration; counter?.dispose(); operating?.dispose(); $('memo-form').removeEventListener?.('input', render); $('instance').removeEventListener?.('change', load); } };
 }
 
 if (typeof document !== 'undefined') {
@@ -279,7 +284,9 @@ if (typeof document !== 'undefined') {
   const compactHeading = initCompactHeading(document, window);
   let counter = null;
   try { counter = initLedgerCounter(document, window); } catch { /* Optional statistic. */ }
-  const app = createApp({ documentRef: document, counter });
+  let operating = null;
+  try { operating = initOperatingStatus(document, window, {client:createOperatingStatusClient()}); } catch { /* Optional status must not break the builder. */ }
+  const app = createApp({ documentRef: document, counter, operating });
   window.addEventListener('pagehide', event => {
     if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); }
   });

@@ -404,6 +404,34 @@ used. IO remains planned and makes no ledger request. Missing or unknown source
 modes fail closed. The mainnet root key and normal SDK verification remain in
 force; static frontend certification does not certify the runtime total.
 
+### Instance operating status
+
+The selected live instance's Network panel may independently read public native
+management **queries** `canister_status` and `fetch_canister_logs`, routed to
+the reviewed backend principal through the fixed API host. These calls must not
+change canister settings or use a controller identity. Private/unavailable status
+or missing retained reports produce an unavailable display; planned instances
+make no requests. No new Event Horizon application method is required.
+
+Show the queried total cycles balance separately from the last reported
+operating mode and liquid cycles in existing `HEALTH` / `POLL_MODE_CHANGE`
+records. Label and date both readings. Actual cadence has hysteresis: never
+infer its mode from total balance or promote the displayed mode from a threshold
+comparison. Progress and the deficit to the next entry threshold use the
+**reported liquid balance**, explicitly dated, rather than claiming a current
+liquid measurement. Use exact integer cycle arithmetic, bounded progress, and
+the existing production entry table; Continuous has no higher tier. A reported
+tier is not evidence of a completed Ledger poll or notification delivery.
+
+Refresh immediately and 60 seconds after each completed attempt, with a
+10-second abortable deadline, reused agent/actor, normal mainnet verification
+and no SDK transport retries. Hidden pages suspend and abort owned work; a
+selection change or positive configuration mismatch retires old responses.
+Status failures must not affect pricing, memo verification, or the independent
+ledger-history counter. Runtime readings are not certified by the frontend's
+static asset certificate tree. No backend interface, polling policy or runtime
+accounting machinery is added.
+
 ### Hero branding and sampled ledger-history rate
 
 On compact layouts (maximum width 81.25rem or aspect ratio at most 1/1),

@@ -207,3 +207,22 @@ runs every discovered ignored PocketIC scenario, including exact certified asset
 bytes and query-suffixed routing. See the
 [hero refinement validation report](../codex/ledger-hero-refinement-validation.md) and the
 [compact hero restoration validation](../codex/compact-hero-restoration-validation.md).
+
+## Instance operating status
+
+`npm run test:frontend-unit` includes `operating-tier.test.mjs`,
+`operating-status-client.test.mjs` and `operating-status.test.mjs`. They cover
+production threshold parity, explicit hysteretic modes, exact large cycle
+arithmetic, Reserve/highest-tier progress, native query Candid projection,
+reviewed effective routing, agent reuse, transport cancellation during
+initialization/query, late responses, timeout, planned selection, visibility,
+configuration mismatch and failure isolation from pricing/the memo builder.
+
+`node tools/scripts/validate-ledger-counter.mjs` also checks the operating panel
+at desktop, phone and narrow widths with separate injected query fixtures.
+Its opt-in `--live` branch reads public native status/logs using the actual
+built bundle and unchanged verification configuration. This is read-only and
+must remain separate from deterministic fixture evidence. The certified-asset
+PocketIC regression checks the operating markup as well as exact served
+bundle/CSS bytes. See [operating-status validation](../codex/operating-status-validation.md)
+for evidence and the limitations of dated mode/liquid readings.

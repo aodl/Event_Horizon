@@ -6206,6 +6206,9 @@ mod tests {
         assert!(html.contains("id=\"ledger-count\""));
         assert!(html.contains("id=\"ledger-rate\""));
         assert!(html.contains("id=\"ledger-rate-description\""));
+        assert!(html.contains("id=\"operating-tier\""));
+        assert!(html.contains("id=\"operating-balance\""));
+        assert!(html.contains("id=\"operating-progress\""));
         assert!(html.contains("ICP ledger transactions"));
         assert!(!html.contains("id=\"live-effects\""));
         assert!(!html.contains("href=\"styles.css\""));

@@ -126,6 +126,15 @@
           <label class="field field--select">Selected instance
             <select id="instance"></select>
           </label>
+          <section class="operating-status" aria-labelledby="operating-heading">
+            <div class="operating-status__heading"><h3 id="operating-heading">Operating status</h3><span id="operating-tier">—</span></div>
+            <p class="operating-status__balance"><span id="operating-balance">—</span> <span id="operating-balance-label">Cycles balance</span></p>
+            <p><span id="operating-mode-label">Polling tier</span> · <span id="operating-delay">—</span></p>
+            <progress id="operating-progress" max="100" value="0" aria-label="Balance toward the next tier entry threshold" hidden></progress>
+            <p id="operating-next">Operating status requires JavaScript and public canister status/logs.</p>
+            <p id="operating-checked" class="operating-status__note"></p>
+            <p class="operating-status__note">T = one trillion cycles. Polling uses liquid cycles and hysteresis; the total balance may differ. A reported tier is not proof of a completed poll or notification delivery.</p>
+          </section>
           <div id="instance-info" class="instance-info"></div>
         </article>
 

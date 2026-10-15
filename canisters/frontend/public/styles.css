@@ -547,3 +547,16 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   .hero__body { grid-row: 2; grid-column: 1; margin-top: 2rem; }
   .hero__facts { grid-row: 3; grid-column: 1; }
 }
+
+.operating-status { margin: 1.5rem 0 2rem; padding-block: 1.25rem; border-block: 1px solid var(--line); }
+.operating-status__heading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
+.operating-status h3 { margin: 0; font-size: .72rem; color: var(--paper-muted); letter-spacing: .1em; text-transform: uppercase; }
+#operating-tier { color: var(--ember); font-size: .9rem; }
+.operating-status p { margin: .65rem 0 0; line-height: 1.6; font-size: .78rem; overflow-wrap: anywhere; }
+.operating-status__balance { display: flex; align-items: baseline; gap: .65rem; flex-wrap: wrap; color: var(--paper-muted); }
+#operating-balance { color: var(--paper); font-size: clamp(1.6rem, 3vw, 2.25rem); font-variant-numeric: tabular-nums; }
+.operating-status progress { display: block; width: 100%; height: .45rem; margin-top: 1rem; border: 0; accent-color: var(--ember); background: var(--line); }
+.operating-status progress[hidden] { display: none; }
+.operating-status progress::-webkit-progress-bar { background: var(--line); }
+.operating-status progress::-webkit-progress-value { background: var(--ember); }
+.operating-status .operating-status__note { color: var(--paper-muted); font-size: .67rem; }
