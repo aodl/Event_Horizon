@@ -19,7 +19,7 @@ export function fakeDocument({ counter = false } = {}) {
     append(option) { this.options ??= []; this.options.push(option); if (!this.value) this.value = option.value; },
   });
   const ids = ['instance', 'instance-info', 'pricing', 'scope', 'single-label', 'range-start-label', 'range-end-label', 'account-fields', 'single-field', 'range-fields', 'memo-output', 'memo-help', 'principal', 'subaccount', 'range-start', 'range-end', 'amount'];
-  if (counter) ids.push('ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked', 'live-effects');
+  if (counter) ids.push('ledger-rate', 'ledger-rate-description', 'ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked', 'live-effects');
   const nodes = Object.fromEntries(ids.map(id => [id, makeNode()]));
   nodes.scope.value = 'account';
   const scopeOptions = { neuron: makeNode(), 'neuron-range': makeNode() };

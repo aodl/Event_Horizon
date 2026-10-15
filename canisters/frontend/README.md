@@ -133,3 +133,32 @@ principals and reviewed backend hash stay unchanged.
 For deterministic tests, real-browser checks, opt-in read-only live smoke and
 limitations, see [testing](../../docs/development/testing.md) and the
 [ledger-counter validation report](../../docs/codex/ledger-counter-validation.md).
+
+## Hero branding and sampled recent rate
+
+The statistic is a single unboxed, lower-right typographic group immediately
+above/near fact 04. Rate and count may wrap; disclosures and long values expand
+flow. Short landscape uses a hero-scoped first region for statistic/facts, with
+the full heading below. The `EVH.` shortcut defaults hidden. An eligible
+width/aspect condition is necessary but insufficient: viewport observation must
+prove the actual heading is wholly below view. Any partial heading visibility,
+scrolling above view, portrait/zoom/resize or reflow hides it. Missing/broken
+IntersectionObserver fails closed; teardown removes observers and listeners.
+
+`(~n tx/s)` is sampled recent-average growth in the same canonical ICP ledger's
+historical transaction total, not backend processing, animation speed or
+instantaneous network TPS. Generic ICRC-3 entries use `records/s`. The controller
+retains up to 32 accepted receipt samples from the last 60 seconds and requires
+at least 15 seconds between oldest and newest. The 2-second warm-up alone gives
+no rate. Actual monotonic receipt spacing supplies the denominator; BigInt
+fixed-point arithmetic preserves huge deltas. Rates round to one decimal; zero
+is genuine and positive rates below 0.1 say `<0.1`. No extra request or timer is
+introduced. Quiet accepted totals eventually give zero, not extrapolation.
+
+Failures, lower replies, delayed data, selection/mismatch, pause, hiding and
+disposal clear the rate history. Resume/recovery needs a fresh baseline and
+qualifying span. Reduced motion still samples rates but displays totals directly.
+The rate is not live-announced. Existing immediate/2-second warm-up/15-second
+steady sampling, 10-second deadline, 30/60/120-second backoff and 45-second delayed
+threshold remain unchanged. The disclosure explains smoothing lag and runtime
+trust: static asset certification does not certify queried totals or rates.

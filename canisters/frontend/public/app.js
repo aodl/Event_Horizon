@@ -13,6 +13,8 @@ import { renderRuntimeError } from './safe-dom.js';
 import { isNeuronMode, normalizeMode, targetLabels } from './target-view.js';
 
 import { createLedgerCounterClient } from './ledger-counter-client.js';
+import { initCompactHeading } from './compact-heading.js';
+
 import { createLedgerCounter, formatTotal } from './ledger-counter.js';
 
 const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
@@ -81,6 +83,10 @@ export function initLedgerCounter(documentRef, windowRef, { query, artwork, depe
       write('ledger-label', label);
       const text = state.displayed === null ? '—' : formatTotal(state.displayed);
       write('ledger-count', text);
+      const unit = icp ? 'tx/s' : 'records/s';
+      if (node('ledger-rate')) write('ledger-rate', state.rate ? `(~${state.rate.text} ${unit})` : '');
+      if (node('ledger-rate-description')) write('ledger-rate-description', state.rate
+        ? `Approximate recent average ledger-history growth: ${state.rate.text} ${icp ? 'transactions' : 'records'} per second over ${(state.rate.spanMilliseconds / 1000).toFixed(1)} seconds.` : 'Recent average rate unavailable.');
       write('ledger-sample', state.accepted === null ? `${label}: unavailable`
         : `${label}: ${formatTotal(state.accepted)} (latest retrieved total)`);
       const messages = {
@@ -279,10 +285,11 @@ export function createApp({
 if (typeof document !== 'undefined') {
   const artwork = initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
   initHeroBackdrop(document, window);
+  const compactHeading = initCompactHeading(document, window);
   let counter = null;
   try { counter = initLedgerCounter(document, window, { artwork }); } catch { /* Optional statistic. */ }
   const app = createApp({ documentRef: document, counter });
   window.addEventListener('pagehide', event => {
-    if (!event.persisted) { app.dispose(); artwork.dispose(); }
+    if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); }
   });
 }

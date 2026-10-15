@@ -109,3 +109,19 @@ test('repeated SVG loads synchronize manual pause, visibility, focus and dynamic
   art.dispose(); assert.equal(timeline, true);
   for (const target of [doc, win, detail, media]) for (const listeners of target.listeners.values()) assert.equal(listeners.size, 0);
 });
+
+test('page rate uses source-specific units and a quiet exact description, then clears on selection/pause', async () => {
+  let total = 100n;
+  const f = fixture(async () => total); await f.app.load(); await flush();
+  assert.equal(f.doc.nodes['ledger-rate'].textContent, '');
+  total = 134n; await f.time.tick(17000);
+  assert.equal(f.doc.nodes['ledger-rate'].textContent, '(~2.0 tx/s)');
+  assert.match(f.doc.nodes['ledger-rate-description'].textContent, /Approximate recent average.*17.0 seconds/);
+  const previous = f.doc.nodes['ledger-rate'].textContent;
+  f.time.frame(20000); assert.equal(f.doc.nodes['ledger-rate'].textContent, previous);
+  f.doc.nodes['live-effects'].dispatch('click'); assert.equal(f.doc.nodes['ledger-rate'].textContent, '');
+  f.doc.nodes['live-effects'].dispatch('click'); await flush(); assert.equal(f.doc.nodes['ledger-rate'].textContent, '');
+  f.doc.nodes.instance.value = 'b'; await f.app.load(); await flush();
+  total = 164n; await f.time.tick(17000); assert.match(f.doc.nodes['ledger-rate'].textContent, /records\/s/);
+  f.doc.nodes.instance.value = 'io'; await f.app.load(); assert.equal(f.doc.nodes['ledger-rate'].textContent, ''); f.app.dispose();
+});

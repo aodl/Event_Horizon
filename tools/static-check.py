@@ -248,6 +248,8 @@ frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
 assert 'styles.css?v=9' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert 'id="ledger-count"' in frontend_index
+assert 'id="ledger-rate"' in frontend_index
+assert 'id="ledger-rate-description"' in frontend_index
 assert 'ICP ledger transactions' in frontend_index
 assert 'id="live-effects" type="button"' in frontend_index
 counter_client=(root/'canisters/frontend/public/ledger-counter-client.js').read_text()

@@ -186,3 +186,24 @@ retaining certificate, CSP and revalidation assertions. Run the complete
 `test_all` gate after rebuilding; pure JavaScript tests alone do not prove what
 the frontend Wasm embeds. See the [validation report](../codex/ledger-counter-validation.md)
 for browser/device limits and retained evidence.
+
+## Hero branding and recent-rate regressions
+
+Run `npm run test:frontend-unit` for dedicated `compact-heading.test.mjs` and
+`ledger-rate.test.mjs` plus existing counter/client/integration and builder tests.
+`node tools/scripts/validate-ledger-counter.mjs` exercises the built page and a
+separate injected-query page with the same production controllers, with no
+production test switches. Use the installed pinned Playwright Chromium (or set
+`COUNTER_BROWSER_EXECUTABLE` for its installed path).
+
+The browser matrix covers 1440×900, 1280×800, 1024×768, the 1000×800 duplicate-brand
+regression, 844×390 landscape, 390×844, 360×640, 320×568 and 200% text. Assertions
+check observed heading/compact visibility, dynamic scroll/resize, native anchor,
+focus retirement, disclosure reflow, unboxed styling, fourth-fact alignment,
+overflow, rate pending/nonzero/zero/tiny values, delay/pause, long generic totals,
+reduced motion, SVG timeline/CSS pause, quiet accessibility and cleanup. Evidence
+is ignored under `observations/ledger-counter-refinement/`. Browser emulation is
+not physical-device or cross-engine performance proof. Full `test_all` still
+runs every discovered ignored PocketIC scenario, including exact certified asset
+bytes and query-suffixed routing. See the
+[hero refinement validation report](../codex/ledger-hero-refinement-validation.md).

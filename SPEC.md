@@ -371,6 +371,44 @@ used. IO remains planned and makes no ledger request. Missing or unknown source
 modes fail closed. The mainnet root key and normal SDK verification remain in
 force; static frontend certification does not certify the runtime total.
 
+### Hero branding and sampled ledger-history rate
+
+The compact `EVH.` link defaults to hidden and may appear only in an eligible
+compact landscape while the actual full `#hero-title` lies entirely below the
+viewport. Any visible part of the heading hides it; leaving upward must not
+resurrect it. Width/aspect ratio alone is insufficient after shortened hero
+padding or counter reflow. Viewport observation, resize/zoom/reflow handling,
+fail-closed initialization and teardown must enforce this invariant. Hidden
+branding is absent from keyboard, pointer and accessibility interaction.
+
+The single ledger statistic is unboxed hero typography, right aligned near and
+above fact **04 Powered by Internet Computer Protocol**. Its label precedes the
+large grouped total; a subdued approximate rate sits adjacent or wraps directly
+below. Preserve readable scrolling, artwork, facts, focus order and controls on
+short/zoomed screens. A short-landscape hero region may place the statistic and
+facts before the below-fold title visually; it must expand without overlap and
+must never become a persistent fixed/sticky overlay.
+
+The rate is recent average growth of accepted ledger-history totals, not
+instantaneous TPS, animation speed, Event Horizon throughput or all Internet
+Computer activity. Use only existing successful browser-ledger samples and
+actual monotonic receipt intervals: BigInt count delta divided by elapsed time.
+Retain at most 32 samples from the latest 60 seconds; require at least 15 seconds
+between oldest and newest samples. Before then withhold the rate. Equal totals
+over a valid span yield zero. Use grouped, rounded one-decimal approximations;
+a positive rate below 0.1 must say `<0.1`, never a false zero. ICP uses `tx/s`;
+generic ICRC-3 uses `records/s`. Never derive a rate from animated values, add
+queries/timers, persist samples or convert totals/deltas to floating point.
+
+Selection, configuration mismatch, pause/hidden suspension, failed/lower replies,
+delayed data and disposal invalidate rate history. Recovery/resume requires new
+samples; retain the independent same-ledger high-water check. Reduced motion
+retains sampling and rate calculation with direct totals and static artwork.
+Expose the exact accepted total and approximate recent-average description
+quietly, without per-frame/sample announcements. Query timing, low sampling
+frequency and replica freshness limit precision; neither rate nor total is a
+certified or exact instantaneous ledger tip.
+
 The first accepted total is displayed directly. Subsequent increases interpolate
 linearly in exact integer arithmetic over about 15 seconds, never decreasing
 within a selection or exceeding the highest accepted total. Equal samples

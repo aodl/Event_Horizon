@@ -4,6 +4,27 @@ export const COUNTER_TIMING = Object.freeze({ warmup: 2000, interval: 15000, dur
   deadline: 10000, backoff: 30000, maxBackoff: 120000, delayed: 45000 });
 export const formatTotal = total => total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
+// Recent ledger-history growth between accepted receipts: not animation speed,
+// backend processing, or instantaneous TPS. This history never causes a query.
+export const RATE_WINDOW = 60000, RATE_MIN_SPAN = 15000, RATE_MAX_SAMPLES = 32;
+export function retainRateSamples(samples, sample) {
+  if (!Number.isFinite(sample.at) || (samples.length && sample.at <= samples.at(-1).at)) return [];
+  return [...samples.filter(s => sample.at - s.at <= RATE_WINDOW), sample].slice(-RATE_MAX_SAMPLES);
+}
+export function recentRate(samples) {
+  if (samples.length < 2) return null;
+  const first = samples[0], last = samples.at(-1), elapsed = last.at - first.at;
+  if (!Number.isFinite(elapsed) || elapsed < RATE_MIN_SPAN || elapsed > RATE_WINDOW
+      || first.total > last.total) return null;
+  const delta = last.total - first.total;
+  // Only a bounded elapsed interval becomes a Number-derived integer; counts stay BigInt.
+  const micros = BigInt(Math.round(elapsed * 1000));
+  const tenths = (delta * 10000000n + micros / 2n) / micros;
+  const text = delta > 0n && delta * 10000000n < micros ? '<0.1'
+    : tenths === 0n ? '0' : `${formatTotal(tenths / 10n)}.${tenths % 10n}`;
+  return { text, spanMilliseconds: elapsed };
+}
+
 export function interpolateTotal(a, b, elapsed, duration) {
   const progress = typeof elapsed !== 'number' || Number.isNaN(elapsed) || elapsed <= 0 ? 0
     : elapsed >= duration ? 1000000 : Math.floor(elapsed / duration * 1000000);
@@ -17,13 +38,15 @@ export function createLedgerCounter({ query, render, now = () => performance.now
 } = {}) {
   let entry, generation = 0, disposed = false, paused = false, hidden = false, reduced = false;
   let accepted = null, displayed = null, target = null, received = null, checked = null;
+  let samples = [], rate = null;
+  const clearRate = () => { samples = []; rate = null; };
   let status = 'unavailable', failures = 0, lower = 0, warm = false, baseline = true;
   let poll = null, fresh = null, frame = null, active = null, animation = null;
   const suspended = () => paused || hidden;
   const delayed = () => received !== null && now() - received >= timing.delayed;
   function emit() {
     if (disposed) return;
-    try { render({ entry, accepted, displayed, checked, reduced, paused,
+    try { render({ entry, accepted, displayed, checked, reduced, paused, rate,
       status: status === 'configuration' ? status : !eligibleLedger(entry) ? status
         : suspended() ? (paused ? 'paused' : 'hidden')
           : lower >= 3 ? 'inconsistent' : delayed() ? 'delayed' : status });
@@ -33,7 +56,7 @@ export function createLedgerCounter({ query, render, now = () => performance.now
     }
   }
   function clearWork() {
-    ++generation;
+    ++generation; clearRate();
     clearTimer(poll); poll = null;
     clearTimer(fresh); fresh = null;
     cancelFrame(frame); frame = null;
@@ -47,7 +70,7 @@ export function createLedgerCounter({ query, render, now = () => performance.now
     fresh = setTimer(() => {
       if (gen !== generation || disposed || suspended()) return;
       fresh = null;
-      baseline = true;
+      baseline = true; clearRate();
       emit();
     }, Math.max(0, timing.delayed - (now() - received)));
   }
@@ -96,6 +119,7 @@ export function createLedgerCounter({ query, render, now = () => performance.now
         lower++;
         throw new Error('Ledger total decreased.');
       }
+      if (delayed()) clearRate();
       const direct = baseline || delayed() || accepted === null || reduced;
       if (direct) {
         displayed = total; target = total; animation = null;
@@ -104,11 +128,13 @@ export function createLedgerCounter({ query, render, now = () => performance.now
         target = total; animation = { from: displayed, start: now() };
       }
       accepted = total; received = now(); checked = wallNow();
+      samples = retainRateSamples(samples, { total, at: received });
+      rate = recentRate(samples);
       baseline = false; failures = 0; lower = 0; status = 'current';
       scheduleFresh(); emit(); animate();
     }).catch(() => {
       if (!current()) return;
-      failures++; status = accepted === null ? 'unavailable' : 'retrying';
+      clearRate(); failures++; status = accepted === null ? 'unavailable' : 'retrying';
       emit();
     }).finally(() => {
       clearTimer(owned.deadline);
