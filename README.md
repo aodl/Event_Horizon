@@ -8,9 +8,14 @@ Horizon as raw ICP, pooled, and converted into cycles. The canonical ICP
 instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances
 read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each
 matching numeric subaccount or neuron nonce and the largest qualifying raw
-transfer amount; wake-up-only subscribers may expose a zero-argument receiver
-through Candid compatibility. Subscribers keep authoritative ledger cursors
-and independent reconciliation; an Index is optional.
+transfer amount. Scoped subscribers should normally use `poke(vec PokeMatch)`
+to filter locally approved targets and amount thresholds before expensive work:
+any patron can fund a subscription without the receiving canister's consent.
+A trusted caller is not proof of wanted activity. Zero-argument `poke()` remains
+Candid-compatible for intentional general wake-ups with cheap, bounded/coalesced
+work; it discards those filtering hints. See the [subscriber guide](docs/subscriber-guide.md).
+Subscribers keep authoritative ledger cursors and independent reconciliation;
+an Index is optional.
 
 Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. Trigger thresholds use the observed token's decimals, while prices, cycles funding, and any surplus remain ICP.
 

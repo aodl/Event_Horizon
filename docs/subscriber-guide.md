@@ -2,12 +2,39 @@
 
 Event Horizon accelerates an application's authoritative Ledger or optional Index reconciliation. Pokes are best-effort hints; exact grammar and semantics are normative in [`SPEC.md`](../SPEC.md).
 
+## Security first: subscription funding is not subscriber consent
+
+**A valid poke from a trusted Event Horizon canister is not proof that the
+receiving canister wanted the subscription.** Any patron may fund a qualifying
+declaration naming an arbitrary valid subscriber principal, without controlling
+that canister or obtaining its knowledge or consent. This applies to account,
+range, neuron and global subscriptions. Event Horizon admits the funded
+declaration; it does not ask the subscriber to approve it.
+
+For example, an application only cares about incoming ICP transfers to its
+numeric subaccount `7`. An unrelated patron endows a subscription naming that
+canister's subaccount `999` and arranges transfers into it. Event Horizon
+correctly sends a poke identifying `subaccount 999`. A receiver checking its
+local interest registry returns cheaply. A naïve zero-argument receiver has
+discarded that hint and may unnecessarily start Ledger or Index reconciliation.
+A patron can also finance a less restrictive threshold for an already-watched
+target, or a global subscription the application never requested.
+
+**Subscribers interested in particular accounts, ranges or neuron targets should
+normally implement `poke(vec PokeMatch)` and inspect targets and amount hints
+before initiating Ledger reads, Index queries or other consequential work.**
+This cheap filtering is a central reason for the argument-bearing callback.
+Maintain locally approved interests independently of Event Horizon's admitted
+subscriptions. Caller authentication establishes the source, not local
+interest or authorisation. Ignore an empty global-only hint unless global
+activity is an intentional local policy.
+
 ## Integration flow
 
 1. Identify the Event Horizon instance or instances for the ledgers the application needs.
 2. Record each trusted Event Horizon canister principal and its immutable observed ledger.
-3. Implement either the target-aware or wake-up-only `poke` callback.
-4. Authenticate `caller` before interpreting any match.
+3. For scoped interests, implement the recommended target-aware `poke(vec PokeMatch)` handler below. Use zero-argument `poke()` only under the [wake-up-only conditions](#wake-up-only-subscribers).
+4. Authenticate `caller` and filter against locally approved per-Ledger interests before scheduling work.
 5. Maintain authoritative reconciliation cursor/state independently per observed ledger.
 6. Create the required Jupiter declaration for each instance.
 7. Fund the exact declaration through that instance's reviewed Jupiter alias.
@@ -47,14 +74,24 @@ remain independent of the ICP admission requirement.
 ## Callback and targets
 
 ```candid
-type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
-type PokeMatch = record { target : PokeTarget; max_amount : nat };
-service : { poke : (vec PokeMatch) -> (); }
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+
+type PokeMatch = record {
+  target : PokeTarget;
+  max_amount : nat;
+};
+
+service : {
+  poke : (vec PokeMatch) -> ();
+}
 ```
 
 Event Horizon has one outbound callback format and always sends the match
-vector above. A subscriber chooses one of the two receiver styles described in
-this guide; Event Horizon does not discover, negotiate, or retry another
+vector above. Payload-aware handling is the recommended default for scoped
+subscribers; Event Horizon does not discover, negotiate, or retry another
 signature. Candid permits a receiver with fewer arguments to ignore extra
 arguments. See the [Candid argument and result sequence
 rules](https://github.com/dfinity/candid/blob/master/spec/Candid.md#upgrading-and-subtyping).
@@ -64,47 +101,6 @@ Jupiter suffixes accept `<subscriber>`, `<subscriber>.<number>[:<amount>]`, `<su
 Numeric subaccount `N` means subscriber ownership with `24 zero bytes || N.to_be_bytes()`. Neuron nonce `N` derives the staking subaccount with controller equal to the subscriber principal. ICP uses NNS Governance as owner; an SNS-token instance uses its verified SNS Governance. This excludes hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts.
 
 `max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. It is a prefilter hint, not proof of payment. Specific matches take precedence over simultaneous global activity. `poke([])` means global-only activity. Non-empty targets are ordered as numeric subaccounts ascending and then neuron nonces ascending, with at most 256 retained targets per subscriber per poll. Any omission affects wake-up latency only.
-
-## Wake-up-only subscribers
-
-A consumer that needs only a wake-up signal may expose this alternative
-receiver interface:
-
-```candid
-service : { poke : () -> (); }
-```
-
-Event Horizon still sends its standard match-vector payload. A wake-up-only
-subscriber may expose a zero-argument `poke()` update method; the extra
-argument is ignored. The subscriber can use that notification to schedule
-authoritative reconciliation without interpreting target or amount hints.
-This works for both empty global payloads and nonempty specific-match payloads;
-it does not depend on the canister previously exposing the longer signature.
-
-Choosing `poke()` does not make a subscription global. Global, account, range,
-and neuron declarations retain their existing meanings. The zero-argument
-receiver simply discards the targets and `max_amount` values, so it must not
-claim to have performed the payload-aware local filtering described below.
-
-Authenticate the caller before scheduling meaningful work. A multi-ledger
-consumer must retain a trusted Event-Horizon-caller-to-observed-ledger mapping
-and independent reconciliation state for every ledger. Treat each callback as
-a best-effort hint, coalesce repeated wake-ups locally, prevent overlapping
-reconciliation work, and retain an independent periodic reconciliation path.
-
-For example, an index canister that implements the callback could use the
-following pseudocode; this does not imply that every existing Index canister
-already exports `poke`:
-
-```text
-poke():
-    context = trusted_event_horizon_instances.get(caller)
-    if context is absent:
-        return
-
-    mark reconciliation needed for context.observed_ledger
-    schedule reconciliation unless already scheduled or running
-```
 
 ## Subscribing to multiple ledgers
 
@@ -116,14 +112,19 @@ Event Horizon caller B -> SNS Foo Ledger
 Event Horizon caller C -> IO Ledger
 ```
 
-After authentication, `caller()` is the ledger namespace for a poke. Maintain a trusted mapping conceptually like:
+After authentication, `caller()` is the ledger namespace for a poke. Maintain a local trusted mapping conceptually like:
 
 ```text
 Event Horizon caller principal
     -> observed ledger identity
     -> token decimals / local economic policy
-    -> authoritative reconciliation cursor/state
+    -> intentional global-interest flag
+    -> locally approved subaccounts / neuron nonces
+    -> local minimum atomic amount per approved target
+    -> independent per-Ledger reconciliation cursor/state
 ```
+
+This is the application's approved-interest configuration, not a copy of Event Horizon's admitted-subscription state. A match appearing in a poke never adds a locally authorised interest. Resolve the immutable observed-Ledger context from this registry without an Event Horizon subscription lookup or external authorisation query.
 
 Never trust ledger identity or amount interpretation supplied by an untrusted caller. `subaccount 7` from the ICP caller and `subaccount 7` from an SNS caller are independent targets on different ledgers. Likewise, `neuron_nonce 7` means an NNS neuron controlled by the subscriber for the ICP caller, but that SNS's subscriber-controlled neuron for an SNS caller.
 
@@ -131,34 +132,70 @@ Never trust ledger identity or amount interpretation supplied by an untrusted ca
 
 ## Safe multi-ledger handler
 
+Use the argument-bearing handler as the normal pattern for scoped applications.
+The lightweight sequence is:
+
+1. Authenticate the caller against explicitly trusted Event Horizon instances.
+2. Resolve its immutable observed-Ledger context from the local trusted registry.
+3. Check whether the application intentionally accepts all activity for that Ledger.
+4. Without local global interest, return immediately on an empty vector.
+5. Discard non-empty target hints outside the locally approved interest set.
+6. Compare `max_amount` with each target's local minimum in that Ledger's atomic units.
+7. If nothing relevant remains, return without expensive work.
+8. Otherwise coalesce the wake-up and schedule bounded authoritative reconciliation.
+9. Make consequential decisions only from verified Ledger/Index data.
+10. Keep independent periodic reconciliation through the same per-Ledger path.
+
+Perform authentication and interest/amount checks **before** any asynchronous
+Ledger, Index or other expensive inter-canister call. The checks are local;
+they require no Event Horizon subscription lookup or external approval call.
+
 ```text
 poke(matches):
     context = trusted_event_horizon_instances.get(caller)
     if context is absent:
         return
 
+    # This flag is intentional LOCAL policy, not inferred from admission.
+    # Specific hints replace the empty global hint when both match a poll,
+    # so a global consumer accepts either vector shape as a wake-up.
+    if context.wants_global_activity:
+        schedule_coalesced_reconciliation(context.observed_ledger)
+        return
+
     if matches is empty:
-        if context.global_activity_not_relevant:
-            return
-        reconcile context.observed_ledger
         return
 
-    relevant = []
+    relevant = false
     for match in matches:
-        if target not recognised for this ledger context:
+        policy = context.approved_targets.get(match.target)
+        if policy is absent:
             continue
-        if match.max_amount < local_threshold(context, match.target):
+        if match.max_amount < policy.minimum_atomic_amount:
             continue
-        relevant.push(match.target)
+        relevant = true
+        break
 
-    if relevant is empty:
+    if not relevant:
         return
 
-    reconcile authoritative state for context.observed_ledger
-    perform consequential work only from reconciled ledger state
+    schedule_coalesced_reconciliation(context.observed_ledger)
+
+# Scheduled work, not an inline Ledger/Index call from poke:
+# - coalesces repeated wakes and prevents overlapping/redundant reconciliation
+# - bounds and rate-limits work according to the application's own policy
+# - reads authoritative Ledger/Index state using independent per-Ledger cursors
+# - processes only locally authorised activity, not just the supplied hints
+# The independent periodic timer schedules this same reconciliation path.
 ```
 
-Reconciliation cursor/state normally must be independent for each observed ledger; one universal cursor cannot reconcile unrelated ledgers.
+A non-empty vector does **not** mean there was no global activity. Specific
+matches take precedence over the empty global-only hint. An intentionally global
+consumer must therefore treat either shape as a global wake-up; a scoped
+consumer must not process `poke([])` merely because its caller is trusted.
+
+Reconciliation state must be independent per observed Ledger. Never advance a
+cursor, accept a payment or perform accounting from a poke alone.
 
 ## Local thresholds and poke poisoning
 
@@ -169,6 +206,75 @@ subscriber policy:             >= 0.01 ICP
 later Event Horizon threshold: every transfer
 ```
 
-After authenticating the caller, the subscriber can return cheaply when `max_amount` is below its own `1_000_000` e8s requirement and reconcile when it is high enough. This is an intended reason `max_amount` exists, but it does not make the poke authoritative. The subscriber must make consequential decisions only from reconciled Ledger or Index state.
+After authenticating the caller and recognising the locally approved target,
+the subscriber should return cheaply when `max_amount` is below its own `1_000_000` e8s requirement and reconcile when it is high enough. The local `0.01 ICP` minimum remains the subscriber's independent economic
+policy even when the effective Event Horizon threshold becomes lower. This is
+an intended reason `max_amount` exists, but it does not make the poke authoritative.
+
+`max_amount` is the largest **individual** qualifying incoming transfer for that
+target observed during the completed poll, not a sum. Use the observed Ledger's
+atomic units and that Ledger's decimals/economic policy; never apply another
+Ledger's amount scale. The hint is not a payment receipt, independent proof of
+finality, or proof that an Index already exposes the transfer. Acceptance,
+accounting and payment processing require verified authoritative reconciliation.
+An Index may lag the Ledger; retry/backoff belongs to the subscriber.
 
 Similarly, `poke([])` contains no specific target match. A subscriber uninterested in global activity can immediately return. Event Horizon provides no retries or acknowledgements, so independent periodic reconciliation remains required.
+
+
+## Economics and bounded unwanted work
+
+Unsolicited subscriptions require qualifying productive endowments. The
+reference bases are 10 ICP for an account or neuron target, 20 ICP for a range,
+and 1,000 ICP for global activity. Actual admission requirements remain dynamic
+under the existing pricing formula; see [funding and permanent admission](#funding-and-permanent-admission).
+These endowments impose an economic cost while contributing productive backing
+to the shared operating model. They are not per-poke fees, and admission is permanent.
+
+For a properly designed scoped receiver, an irrelevant authenticated callback
+costs only a local caller/context lookup, target-interest checks and optional
+amount comparisons, then a cheap return. Authentic Event Horizon callbacks
+retain at most 256 specific targets per subscriber per poll, so this local scan
+is bounded. Rejected hints must not start Ledger/Index reads or other expensive
+work. Even relevant wakes should only schedule coalesced, bounded processing.
+
+**The cost of funding unwanted subscriptions, combined with cheap recipient-side
+rejection and coalesced processing, substantially limits the practical
+cycles-drain opportunity.** This is defence in depth, not an authorisation
+mechanism enforced by Event Horizon, and not an absolute economic guarantee.
+An attacker may fund activity that genuinely meets the subscriber's approved
+interests and amounts. Global consumers have different exposure because any
+Ledger activity can be relevant. Keep reconciliation rate-limited or otherwise
+bounded; never trigger disproportionately expensive operations directly per poke.
+
+## Wake-up-only subscribers
+
+Zero-argument `poke()` remains supported, but is an intentional general-wake
+policy rather than the default shortcut for scoped applications:
+
+```candid
+service : {
+  poke : () -> ();
+}
+```
+
+Event Horizon still sends its standard `vec PokeMatch` argument. Candid permits
+the zero-argument receiver to ignore that extra argument for both empty global
+and non-empty specific-match payloads; no negotiation or alternate callback is
+performed, and the receiver need not previously have exposed the longer signature.
+
+This is appropriate only when the application deliberately treats **every
+authenticated** Event Horizon poke as a general reconciliation wake-up, needs
+no target/amount hints to decide relevance, and makes redundant wakes cheap and
+bounded through coalescing, rate limiting or similar protection. It can suit
+some indexing or general Ledger-monitoring applications. Authenticate the
+caller, resolve its trusted Ledger context, schedule rather than reconcile
+inline, and retain independent authoritative/periodic reconciliation.
+
+Do not choose zero arguments merely for convenience when only a limited set of
+accounts or neurons matters. Discarding the payload prevents cheap identification
+of an unsolicited irrelevant target or a below-local-threshold hint. Choosing
+`poke()` neither makes the application a global subscriber nor prevents a third
+party from funding unwanted specific subscriptions. It is not inherently insecure;
+safety depends on the intentionally bounded work performed after each authenticated
+wake-up. Existing Index canisters are not assumed to export `poke`.

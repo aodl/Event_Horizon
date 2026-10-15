@@ -139,6 +139,10 @@ recognition delay, and payout processing may add further delay. Repeated
 endowments to the same exact route contribute cumulatively, and any patron may
 fund a declaration without controlling the subscriber canister. Cumulative
 endowment principal is distinct from cumulative Faucet rewards distributed.
+Subscriber consent or knowledge is not required for account, range, neuron or
+global declarations. A patron may fund an irrelevant target or a lower effective
+threshold; a valid callback from a trusted instance does not establish that the
+subscriber wanted the subscription.
 
 Global, range, and single-target declarations are distinct exact routes with class-specific prices. Ordinary and neuron singles use the account price; ordinary and neuron ranges use the range price. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
@@ -204,12 +208,19 @@ service : {
 }
 ```
 
-Event Horizon always sends this one `vec PokeMatch` argument. A wake-up-only
-subscriber may instead implement `poke : () -> ()`; Candid argument-sequence
+Event Horizon always sends this one `vec PokeMatch` argument. Scoped subscribers
+should normally implement the argument-bearing handler and filter locally
+approved targets and minimum amounts before any expensive asynchronous work.
+A wake-up-only subscriber may instead implement `poke : () -> ()`; Candid argument-sequence
 compatibility ignores the extra payload at that receiver. Empty and nonempty
 vectors use the same rule. These are alternative receiver implementations of
 one outbound protocol: there is no callback negotiation, discovery, fallback,
-or per-subscription callback setting.
+or per-subscription callback setting. Zero-argument receivers discard the
+prefilter hints and should be used only when every authenticated wake is
+intentionally acceptable and redundant reconciliation is cheap, coalesced and
+bounded; convenience alone is not a reason for a scoped subscriber to discard
+target/amount filtering. Zero arguments neither confer global-subscription
+status nor prevent unsolicited specific subscriptions.
 
 `max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
@@ -227,7 +238,29 @@ There is:
 - no delivery journal;
 - no ordering or delivery guarantee.
 
-The target identity and per-target maximum are aggregate prefilter hints, not authoritative transaction data. Subscribers should authenticate Event Horizon as caller, validate/recognise the supplied specific targets within that caller's ledger context, coalesce concurrent wake-ups, and route both pokes and their independent periodic timer through the same authoritative reconciliation path. Reconciliation cursors/state are maintained independently per observed ledger.
+Caller authentication identifies the instance, not subscriber consent or local
+authorisation. Each receiver maintains its own trusted-caller-to-observed-Ledger
+mapping, approved target set, local minimum amounts in that Ledger's atomic
+units, and intentional global-interest policy, independently of admitted
+subscriptions. A scoped receiver rejects empty hints, unapproved targets and
+below-local-threshold maxima before Ledger/Index reads or other expensive calls.
+No Event Horizon subscription lookup or external authorisation query is needed.
+
+An intentionally global consumer treats either vector shape as a wake-up:
+specific matches take precedence even when global activity also matched. A
+non-empty vector does not establish the absence of global activity. Without
+intentional local global interest, `poke([])` is cheaply ignored.
+
+The target identity and per-target maximum are aggregate prefilter hints, not
+authoritative transaction data, payment receipts, finality proofs or Index-
+visibility guarantees. Relevant wakes are coalesced into bounded authoritative
+reconciliation; the independent periodic timer uses the same path. Cursors/state
+are independent per observed Ledger. Productive-endowment requirements, cheap
+local rejection and bounded/coalesced work limit unwanted-work exposure without
+guaranteeing that every cycles-drain attack is uneconomic. This is recipient-side
+defence in depth, not backend-enforced authorisation. See the
+[subscriber guide](docs/subscriber-guide.md) for the recommended handler and
+threshold-poisoning example.
 
 Because Event Horizon reads the Ledger directly, a poke may arrive before the ICP Index exposes the triggering transaction. The subscriber owns any Index retry/backoff policy.
 

@@ -24,7 +24,24 @@ is required before opening the instance for subscriber use: Faucet payout plus
 Historian route evidence is how subscriber declarations are funded and
 admitted.
 
-Qualifying activity is coalesced once per subscriber per poll. A specific callback reports sorted target/maximum-raw-amount pairs; an empty vector represents global-only activity. Event Horizon always sends this vector payload, while a wake-up-only subscriber may implement a zero-argument `poke()` receiver and ignore it through Candid argument compatibility. The callback is intentionally one-way and best-effort. Event Horizon does not negotiate signatures, retry, or account for delivery, and subscribers must retain their own authoritative ledger cursors.
+Qualifying activity is coalesced once per subscriber per poll. A specific callback
+reports sorted target/maximum-raw-amount pairs; an empty vector represents
+global-only activity. Specific matches take precedence when both match, so an
+intentionally global consumer treats either vector shape as a wake-up.
+
+Any patron may fund account, range, neuron or global declarations without
+subscriber consent, including irrelevant targets or weaker thresholds. Scoped
+subscribers should normally implement `poke(vec PokeMatch)`, authenticate the
+caller, and check their own per-Ledger target/amount policy before expensive
+work. Trusted origin does not establish local interest. Zero-argument `poke()`
+remains compatible with the same outgoing payload through Candid; it is suitable
+only for deliberately accepting all authenticated wakes with cheap, bounded and
+coalesced processing. See the [subscriber guide](../../docs/subscriber-guide.md)
+for the recommended handler and local global-interest policy.
+
+The callback remains one-way and best-effort. Event Horizon does not negotiate
+signatures, retry or account for delivery. Subscribers retain independent
+authoritative Ledger reconciliation and periodic timers.
 
 Productive endowment principal remains in Jupiter's staking path. Event Horizon
 receives recurring maturity-derived raw-ICP payouts, pools them, and converts
