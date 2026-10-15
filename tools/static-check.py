@@ -270,7 +270,10 @@ assert '<a class="wordmark" href="#hero-title" aria-label="Jump to the Event Hor
 assert '<h1 id="hero-title"><span>Event</span><span>Horizon</span></h1>' in frontend_index
 assert 'font-size: clamp(.88rem, 1.12vw, 1rem);' in frontend_styles
 assert '@media (max-width: 81.25rem), (max-aspect-ratio: 1/1)' in frontend_styles
-assert '@media (max-width: 81.25rem) and (min-aspect-ratio: 6/5)' in frontend_styles
+# A separate landscape veto defeats heading tolerance on near-square windows.
+assert '(min-aspect-ratio: 6/5)' not in frontend_styles
+compact_heading = (root/'canisters/frontend/public/compact-heading.js').read_text()
+assert "const ELIGIBLE = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';" in compact_heading
 assert 'scroll-margin-top: calc(clamp(5rem, 10svh, 7rem) + 2.77rem);' in frontend_styles
 assert "const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';" in frontend_app
 assert 'animation-timeline: scroll(root block);' in frontend_styles

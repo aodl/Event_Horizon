@@ -9,7 +9,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/ledger-counter-art-first/browser');
+const output = resolve(root, 'observations/compact-title-aspect-gate/browser');
 await mkdir(output, { recursive: true });
 const html = await readFile(resolve(root, 'canisters/frontend/public/index.html'), 'utf8');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -60,14 +60,14 @@ async function assertBranding(page) {
     const mark = document.querySelector('.hero__compact-mark'), title = document.querySelector('#hero-title');
     const visible = n => { const r = n.getBoundingClientRect(); return getComputedStyle(n).display !== 'none' && r.bottom > 0 && r.top < innerHeight; };
     const rect = title.getBoundingClientRect(), viewport = visualViewport ? visualViewport.offsetTop + visualViewport.height : innerHeight;
-    const eligible = matchMedia('(max-width: 81.25rem) and (min-aspect-ratio: 6/5)').matches;
-    const result = { heading: visible(title), compact: visible(mark), below: rect.top > viewport + 1, eligible,
+    const eligible = matchMedia('(max-width: 81.25rem), (max-aspect-ratio: 1/1)').matches;
+    const result = { heading: visible(title), compact: visible(mark), withinPeek: rect.top >= Math.max(visualViewport?.offsetTop ?? 0, viewport - Math.min(128, rect.height * .75)), eligible,
       display: getComputedStyle(mark).display, titleTop: rect.top, markTop: mark.getBoundingClientRect().top, scrollY };
-    return result.display !== 'none' === (eligible && result.below) ? result : false;
+    return result.display !== 'none' === (eligible && result.withinPeek) ? result : false;
   });
   const result = await handle.jsonValue(); await handle.dispose();
-  assert.ok(!(result.heading && result.compact), JSON.stringify(result));
-  assert.equal(result.display !== 'none', result.eligible && result.below, JSON.stringify(result));
+  assert.ok(!result.compact || result.withinPeek, JSON.stringify(result));
+  assert.equal(result.display !== 'none', result.eligible && result.withinPeek, JSON.stringify(result));
   return result;
 }
 
@@ -115,7 +115,7 @@ try {
   await page.goto(`${origin}/fixture.html`);
   await page.waitForFunction(() => document.getElementById('ledger-count').textContent === '123,456,789');
   await page.waitForFunction(() => document.querySelector('.hero__detail').classList.contains('hero__detail--loaded') && getComputedStyle(document.querySelector('.hero__detail')).opacity === '1');
-  for (const [width, height, label] of [[1440, 900, 'desktop'], [1280, 800, 'compact-wide'], [1024, 768, 'compact'], [1000, 800, 'regression'], [844, 390, 'landscape'], [390, 844, 'phone'], [360, 640, 'small-phone'], [320, 568, 'narrow']]) {
+  for (const [width, height, label] of [[1440, 900, 'desktop'], [1280, 800, 'compact-wide'], [1024, 768, 'compact'], [1000, 800, 'regression'], [1000, 900, 'near-square'], [1000, 1000, 'square'], [873, 804, 'reported-873x804'], [844, 390, 'landscape'], [390, 844, 'phone'], [360, 640, 'small-phone'], [320, 568, 'narrow']]) {
     await page.setViewportSize({ width, height });
     const bounds = await page.locator('.ledger-stat').boundingBox();
     console.log(label, bounds);
@@ -149,8 +149,10 @@ try {
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
   const anchored = await assertBranding(page); assert.equal(anchored.heading, true); assert.equal(anchored.compact, false);
+  // Let native smooth anchor navigation finish before the next scripted scroll.
+  await page.waitForFunction(() => { const title = document.querySelector('#hero-title'); return Math.abs(title.getBoundingClientRect().top - parseFloat(getComputedStyle(title).scrollMarginTop)) < 1; });
   await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().top + scrollY - innerHeight + .5, behavior: 'instant' }));
-  assert.equal((await assertBranding(page)).display, 'none');
+  assert.equal((await assertBranding(page)).display, 'block');
   assert.equal(await page.locator('.hero__compact-mark').getAttribute('href'), '#hero-title');
   await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().bottom + scrollY + 30, behavior: 'instant' }));
   await assertBranding(page);
@@ -161,16 +163,33 @@ try {
     await page.setViewportSize(size); await assertBranding(page);
   }
   await assertBranding(page);
+  // Reported regression: near-square 873x804 must show EVH; increasing only
+  // height eventually reveals enough of the full heading to replace it.
+  await page.setViewportSize({width:873,height:804});
+  await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
+  const reported = await assertBranding(page); assert.equal(reported.compact, true);
+  await page.setViewportSize({width:873,height:940});
+  const tallerReported = await assertBranding(page); assert.equal(tallerReported.heading, true); assert.equal(tallerReported.compact, false);
+  await page.screenshot({path:resolve(output,'reported-873x940.png')});
   // A layout change within the SAME eligible media condition must also hide EVH.
   await page.setViewportSize({ width: 1000, height: 830 });
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
-  await page.evaluate(() => { document.querySelector('.hero__body').style.marginTop = '-8rem'; });
+  // Only the fixture moves the title: verify a 96px peek is tolerated, while a
+  // 129px reveal hides the compact mark without changing the media condition.
+  const placeHeading = async pixels => page.evaluate(px => {
+    const body = document.querySelector('.hero__body'), title = document.querySelector('#hero-title');
+    body.style.marginTop = `${parseFloat(getComputedStyle(body).marginTop) + innerHeight - px - title.getBoundingClientRect().top}px`;
+  }, pixels);
+  await placeHeading(96);
+  const peek = await assertBranding(page); assert.equal(peek.eligible, true); assert.equal(peek.heading, true); assert.equal(peek.compact, true);
+  await page.screenshot({ path: resolve(output, 'tolerated-peek.png') });
+  await placeHeading(129);
   const reflowed = await assertBranding(page); assert.equal(reflowed.eligible, true); assert.equal(reflowed.heading, true); assert.equal(reflowed.compact, false);
   await page.screenshot({ path: resolve(output, 'same-media-reflow.png') });
   await page.evaluate(() => { document.querySelector('.hero__body').style.marginTop = ''; });
   // Tall viewports can show the full heading; the compact title must stay absent.
-  await page.setViewportSize({ width: 1000, height: 1000 });
+  await page.setViewportSize({ width: 1000, height: 1100 });
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
   const tall = await assertBranding(page); assert.equal(tall.heading, true); assert.equal(tall.compact, false);
   await page.screenshot({ path: resolve(output, 'tall-title.png') });
@@ -188,7 +207,7 @@ try {
   assert.equal(await page.locator('#ledger-count').textContent(), '123,456,999');
   assert.equal(await page.locator('#ledger-rate').textContent(), '11.7 tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'nonzero-rate.png') });
-  for (const [width,height,label] of [[1440,900,'desktop'],[1280,800,'compact-wide'],[1024,768,'compact'],[1000,800,'regression'],[844,390,'landscape'],[390,844,'phone'],[360,640,'small-phone'],[320,568,'narrow']]) {
+  for (const [width,height,label] of [[1440,900,'desktop'],[1280,800,'compact-wide'],[1024,768,'compact'],[1000,800,'regression'],[1000,900,'near-square'],[1000,1000,'square'],[873,804,'reported-873x804'],[844,390,'landscape'],[390,844,'phone'],[360,640,'small-phone'],[320,568,'narrow']]) {
     await page.setViewportSize({width,height});
     await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
     await assertBranding(page);

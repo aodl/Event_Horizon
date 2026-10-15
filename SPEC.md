@@ -381,18 +381,23 @@ the artwork's lower-right first-view area, independently of the main text.
 Long values/errors may expand the region to preserve readable nonoverlapping flow.
 Wide desktop keeps its existing title/artwork composition and statistic near fact 04.
 
-The small `EVH.` link fits the artwork's dark corner on eligible compact
-landscape layouts (maximum width 81.25rem and minimum aspect ratio 6/5).
+The small `EVH.` link fits the artwork's dark corner on the same compact
+layouts as the art-first hero (maximum width 81.25rem OR aspect ratio at most
+1/1). Do not apply a separate landscape-only eligibility condition: it would
+hide the mark on near-square/tall screens before heading visibility is checked.
 It defaults hidden and may appear only while the actual full heading lies
-entirely below the viewport. Hide it as soon as any full-heading text becomes
-visible; do not resurrect it when the heading leaves above the viewport.
+below the viewport or partially revealed at its bottom edge. Allow at most
+128 CSS pixels of the full heading, capped to three quarters of its height, before
+hiding the compact mark. This bottom-edge tolerance avoids eager disappearance
+for a partial reveal; exceeding that allowance replaces the compact title. Do not
+resurrect it when the heading leaves above the viewport.
 The compact label exists because the large title would cover important artwork;
 viewport width/aspect alone does not establish title visibility on tall or zoomed
 screens. A viewport observer plus initial geometry check, resize/reflow/scroll
 handling and cleanup must enforce this rule. Fail closed if observation cannot
 be established. Hidden branding must not be focusable or clickable. Preserve
 the title anchor and the existing `EVH.` spelling. Source comments and browser
-regressions must preserve both the art-first layout and no-duplicate-title rule.
+regressions must preserve both the art-first layout and bounded bottom-edge title tolerance.
 
 The label precedes the large grouped count; the subdued rate is to its left,
 without brackets or a tilde, and may wrap on narrow screens. Routine refresh and

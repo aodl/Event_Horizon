@@ -143,14 +143,16 @@ art is taller. Its label, left-hand unbracketed rate and right-aligned count sta
 unboxed; long/error content expands the row rather than overlapping the body.
 Wide desktop keeps its title/artwork composition and proximity to fact 04.
 
-The `EVH.` shortcut fits the dark corner in compact landscape while the large
+The `EVH.` shortcut fits the dark corner in the compact art-first layout while the large
 heading would obscure the artwork. Show it only if the full heading is actually
-wholly below the viewport; hide it on any partial heading visibility or when
-it leaves upward. Tall screens, scrolling, text zoom and reflow make the media
-condition alone insufficient. The link defaults hidden, uses viewport observation
+below the viewport or peeking into its bottom edge by at most 128 CSS pixels
+(capped to three quarters of the heading height). Hide it beyond that tolerance or
+when it leaves upward. Tall screens, scrolling, text zoom and reflow make the media
+condition alone insufficient. The link uses the same compact-layout media rule (width at most 81.25rem OR
+aspect ratio at most 1/1), not a separate landscape-only gate. It defaults hidden, uses viewport observation
 and an initial geometry check, and fails closed without observation. Cleanup
 removes observers/listeners/frames. Keep the comments and browser regression
-checks when changing hero spacing; never show both titles simultaneously.
+checks when changing hero spacing; hide the compact mark once the full heading exceeds the documented allowance.
 
 Routine status and About copy stay visually hidden; the description remains
 accessible. Errors remain visible. There is no manual pause control.

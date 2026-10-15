@@ -1,4 +1,8 @@
-const ELIGIBLE = '(max-width: 81.25rem) and (min-aspect-ratio: 6/5)';
+const BOTTOM_PEEK_PX = 128;
+// Match the art-first compact layout, not the old landscape-only shortcut.
+// An aspect-ratio veto would make the heading allowance ineffective on square
+// or taller windows, even when only a few pixels of the title are visible.
+const ELIGIBLE = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
 
 export function initCompactHeading(documentRef, windowRef) {
   const title = documentRef.getElementById('hero-title');
@@ -12,9 +16,10 @@ export function initCompactHeading(documentRef, windowRef) {
   hide();
   const media = windowRef.matchMedia?.(ELIGIBLE);
   // The compact brand fits the dark corner while the large title follows the art.
-  // Tall viewports, zoom and counter reflow can still reveal the full heading even
-  // in eligible landscape layouts (also after zoom/reflow). Both brands must never
-  // appear together: show EVH only while the actual heading is wholly below view.
+  // A partial bottom-edge view need not replace the compact brand immediately.
+  // Keep a bounded allowance rather than reacting to the first visible pixels.
+  // Hide EVH once more than 128px (or three quarters of a small heading) enters
+  // view. Actual geometry still matters on tall/zoomed screens.
   // Without a working viewport observer fail closed, rather than guessing geometry.
   if (!media || !windowRef.IntersectionObserver || !windowRef.requestAnimationFrame) return { dispose: hide };
   const update = () => {
@@ -23,8 +28,9 @@ export function initCompactHeading(documentRef, windowRef) {
     const rect = title.getBoundingClientRect();
     const viewport = windowRef.visualViewport;
     const bottom = viewport ? viewport.offsetTop + viewport.height : windowRef.innerHeight;
+    const peek = Math.min(BOTTOM_PEEK_PX, rect.height * .75);
     const show = media.matches && title.isConnected && rect.width > 0 && rect.height > 0
-      && rect.top > bottom + 1;
+      && rect.top >= Math.max(viewport?.offsetTop ?? 0, bottom - peek);
     if (show) mark.classList.add('hero__compact-mark--visible');
     else hide();
   };
@@ -34,10 +40,10 @@ export function initCompactHeading(documentRef, windowRef) {
   };
   // Do not hide/show the focused anchor on every scroll event: that can interrupt
   // its native smooth-scroll navigation. Coalesce scroll geometry; invalidate the
-  // gate immediately for layout/media changes that could expose both titles.
+  // gate immediately for layout/media changes that could expose a substantial second title.
   const invalidate = () => { if (!disposed) { hide(); schedule(); } };
   try {
-    observer = new windowRef.IntersectionObserver(invalidate, { root: null, threshold: 0 });
+    observer = new windowRef.IntersectionObserver(schedule, { root: null, threshold: 0 });
     observer.observe(title);
     if (windowRef.ResizeObserver) {
       resize = new windowRef.ResizeObserver(invalidate);

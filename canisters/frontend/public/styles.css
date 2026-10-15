@@ -449,7 +449,9 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   }
 }
 
-@media (max-width: 81.25rem) and (min-aspect-ratio: 6/5) {
+/* Use the SAME eligibility as the art-first layout. The former landscape-only
+   condition hid EVH on near-square/tall windows regardless of heading tolerance. */
+@media (max-width: 81.25rem), (max-aspect-ratio: 1/1) {
   .hero__compact-mark {
     position: absolute;
     top: var(--gutter);
@@ -460,7 +462,8 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   }
   /* EVH fits the dark corner without covering the ring. Width/aspect alone
      cannot prove the full title is below view (tall viewports, zoom and reflow).
-     Never bypass the observer gate: both titles must not be visible together. */
+     Keep the observer gate: a bounded bottom-edge title reveal is tolerated;
+     a substantially visible full heading replaces the compact brand. */
   .hero__compact-mark--visible { display: block; }
   .hero__compact-mark:focus-visible {
     outline: 1px solid var(--paper);
