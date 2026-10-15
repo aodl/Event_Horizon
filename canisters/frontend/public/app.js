@@ -21,15 +21,15 @@ const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
 
 export function initHeroArtwork(documentRef, windowRef, schedule = callback => callback()) {
   const detail = documentRef.querySelector('.hero__detail');
-  if (!detail) return { setPaused() {}, dispose() {} };
-  let disposed = false, manuallyPaused = false;
+  if (!detail) return { dispose() {} };
+  let disposed = false, retiring = false;
   let windowFocused = documentRef.hasFocus?.() ?? true;
   const media = windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)');
   const syncAnimationState = () => {
     if (disposed) return;
     const svg = detail.contentDocument?.documentElement;
     if (!svg) return;
-    const paused = manuallyPaused || Boolean(media?.matches) || Boolean(documentRef.hidden) || !windowFocused;
+    const paused = retiring || Boolean(media?.matches) || Boolean(documentRef.hidden) || !windowFocused;
     svg.classList.toggle('ehm-paused', paused);
     if (paused) svg.pauseAnimations?.();
     else svg.unpauseAnimations?.();
@@ -55,9 +55,8 @@ export function initHeroArtwork(documentRef, windowRef, schedule = callback => c
   if (detail.getAttribute?.('data') !== initialSrc) detail.data = initialSrc;
   else if (detail.contentDocument?.documentElement?.namespaceURI === 'http://www.w3.org/2000/svg') reveal();
   return {
-    setPaused(value) { manuallyPaused = value; syncAnimationState(); },
     dispose() {
-      manuallyPaused = true; syncAnimationState(); disposed = true;
+      retiring = true; syncAnimationState(); disposed = true;
       detail.removeEventListener?.('load', reveal);
       documentRef.removeEventListener?.('visibilitychange', syncAnimationState);
       windowRef?.removeEventListener?.('blur', blur);
@@ -67,13 +66,12 @@ export function initHeroArtwork(documentRef, windowRef, schedule = callback => c
   };
 }
 
-export function initLedgerCounter(documentRef, windowRef, { query, artwork, dependencies = {} } = {}) {
+export function initLedgerCounter(documentRef, windowRef, { query, dependencies = {} } = {}) {
   const node = id => documentRef.getElementById(id);
-  if (!['ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked', 'live-effects'].every(id => node(id))
+  if (!['ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked'].every(id => node(id))
       || !windowRef?.AbortController || !windowRef?.requestAnimationFrame) return null;
   const write = (id, text) => { if (node(id).textContent !== text) node(id).textContent = text; };
   const client = query ? null : createLedgerCounterClient();
-  let manual = false;
   const media = windowRef.matchMedia?.('(prefers-reduced-motion: reduce)');
   const controller = createLedgerCounter({
     query: query ?? client.query,
@@ -84,33 +82,27 @@ export function initLedgerCounter(documentRef, windowRef, { query, artwork, depe
       const text = state.displayed === null ? '—' : formatTotal(state.displayed);
       write('ledger-count', text);
       const unit = icp ? 'tx/s' : 'records/s';
-      if (node('ledger-rate')) write('ledger-rate', state.rate ? `(~${state.rate.text} ${unit})` : '');
+      if (node('ledger-rate')) write('ledger-rate', ['planned', 'unsupported', 'configuration'].includes(state.status) ? '' : `${state.rate?.text ?? '—'} ${unit}`);
       if (node('ledger-rate-description')) write('ledger-rate-description', state.rate
-        ? `Approximate recent average ledger-history growth: ${state.rate.text} ${icp ? 'transactions' : 'records'} per second over ${(state.rate.spanMilliseconds / 1000).toFixed(1)} seconds.` : 'Recent average rate unavailable.');
+        ? `${state.rateIsLastKnown ? 'Last known estimate before tab suspension. ' : ''}Approximate recent average ledger-history growth: ${state.rate.text} ${icp ? 'transactions' : 'records'} per second over ${(state.rate.spanMilliseconds / 1000).toFixed(1)} seconds.` : 'Recent average rate unavailable.');
       write('ledger-sample', state.accepted === null ? `${label}: unavailable`
         : `${label}: ${formatTotal(state.accepted)} (latest retrieved total)`);
       const messages = {
         loading: 'Checking selected ledger…', current: state.reduced ? 'Periodically refreshed' : 'Periodically refreshed · Smoothed display',
         unavailable: 'Ledger count unavailable · Retrying', unsupported: 'Ledger count unavailable for this instance',
-        planned: 'Count unavailable until launch', paused: 'Live effects paused', hidden: 'Refresh suspended while hidden',
+        planned: 'Count unavailable until launch', hidden: 'Refresh suspended while hidden',
         retrying: 'Refresh failed · Last known total · Retrying', delayed: 'Data delayed · Last known total · Retrying',
         inconsistent: 'Inconsistent ledger responses · Last known total · Retrying',
         configuration: 'Count unavailable · Instance configuration mismatch',
       };
       write('ledger-status', messages[state.status]);
+      // Startup and tab suspension should not flash routine copy beside the total.
+      node('ledger-status').hidden = !state.entry || ['loading', 'current', 'hidden'].includes(state.status);
       write('ledger-checked', state.checked === null ? '' : `Last checked ${new Date(state.checked).toISOString()}`);
     },
     ...dependencies,
   });
-  const lifecycle = () => controller.setLifecycle({ hidden: documentRef.hidden, paused: manual, reduced: media?.matches });
-  const toggle = () => {
-    manual = !manual;
-    node('live-effects').textContent = manual ? 'Resume live effects' : 'Pause live effects';
-    node('live-effects').setAttribute('aria-pressed', String(manual));
-    artwork?.setPaused(manual); lifecycle();
-  };
-  node('live-effects').hidden = false;
-  node('live-effects').addEventListener('click', toggle);
+  const lifecycle = () => controller.setLifecycle({ hidden: documentRef.hidden, reduced: media?.matches });
   documentRef.addEventListener('visibilitychange', lifecycle);
   media?.addEventListener?.('change', lifecycle);
   lifecycle();
@@ -119,7 +111,6 @@ export function initLedgerCounter(documentRef, windowRef, { query, artwork, depe
     configurationMismatch: () => controller.configurationMismatch(),
     dispose() {
       controller.dispose(); client?.dispose();
-      node('live-effects').removeEventListener('click', toggle);
       documentRef.removeEventListener('visibilitychange', lifecycle);
       media?.removeEventListener?.('change', lifecycle);
     },
@@ -287,7 +278,7 @@ if (typeof document !== 'undefined') {
   initHeroBackdrop(document, window);
   const compactHeading = initCompactHeading(document, window);
   let counter = null;
-  try { counter = initLedgerCounter(document, window, { artwork }); } catch { /* Optional statistic. */ }
+  try { counter = initLedgerCounter(document, window); } catch { /* Optional statistic. */ }
   const app = createApp({ documentRef: document, counter });
   window.addEventListener('pagehide', event => {
     if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); }

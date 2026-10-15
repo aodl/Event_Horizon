@@ -42,7 +42,7 @@ test('deterministic randomized monotonic bounded interpolation, independent of f
 test('first sample directly renders history, warm-up happens once, steady polls after completion', async () => {
   const f = fixture(); f.select(live); assert.equal(f.last().displayed, null); await flush();
   assert.equal(f.last().displayed, 100n); assert.equal(f.time.frames.size, 0);
-  await f.time.tick(1999); assert.equal(f.calls.length, 1);
+  await f.time.tick(2999); assert.equal(f.calls.length, 1);
   await f.time.tick(1); assert.equal(f.calls.length, 2);
   await f.time.tick(15000); assert.equal(f.calls.length, 3);
   await f.time.tick(15000); assert.equal(f.calls.length, 4); f.dispose();
@@ -58,19 +58,19 @@ test('genuine zero differs from initial unavailable; invalid samples fail', asyn
 
 test('linear animation retargets from current display and equal samples never extend it', async () => {
   let total = 100n; const f = fixture(async () => total); f.select(live); await flush();
-  total = 400n; await f.time.tick(2000); f.time.frame(9500); assert.equal(f.last().displayed, 250n);
+  total = 400n; await f.time.tick(3000); f.time.frame(10500); assert.equal(f.last().displayed, 250n);
   // Advance timer to equal sample before the next animation frame.
   await f.time.tick(7500); assert.equal(f.last().accepted, 400n);
-  f.time.frame(17000); assert.equal(f.last().displayed, 400n); assert.equal(f.time.frames.size, 0);
-  total = 1000n; await f.time.tick(15000); f.time.frame(37000); assert.equal(f.last().displayed, 599n);
+  f.time.frame(18000); assert.equal(f.last().displayed, 400n); assert.equal(f.time.frames.size, 0);
+  total = 1000n; await f.time.tick(15000); f.time.frame(38000); assert.equal(f.last().displayed, 599n);
   total = 1600n; await f.time.tick(10000); // No frame since t=37000: retarget from the rendered 599.
-  assert.equal(f.last().displayed, 599n); f.time.frame(54500); assert.equal(f.last().displayed, 1099n);
+  assert.equal(f.last().displayed, 599n); f.time.frame(55500); assert.equal(f.last().displayed, 1099n);
   f.time.frame(90000); assert.equal(f.last().displayed, 1600n); assert.equal(f.time.frames.size, 0); f.dispose();
 });
 
 test('early retarget, clock reversal and stalled frames preserve the invariant', async () => {
   let total = 100n; const f = fixture(async () => total); f.select(live); await flush();
-  total = 1000n; await f.time.tick(2000); f.time.frame(5000); const seen = f.last().displayed;
+  total = 1000n; await f.time.tick(3000); f.time.frame(5000); const seen = f.last().displayed;
   f.time.frame(4000); assert.equal(f.last().displayed, seen);
   // Use a short steady interval to get a genuine higher sample mid-animation.
   f.dispose(); const t = clock(), values = []; let n = 0;
@@ -95,7 +95,7 @@ test('failure backoff is 30/60/120 capped and equal success resets it', async ()
   let fail = true; const f = fixture(async () => { if (fail) throw new Error('offline'); return 100n; });
   f.select(live); await flush(); await f.time.tick(30000); await f.time.tick(60000); await f.time.tick(120000); await f.time.tick(120000);
   assert.deepEqual(f.calls.map(c => c.at), [0, 30000, 90000, 210000, 330000]);
-  fail = false; await f.time.tick(120000); await f.time.tick(2000); assert.equal(f.last().status, 'current');
+  fail = false; await f.time.tick(120000); await f.time.tick(3000); assert.equal(f.last().status, 'current');
   fail = true; await f.time.tick(15000); const count = f.calls.length; await f.time.tick(30000); assert.equal(f.calls.length, count + 1); f.dispose();
 });
 
@@ -103,22 +103,21 @@ test('freshness changes at 45 seconds independently of an idle numeral and recov
   let fail = false, total = 100n; const f = fixture(async () => { if (fail) throw Error('offline'); return total; });
   f.select(live); await flush(); fail = true; await f.time.tick(44999); assert.equal(f.last().status, 'retrying');
   await f.time.tick(1); assert.equal(f.last().status, 'delayed'); assert.equal(f.time.frames.size, 0);
-  fail = false; total = 10000n; await f.time.tick(47000);
+  fail = false; total = 10000n; await f.time.tick(48000);
   assert.equal(f.last().displayed, 10000n); assert.equal(f.time.frames.size, 0); f.dispose();
 });
 
 test('lower replies retain high-water and timestamp; third is inconsistent; equal recovers', async () => {
   let total = 100n; const f = fixture(async () => total); f.select(live); await flush(); const checked = f.last().checked;
-  total = 99n; await f.time.tick(2000); await f.time.tick(30000); await f.time.tick(60000);
+  total = 99n; await f.time.tick(3000); await f.time.tick(30000); await f.time.tick(60000);
   assert.equal(f.last().status, 'inconsistent'); assert.equal(f.last().checked, checked); assert.equal(f.last().accepted, 100n);
   total = 100n; await f.time.tick(120000); assert.equal(f.last().status, 'current'); assert.ok(f.last().checked > checked); f.dispose();
 });
 
-for (const reason of ['pause', 'hide', 'selection', 'dispose', 'configuration']) {
+for (const reason of ['hide', 'selection', 'dispose', 'configuration']) {
   for (const terminal of ['resolve', 'reject']) test(`${reason} retires late ${terminal} without changing state or newer schedules`, async () => {
     const a = deferred(), b = deferred(); const f = fixture((_e, _o, n) => n === 1 ? a.promise : b.promise);
     f.select(live); await flush();
-    if (reason === 'pause') f.setLifecycle({ paused: true });
     if (reason === 'hide') f.setLifecycle({ hidden: true });
     if (reason === 'selection') f.select({ ...live, id: 'shared-ledger' });
     if (reason === 'dispose') f.dispose();
@@ -140,26 +139,26 @@ test('A to planned to A clears number and bootstraps anew; unsupported modes fai
   assert.equal(f.calls.length, 2); f.dispose();
 });
 
-test('hide/show coalesces, manual pause wins, resume baseline retains monotonicity', async () => {
+test('hide/show coalesces, resume baseline retains monotonicity', async () => {
   let total = 100n; const f = fixture(async () => total); f.select(live); await flush();
-  f.setLifecycle({ hidden: true }); f.setLifecycle({ hidden: true }); f.setLifecycle({ paused: true });
-  total = 1000n; f.setLifecycle({ hidden: false }); await flush(); assert.equal(f.calls.length, 1); assert.equal(f.last().displayed, 100n);
-  f.setLifecycle({ paused: false }); f.setLifecycle({ hidden: false }); f.setLifecycle({ paused: false }); await flush();
+  f.setLifecycle({ hidden: true }); f.setLifecycle({ hidden: true }); f.setLifecycle({ hidden: true });
+  total = 1000n; await flush(); assert.equal(f.calls.length, 1); assert.equal(f.last().displayed, 100n);
+  f.setLifecycle({ hidden: false }); f.setLifecycle({ hidden: false }); f.setLifecycle({ hidden: false }); await flush();
   assert.equal(f.calls.length, 2); assert.equal(f.last().displayed, 1000n); assert.equal(f.time.frames.size, 0);
   f.setLifecycle({ hidden: true }); total = 900n; f.setLifecycle({ hidden: false }); await flush(); assert.equal(f.last().accepted, 1000n); f.dispose();
 });
 
-test('dynamic reduced motion stops interpolation, keeps polling, and cannot override pause', async () => {
-  let total = 100n; const f = fixture(async () => total); f.select(live); await flush(); total = 400n; await f.time.tick(2000); f.time.frame(5000);
+test('dynamic reduced motion stops interpolation, keeps polling, and cannot override hidden suspension', async () => {
+  let total = 100n; const f = fixture(async () => total); f.select(live); await flush(); total = 400n; await f.time.tick(3000); f.time.frame(5000);
   f.setLifecycle({ reduced: true }); assert.equal(f.last().displayed, 400n); assert.equal(f.time.frames.size, 0);
   total = 500n; await f.time.tick(15000); assert.equal(f.last().displayed, 500n);
-  f.setLifecycle({ paused: true }); f.setLifecycle({ reduced: false }); await f.time.tick(100000); assert.equal(f.calls.length, 3);
-  total = 1000n; f.setLifecycle({ paused: false }); await flush(); assert.equal(f.last().displayed, 1000n); f.dispose();
+  f.setLifecycle({ hidden: true }); f.setLifecycle({ reduced: false }); await f.time.tick(100000); assert.equal(f.calls.length, 3);
+  total = 1000n; f.setLifecycle({ hidden: false }); await flush(); assert.equal(f.last().displayed, 1000n); f.dispose();
 });
 
 test('retired timer and animation callbacks cannot mutate a replacement context', async () => {
   let total = 100n; const f = fixture(async () => total); f.select(live); await flush();
-  total = 500n; await f.time.tick(2000);
+  total = 500n; await f.time.tick(3000);
   const staleFrames = [...f.time.frames.values()], staleTimers = [...f.time.timers.values()].map(t => t.fn);
   f.select({ ...live, id: 'other' }); await flush(); const state = f.last(), timers = f.time.timers.size;
   staleFrames.forEach(fn => fn()); staleTimers.forEach(fn => fn()); await flush();
@@ -179,8 +178,8 @@ test('equal sample in mid-animation updates freshness without changing its linea
 test('ICRC-3 tiny increment at an enormous baseline arrives exactly without Number conversion', async () => {
   const huge = (1n << 200n) + 999n; let total = huge;
   const f = fixture(async () => total); f.select({ ...live, ledgerCountSource: 'icrc3-log-length' }); await flush();
-  assert.equal(f.last().displayed, huge); total++; await f.time.tick(2000); f.time.frame(9500); assert.equal(f.last().displayed, huge);
-  f.time.frame(17000); assert.equal(f.last().displayed, huge + 1n); f.dispose();
+  assert.equal(f.last().displayed, huge); total++; await f.time.tick(3000); f.time.frame(10500); assert.equal(f.last().displayed, huge);
+  f.time.frame(18000); assert.equal(f.last().displayed, huge + 1n); f.dispose();
 });
 
 

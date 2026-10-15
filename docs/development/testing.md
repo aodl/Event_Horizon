@@ -196,14 +196,14 @@ separate injected-query page with the same production controllers, with no
 production test switches. Use the installed pinned Playwright Chromium (or set
 `COUNTER_BROWSER_EXECUTABLE` for its installed path).
 
-The browser matrix covers 1440×900, 1280×800, 1024×768, the 1000×800 duplicate-brand
-regression, 844×390 landscape, 390×844, 360×640, 320×568 and 200% text. Assertions
+The browser matrix covers 1440×900, 1280×800, 1024×768, 1000×800 branding, 844×390 landscape, 390×844, 360×640, 320×568 and 200% text. Assertions
 check observed heading/compact visibility, dynamic scroll/resize, native anchor,
-focus retirement, disclosure reflow, unboxed styling, fourth-fact alignment,
-overflow, rate pending/nonzero/zero/tiny values, delay/pause, long generic totals,
+observed no-duplicate-title behavior, art-first compact text/facts, independently positioned ledger statistic, absence of the removed manual pause control, unboxed styling, fourth-fact alignment,
+overflow, rate pending/nonzero/zero/tiny values, delay/hidden suspension, long generic totals,
 reduced motion, SVG timeline/CSS pause, quiet accessibility and cleanup. Evidence
-is ignored under `observations/ledger-counter-refinement/`. Browser emulation is
+is ignored under `observations/ledger-counter-art-first/` (earlier evidence remains under `observations/ledger-counter-refinement/`). Browser emulation is
 not physical-device or cross-engine performance proof. Full `test_all` still
 runs every discovered ignored PocketIC scenario, including exact certified asset
 bytes and query-suffixed routing. See the
-[hero refinement validation report](../codex/ledger-hero-refinement-validation.md).
+[hero refinement validation report](../codex/ledger-hero-refinement-validation.md) and the
+[compact hero restoration validation](../codex/compact-hero-restoration-validation.md).

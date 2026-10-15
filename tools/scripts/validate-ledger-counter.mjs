@@ -9,7 +9,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/ledger-counter-refinement/browser');
+const output = resolve(root, 'observations/ledger-counter-art-first/browser');
 await mkdir(output, { recursive: true });
 const html = await readFile(resolve(root, 'canisters/frontend/public/index.html'), 'utf8');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -26,7 +26,7 @@ let total = 123456789n, fail = false, calls = 0;
 const artwork = initHeroArtwork(doc, window);
 initHeroBackdrop(doc, window);
 const compact = initCompactHeading(doc, window);
-const counter = initLedgerCounter(doc, window, { artwork, dependencies: time,
+const counter = initLedgerCounter(doc, window, { dependencies: time,
   query: async () => { calls++; if (fail) throw Error('fixture failure'); return total; } });
 const reviewedFixture = { ...INSTANCES[0], id: 'generic-fixture', name: 'Reviewed fixture', ledgerCountSource: 'icrc3-log-length' };
 const app = createApp({ documentRef: doc, counter, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10) });
@@ -55,14 +55,14 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 async function assertBranding(page) {
-  // Sample geometry and computed display atomically after observer/resize work.
+  // Observe actual title visibility, including resize/scroll/reflow, before showing the compact brand.
   const handle = await page.waitForFunction(() => {
     const mark = document.querySelector('.hero__compact-mark'), title = document.querySelector('#hero-title');
     const visible = n => { const r = n.getBoundingClientRect(); return getComputedStyle(n).display !== 'none' && r.bottom > 0 && r.top < innerHeight; };
     const rect = title.getBoundingClientRect(), viewport = visualViewport ? visualViewport.offsetTop + visualViewport.height : innerHeight;
     const eligible = matchMedia('(max-width: 81.25rem) and (min-aspect-ratio: 6/5)').matches;
     const result = { heading: visible(title), compact: visible(mark), below: rect.top > viewport + 1, eligible,
-      display: getComputedStyle(mark).display, titleTop: rect.top };
+      display: getComputedStyle(mark).display, titleTop: rect.top, markTop: mark.getBoundingClientRect().top, scrollY };
     return result.display !== 'none' === (eligible && result.below) ? result : false;
   });
   const result = await handle.jsonValue(); await handle.dispose();
@@ -91,8 +91,8 @@ try {
   await page.selectOption('#instance', 'io');
   assert.match(await page.locator('#ledger-status').textContent(), /until launch/);
   const before = evidence.requests.filter(r => r.url.includes('/ryjl3-tyaaa-aaaaa-aaaba-cai/')).length;
-  await page.locator('#live-effects').click();
-  assert.equal(await page.locator('#live-effects').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#live-effects').count(), 0);
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
   await page.waitForFunction(() => document.querySelector('.hero__detail').contentDocument?.documentElement?.animationsPaused?.());
   const svgTime = () => page.evaluate(() => document.querySelector('.hero__detail').contentDocument.documentElement.getCurrentTime());
   const stopped = await svgTime(); await page.waitForTimeout(180); assert.equal(await svgTime(), stopped);
@@ -102,8 +102,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.hero__detail').getAttribute('data').includes('static'));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.waitForFunction(() => document.querySelector('.hero__detail').contentDocument?.documentElement?.animationsPaused?.());
-  assert.equal(await page.locator('#live-effects').textContent(), 'Resume live effects');
-  await page.locator('#live-effects').click();
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); });
   await page.waitForFunction(() => !document.querySelector('.hero__detail').contentDocument.documentElement.animationsPaused());
   assert.equal(evidence.requests.filter(r => r.url.includes('/ryjl3-tyaaa-aaaaa-aaaba-cai/')).length, before);
   await page.screenshot({ timeout: 60000, path: resolve(output, 'production-planned.png') });
@@ -115,64 +114,79 @@ try {
   }
   await page.goto(`${origin}/fixture.html`);
   await page.waitForFunction(() => document.getElementById('ledger-count').textContent === '123,456,789');
-  await page.evaluate(() => {
-    globalThis.brandViolations = [];
-    const check = () => {
-      const a = document.querySelector('.hero__compact-mark'), b = document.querySelector('#hero-title');
-      const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
-      if (getComputedStyle(a).display !== 'none' && x.bottom > 0 && x.top < innerHeight && y.bottom > 0 && y.top < innerHeight) brandViolations.push({x:x.toJSON(),y:y.toJSON()});
-      if (globalThis.brandViolations) requestAnimationFrame(check);
-    }; requestAnimationFrame(check);
-  });
   await page.waitForFunction(() => document.querySelector('.hero__detail').classList.contains('hero__detail--loaded') && getComputedStyle(document.querySelector('.hero__detail')).opacity === '1');
   for (const [width, height, label] of [[1440, 900, 'desktop'], [1280, 800, 'compact-wide'], [1024, 768, 'compact'], [1000, 800, 'regression'], [844, 390, 'landscape'], [390, 844, 'phone'], [360, 640, 'small-phone'], [320, 568, 'narrow']]) {
     await page.setViewportSize({ width, height });
     const bounds = await page.locator('.ledger-stat').boundingBox();
     console.log(label, bounds);
-    assert.ok(bounds.y >= height * .4, `${label}: statistic too high`);
+    const compact = width <= 1300 || width <= height;
+    const artView = compact ? Math.min(height, width * 941 / (1672 * .7)) : height;
+    assert.ok(bounds.y >= artView * .35, `${label}: statistic too high`);
     if (height >= 640 || label === 'landscape') assert.ok(bounds.y + bounds.height <= height + 100, `${label}: statistic too far below first view`);
     await assertBranding(page);
     const geometry = await page.evaluate(() => {
       const stat = document.querySelector('.ledger-stat'), fact = document.querySelector('.hero__facts p:last-child');
       const a = stat.getBoundingClientRect(), b = fact.getBoundingClientRect(), style = getComputedStyle(stat);
-      return { right: a.right, factRight: b.right, gap: b.top - a.bottom, border: style.borderTopWidth, background: style.backgroundColor };
+      const art = document.querySelector('.hero__art').getBoundingClientRect(), body = document.querySelector('.hero__body').getBoundingClientRect();
+      return { right: a.right, factRight: b.right, gap: b.top - a.bottom, border: style.borderTopWidth, background: style.backgroundColor, artBottom: art.bottom, bodyTop: body.top, factTop: b.top };
     });
     assert.equal(geometry.border, '0px'); assert.equal(geometry.background, 'rgba(0, 0, 0, 0)');
-    assert.ok(Math.abs(geometry.right - geometry.factRight) < 2); assert.ok(geometry.gap >= 0 && geometry.gap < 160);
+    assert.ok(Math.abs(geometry.right - geometry.factRight) < 2);
+    if (compact) {
+      assert.ok(geometry.bodyTop >= geometry.artBottom, `${label}: full text overlays artwork`);
+      assert.ok(geometry.factTop >= geometry.artBottom, `${label}: facts overlay artwork`);
+      assert.ok(bounds.y + bounds.height <= artView + 1, `${label}: count left artwork’s first view`);
+    } else assert.ok(geometry.gap >= 0 && geometry.gap < 160);
     evidence.fixtures[label] = { bounds, geometry };
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ timeout: 60000, path: resolve(output, `${label}.png`) }); evidence.screenshots.push(`${label}.png`);
   }
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  assert.equal((await assertBranding(page)).compact, true);
+  await page.waitForFunction(() => scrollY === 0 && getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  const shown = await assertBranding(page); assert.equal(shown.compact, true, JSON.stringify(shown));
   await page.locator('.hero__compact-mark').focus();
-  await page.keyboard.press('Enter'); await page.waitForTimeout(600); await assertBranding(page);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
+  const anchored = await assertBranding(page); assert.equal(anchored.heading, true); assert.equal(anchored.compact, false);
   await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().top + scrollY - innerHeight + .5, behavior: 'instant' }));
-  assert.equal((await assertBranding(page)).compact, false);
-  assert.equal(await page.locator('.hero__compact-mark').evaluate(n => n === document.activeElement), false);
+  assert.equal((await assertBranding(page)).display, 'none');
+  assert.equal(await page.locator('.hero__compact-mark').getAttribute('href'), '#hero-title');
   await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().bottom + scrollY + 30, behavior: 'instant' }));
   await assertBranding(page);
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  assert.equal((await assertBranding(page)).compact, true);
+  await page.waitForFunction(() => scrollY === 0 && getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  const returned = await assertBranding(page); assert.equal(returned.compact, true, JSON.stringify(returned));
   for (const size of [{width:1000,height:800},{width:390,height:844},{width:1024,height:768},{width:844,height:390}]) {
     await page.setViewportSize(size); await assertBranding(page);
   }
-  await page.locator('summary').click(); await assertBranding(page);
-  // Expanded native disclosure must push the title down in short landscape, never overlap it.
+  await assertBranding(page);
+  // A layout change within the SAME eligible media condition must also hide EVH.
+  await page.setViewportSize({ width: 1000, height: 830 });
+  await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  await page.evaluate(() => { document.querySelector('.hero__body').style.marginTop = '-8rem'; });
+  const reflowed = await assertBranding(page); assert.equal(reflowed.eligible, true); assert.equal(reflowed.heading, true); assert.equal(reflowed.compact, false);
+  await page.screenshot({ path: resolve(output, 'same-media-reflow.png') });
+  await page.evaluate(() => { document.querySelector('.hero__body').style.marginTop = ''; });
+  // Tall viewports can show the full heading; the compact title must stay absent.
+  await page.setViewportSize({ width: 1000, height: 1000 });
+  await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
+  const tall = await assertBranding(page); assert.equal(tall.heading, true); assert.equal(tall.compact, false);
+  await page.screenshot({ path: resolve(output, 'tall-title.png') });
+  // Zoom/text reflow must not move any full text back over the artwork.
   assert.equal(await page.evaluate(() => document.querySelector('.hero__bottom').getBoundingClientRect().bottom <= document.querySelector('.hero__body').getBoundingClientRect().top), true);
-  await page.locator('summary').click();
   await page.setViewportSize({width:1440,height:900});
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
-  assert.deepEqual(await page.evaluate(() => brandViolations), []);
-  await page.evaluate(() => { globalThis.brandViolations = null; });
-  assert.equal(await page.locator('#ledger-rate').textContent(), '');
-  await page.evaluate(async () => { counterFixture.sample('123456999'); await counterFixture.time.tick(2000); counterFixture.time.frame(9500); });
+  assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
+  await page.evaluate(async () => { counterFixture.sample('123456999'); await counterFixture.time.tick(3000); });
+  assert.equal(await page.locator('#ledger-rate').textContent(), '70.0 tx/s');
+  await page.evaluate(() => counterFixture.time.frame(10500));
   assert.equal(await page.locator('#ledger-count').textContent(), '123,456,894');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'interpolating.png') });
-  await page.evaluate(async () => { await counterFixture.time.tick(7500); counterFixture.time.frame(17000); });
+  await page.evaluate(async () => { await counterFixture.time.tick(7500); counterFixture.time.frame(18000); });
   assert.equal(await page.locator('#ledger-count').textContent(), '123,456,999');
-  assert.equal(await page.locator('#ledger-rate').textContent(), '(~12.4 tx/s)');
+  assert.equal(await page.locator('#ledger-rate').textContent(), '11.7 tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'nonzero-rate.png') });
   for (const [width,height,label] of [[1440,900,'desktop'],[1280,800,'compact-wide'],[1024,768,'compact'],[1000,800,'regression'],[844,390,'landscape'],[390,844,'phone'],[360,640,'small-phone'],[320,568,'narrow']]) {
     await page.setViewportSize({width,height});
@@ -188,34 +202,32 @@ try {
   }
   await page.setViewportSize({width:1440,height:900});
   await page.evaluate(async () => { await counterFixture.time.tick(60000); counterFixture.time.frame(); });
-  assert.equal(await page.locator('#ledger-rate').textContent(), '(~0 tx/s)');
+  assert.equal(await page.locator('#ledger-rate').textContent(), '0 tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'zero-rate.png') });
   await page.evaluate(async () => { counterFixture.sample('123457000'); await counterFixture.time.tick(15000); });
-  assert.equal(await page.locator('#ledger-rate').textContent(), '(~<0.1 tx/s)');
+  assert.equal(await page.locator('#ledger-rate').textContent(), '<0.1 tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'small-rate.png') });
   await page.evaluate(() => counterFixture.fail(true));
   await page.evaluate(async () => { await counterFixture.time.tick(45000); });
   assert.match(await page.locator('#ledger-status').textContent(), /delayed/);
-  assert.equal(await page.locator('#ledger-rate').textContent(), '');
+  assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'delayed.png') });
-  await page.locator('#live-effects').click();
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
   const frozen = await page.locator('#ledger-count').textContent();
-  assert.equal(await page.locator('#ledger-rate').textContent(), '');
+  assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'paused.png') });
   await page.evaluate(async () => { counterFixture.fail(false); counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'); await counterFixture.time.tick(120000); });
   assert.equal(await page.locator('#ledger-count').textContent(), frozen);
   // Long totals are generic-only; use the actual generic DOM integration below.
   await page.selectOption('#instance', 'generic-fixture');
   await page.evaluate(() => counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'));
-  await page.locator('#live-effects').click(); await page.evaluate(() => counterFixture.flush());
+  await page.evaluate(async () => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); await counterFixture.flush(); });
   assert.equal(await page.locator('#ledger-count').textContent(), '999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'long-value.png') });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForFunction(() => document.getElementById('ledger-status').textContent === 'Periodically refreshed');
   await page.screenshot({ timeout: 60000,path:resolve(output, 'reduced-motion.png')});
-  await page.locator('summary').focus(); await page.keyboard.press('Enter');
-  assert.equal(await page.locator('details').getAttribute('open'), '');
-  await page.keyboard.press('Tab'); assert.equal(await page.locator('#live-effects').evaluate(n => n === document.activeElement), true);
+  assert.equal(await page.locator('#live-effects').count(), 0);
   const snapshot = await page.locator('.ledger-stat').ariaSnapshot();
   await writeFile(resolve(output, 'accessibility.yml'), snapshot);
   assert.ok(snapshot.includes('999,999,999')); assert.equal(snapshot.match(/\(latest retrieved total\)/g).length, 1);
@@ -243,7 +255,7 @@ try {
   await page.evaluate(() => counterFixture.dispose());
   const pending = await page.evaluate(() => ({ timers: counterFixture.time.timers.size, frames: counterFixture.time.frames.size }));
   assert.deepEqual(pending, { timers: 0, frames: 0 });
-  evidence.fixtures = { ...evidence.fixtures, injectedQueries: true, interpolation: true, unchangedHold: true, delayed: true, pauseResume: true,
+  evidence.fixtures = { ...evidence.fixtures, injectedQueries: true, interpolation: true, unchangedHold: true, delayed: true, hiddenResume: true,
     reducedMotion: true, simulatedVisibilityReturn: true, rapidSelection: true, keyboard: true, accessibleExactSampleOnce: true, cleanup: pending };
   assert.equal(evidence.console.filter(e => e.type === 'pageerror').length, 0);
   assert.equal(evidence.console.filter(e => /Content Security Policy|violates.*directive/.test(e.text)).length, 0);

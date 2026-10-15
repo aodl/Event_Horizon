@@ -4,8 +4,10 @@ import { recentRate, retainRateSamples, RATE_MAX_SAMPLES, createLedgerCounter } 
 import { INSTANCES } from '../public/instances.js';
 import { clock, flush } from './counter-clock.mjs';
 const pair = (delta, at = 15000, base = 1n << 100n) => [{ total: base, at: 0 }, { total: base + delta, at }];
-test('rate needs 15 seconds; exact BigInt deltas, zero, tiny positive, rounded and grouped rates', () => {
-  assert.equal(recentRate([]), null); assert.equal(recentRate(pair(10n, 2000)), null);
+test('rate needs 3 seconds; exact BigInt deltas, zero, tiny positive, rounded and grouped rates', () => {
+  assert.equal(recentRate([]), null); assert.equal(recentRate(pair(10n, 2999)), null);
+  assert.equal(recentRate(pair(6n, 3000)).text, '2.0');
+  assert.equal(recentRate(pair(0n, 3000)).text, '0');
   for (const base of [0n, 1n << 53n, 1n << 64n, 1n << 200n]) {
     assert.equal(recentRate(pair(24n, 15000, base)).text, '1.6');
     assert.equal(recentRate(pair(0n, 15000, base)).text, '0');
@@ -34,20 +36,22 @@ function fixture() {
 }
 test('rate only changes on accepted samples, never animation frames; no new polls', async () => {
   const f = fixture(); f.select(INSTANCES[0]); await flush(); assert.equal(f.last().rate, null);
-  f.total(104n); await f.time.tick(2000); assert.equal(f.last().rate, null);
-  f.total(134n); await f.time.tick(15000); assert.equal(f.last().rate.text, '2.0');
+  f.total(106n); await f.time.tick(2999); assert.equal(f.last().rate, null); assert.equal(f.calls(), 1);
+  await f.time.tick(1); assert.equal(f.last().rate.text, '2.0'); assert.equal(f.calls(), 2);
+  f.total(136n); await f.time.tick(15000); assert.equal(f.last().rate.text, '2.0');
   const rate = f.last().rate; f.time.frame(20000); f.time.frame(21000); assert.equal(f.last().rate, rate); assert.equal(f.calls(), 3);
   f.dispose(); assert.equal(f.time.timers.size, 0);
 });
-for (const lifecycle of ['paused', 'hidden']) test(`rate invalidates on ${lifecycle}, direct resume and fresh history`, async () => {
-  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(17000); assert.equal(f.last().rate.text, '0');
-  f.setLifecycle({ [lifecycle]: true }); assert.equal(f.last().rate, null); const calls = f.calls();
+for (const lifecycle of ['hidden']) test(`rate survives ${lifecycle}, direct resume uses fresh history`, async () => {
+  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(18000); assert.equal(f.last().rate.text, '0');
+  const held = f.last().rate;
+  f.setLifecycle({ [lifecycle]: true }); assert.equal(f.last().rate, held); assert.equal(f.last().rateIsLastKnown, true); const calls = f.calls();
   await f.time.tick(100000); assert.equal(f.calls(), calls);
-  f.setLifecycle({ [lifecycle]: false }); await flush(); assert.equal(f.last().rate, null);
-  await f.time.tick(17000); assert.equal(f.last().rate.text, '0'); f.dispose();
+  f.setLifecycle({ [lifecycle]: false }); await flush(); assert.equal(f.last().rate, held); assert.equal(f.last().rateIsLastKnown, true);
+  f.total(136n); await f.time.tick(18000); assert.equal(f.last().rate.text, '2.0'); assert.equal(f.last().rateIsLastKnown, false); f.dispose();
 });
 test('failure, timeout/backoff, lower replies, delayed data and recovery never retain old rate', async () => {
-  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(17000); assert.ok(f.last().rate);
+  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(18000); assert.ok(f.last().rate);
   f.total(99n); await f.time.tick(15000); assert.equal(f.last().rate, null); assert.equal(f.last().accepted, 100n);
   await f.time.tick(30000); await f.time.tick(60000); assert.equal(f.last().status, 'inconsistent'); assert.equal(f.last().rate, null);
   f.total(100n); await f.time.tick(120000); assert.equal(f.last().rate, null);
@@ -55,9 +59,9 @@ test('failure, timeout/backoff, lower replies, delayed data and recovery never r
   f.fail(true); await f.time.tick(15000); assert.equal(f.last().rate, null); await f.time.tick(30000); assert.equal(f.last().status, 'delayed'); f.dispose();
 });
 test('reduced motion keeps sampled rate; every selection and mismatch clears rate independently of high-water', async () => {
-  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(17000); f.setLifecycle({ reduced: true }); assert.equal(f.last().rate.text, '0');
+  const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(18000); f.setLifecycle({ reduced: true }); assert.equal(f.last().rate.text, '0');
   f.select({ ...INSTANCES[0], id: 'same-ledger-new-selection' }); assert.equal(f.last().rate, null); await flush();
-  await f.time.tick(17000); assert.ok(f.last().rate); f.configurationMismatch(); assert.equal(f.last().rate, null);
+  await f.time.tick(18000); assert.ok(f.last().rate); f.configurationMismatch(); assert.equal(f.last().rate, null);
   f.select(INSTANCES[1]); assert.equal(f.last().rate, null); f.dispose();
 });
 
@@ -66,8 +70,8 @@ test('hung request deadline and late success cannot restore a retired rate', asy
   const c = createLedgerCounter({ ...time, render: s => states.push(s), query: async () => {
     if (hung) return new Promise(r => { resolve = r; }); return 100n;
   } });
-  c.select(INSTANCES[0]); await flush(); await time.tick(17000); assert.ok(states.at(-1).rate);
+  c.select(INSTANCES[0]); await flush(); await time.tick(18000); assert.ok(states.at(-1).rate);
   hung = true; await time.tick(25000); assert.equal(states.at(-1).rate, null); assert.equal(states.at(-1).status, 'retrying');
-  c.setLifecycle({ paused: true }); resolve(200n); await flush(); assert.equal(states.at(-1).rate, null);
+  c.setLifecycle({ hidden: true }); resolve(200n); await flush(); assert.equal(states.at(-1).rate, null);
   assert.equal(states.at(-1).accepted, 100n); c.dispose();
 });

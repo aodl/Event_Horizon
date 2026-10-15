@@ -251,7 +251,7 @@ assert 'id="ledger-count"' in frontend_index
 assert 'id="ledger-rate"' in frontend_index
 assert 'id="ledger-rate-description"' in frontend_index
 assert 'ICP ledger transactions' in frontend_index
-assert 'id="live-effects" type="button"' in frontend_index
+assert 'id="live-effects"' not in frontend_index
 counter_client=(root/'canisters/frontend/public/ledger-counter-client.js').read_text()
 for marker in ['fetchRootKey', 'verifyQuerySignatures: false', 'shouldFetchRootKey', 'localStorage']:
     assert marker not in counter_client, f'counter client contains forbidden marker {marker}'

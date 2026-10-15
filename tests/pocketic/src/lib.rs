@@ -6207,7 +6207,7 @@ mod tests {
         assert!(html.contains("id=\"ledger-rate\""));
         assert!(html.contains("id=\"ledger-rate-description\""));
         assert!(html.contains("ICP ledger transactions"));
-        assert!(html.contains("id=\"live-effects\""));
+        assert!(!html.contains("id=\"live-effects\""));
         assert!(!html.contains("href=\"styles.css\""));
         assert!(!html.contains("src=\"app.bundle.js\""));
 

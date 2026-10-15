@@ -373,37 +373,53 @@ force; static frontend certification does not certify the runtime total.
 
 ### Hero branding and sampled ledger-history rate
 
-The compact `EVH.` link defaults to hidden and may appear only in an eligible
-compact landscape while the actual full `#hero-title` lies entirely below the
-viewport. Any visible part of the heading hides it; leaving upward must not
-resurrect it. Width/aspect ratio alone is insufficient after shortened hero
-padding or counter reflow. Viewport observation, resize/zoom/reflow handling,
-fail-closed initialization and teardown must enforce this invariant. Hidden
-branding is absent from keyboard, pointer and accessibility interaction.
+On compact layouts (maximum width 81.25rem or aspect ratio at most 1/1),
+reserve the cropped SVG's full aspect-ratio height before the full heading,
+lead, memo CTA and facts. These texts must not overlay the artwork. The ledger
+statistic is the sole content exception: keep it unboxed and right aligned in
+the artwork's lower-right first-view area, independently of the main text.
+Long values/errors may expand the region to preserve readable nonoverlapping flow.
+Wide desktop keeps its existing title/artwork composition and statistic near fact 04.
 
-The single ledger statistic is unboxed hero typography, right aligned near and
-above fact **04 Powered by Internet Computer Protocol**. Its label precedes the
-large grouped total; a subdued approximate rate sits adjacent or wraps directly
-below. Preserve readable scrolling, artwork, facts, focus order and controls on
-short/zoomed screens. A short-landscape hero region may place the statistic and
-facts before the below-fold title visually; it must expand without overlap and
-must never become a persistent fixed/sticky overlay.
+The small `EVH.` link fits the artwork's dark corner on eligible compact
+landscape layouts (maximum width 81.25rem and minimum aspect ratio 6/5).
+It defaults hidden and may appear only while the actual full heading lies
+entirely below the viewport. Hide it as soon as any full-heading text becomes
+visible; do not resurrect it when the heading leaves above the viewport.
+The compact label exists because the large title would cover important artwork;
+viewport width/aspect alone does not establish title visibility on tall or zoomed
+screens. A viewport observer plus initial geometry check, resize/reflow/scroll
+handling and cleanup must enforce this rule. Fail closed if observation cannot
+be established. Hidden branding must not be focusable or clickable. Preserve
+the title anchor and the existing `EVH.` spelling. Source comments and browser
+regressions must preserve both the art-first layout and no-duplicate-title rule.
+
+The label precedes the large grouped count; the subdued rate is to its left,
+without brackets or a tilde, and may wrap on narrow screens. Routine refresh and
+About copy are hidden visually, with an accessible explanation and no manual
+pause control. Failure/delayed warnings stay visible. No viewport-fixed or sticky
+statistic is allowed; scrolling and text zoom must remain readable.
 
 The rate is recent average growth of accepted ledger-history totals, not
 instantaneous TPS, animation speed, Event Horizon throughput or all Internet
 Computer activity. Use only existing successful browser-ledger samples and
 actual monotonic receipt intervals: BigInt count delta divided by elapsed time.
-Retain at most 32 samples from the latest 60 seconds; require at least 15 seconds
-between oldest and newest samples. Before then withhold the rate. Equal totals
+Retain at most 32 samples from the latest 60 seconds; require at least 3 seconds
+between oldest and newest samples. Before then show `— tx/s` (or `— records/s`) rather than a numeric rate. Keep this placeholder visible while a supported counter is delayed or retrying; planned, unsupported and configuration-mismatched selections omit the rate. Equal totals
 over a valid span yield zero. Use grouped, rounded one-decimal approximations;
 a positive rate below 0.1 must say `<0.1`, never a false zero. ICP uses `tx/s`;
 generic ICRC-3 uses `records/s`. Never derive a rate from animated values, add
 queries/timers, persist samples or convert totals/deltas to floating point.
 
-Selection, configuration mismatch, pause/hidden suspension, failed/lower replies,
+
+The first rate may use the short three-second warm-up span and is correspondingly noisy; subsequent samples grow the averaging span toward the existing one-minute window. The three-second wait starts after the first accepted response; network latency can delay availability. Steady polling remains 15 seconds after attempt completion.
+
+Selection, configuration mismatch, hidden suspension, failed/lower replies,
 delayed data and disposal invalidate rate history. Recovery/resume requires new
 samples; retain the independent same-ledger high-water check. Reduced motion
 retains sampling and rate calculation with direct totals and static artwork.
+Tab suspension retains the last displayed sampled rate while resetting its receipt-sample history. On return, hold that estimate until at least 3 seconds of new accepted samples can replace it; identify the held estimate as last known in its accessible description. Hidden tabs still suspend polling and artwork. Failures, contradictory samples, freshness expiry during active sampling, and selection changes still clear the rate.
+
 Expose the exact accepted total and approximate recent-average description
 quietly, without per-frame/sample announcements. Query timing, low sampling
 frequency and replica freshness limit precision; neither rate nor total is a
@@ -418,7 +434,7 @@ lag and replica freshness limits are explained through a keyboard-accessible
 control. The numeral is not a live announcement; assistive technology receives
 the latest exact sample once.
 
-Sampling is single flight: immediately, one warm-up approximately two seconds
+Sampling is single flight: immediately, one warm-up approximately three seconds
 after the first accepted baseline, then approximately 15 seconds after each
 attempt completes. Each attempt has a ten-second deadline covering initialization
 and query transport; SDK transport retries are disabled in this client. Failures
@@ -428,15 +444,13 @@ are rejected without refreshing time or resetting backoff; three such responses
 since the last acceptance produce an explicit inconsistent-data state. A later
 nondecreasing sample recovers it.
 
-Hidden pages and the native **Pause live effects / Resume live effects** control
-suspend polling and numeric animation and retire owned requests. Selection
+Hidden pages suspend polling and numeric animation and retire owned requests. Selection
 changes clear the statistic immediately. Resuming or recovering delayed data
 establishes a direct baseline instead of animating unseen history, while
 retaining the same-ledger high-water check across suspension. Dynamic reduced
 motion shows accepted samples directly and selects static artwork, while keeping
-sampling unless paused or hidden. Artwork additionally pauses on blur; blur alone
-does not suspend ledger sampling. Manual pause takes precedence over automatic
-resume conditions. Repeated SVG loads synchronize both CSS and SVG timelines.
+sampling unless hidden. Artwork additionally pauses on blur; blur alone
+does not suspend ledger sampling. There is no manual pause control. Repeated SVG loads synchronize both CSS and SVG timelines.
 
 The counter starts from the reviewed registry independently of pricing. Positive
 configuration mismatch disables it without following an unexpected principal.

@@ -11,7 +11,8 @@ export function initCompactHeading(documentRef, windowRef) {
   };
   hide();
   const media = windowRef.matchMedia?.(ELIGIBLE);
-  // Shorter hero padding and variable counter height can reveal the heading even
+  // The compact brand fits the dark corner while the large title follows the art.
+  // Tall viewports, zoom and counter reflow can still reveal the full heading even
   // in eligible landscape layouts (also after zoom/reflow). Both brands must never
   // appear together: show EVH only while the actual heading is wholly below view.
   // Without a working viewport observer fail closed, rather than guessing geometry.
@@ -29,30 +30,33 @@ export function initCompactHeading(documentRef, windowRef) {
   };
   const schedule = () => {
     if (disposed) return;
-    hide(); // Retire a possibly stale show gate before the next layout/paint.
     if (frame === null) frame = windowRef.requestAnimationFrame(update);
   };
+  // Do not hide/show the focused anchor on every scroll event: that can interrupt
+  // its native smooth-scroll navigation. Coalesce scroll geometry; invalidate the
+  // gate immediately for layout/media changes that could expose both titles.
+  const invalidate = () => { if (!disposed) { hide(); schedule(); } };
   try {
-    observer = new windowRef.IntersectionObserver(schedule, { root: null, threshold: 0 });
+    observer = new windowRef.IntersectionObserver(invalidate, { root: null, threshold: 0 });
     observer.observe(title);
     if (windowRef.ResizeObserver) {
-      resize = new windowRef.ResizeObserver(schedule);
+      resize = new windowRef.ResizeObserver(invalidate);
       resize.observe(documentRef.querySelector('.hero'));
     }
   } catch { disposed = true; observer?.disconnect(); resize?.disconnect(); hide(); return { dispose: hide }; }
   update();
-  media.addEventListener('change', schedule);
-  windowRef.addEventListener('resize', schedule);
+  media.addEventListener('change', invalidate);
+  windowRef.addEventListener('resize', invalidate);
   windowRef.addEventListener('scroll', schedule, { passive: true });
-  windowRef.visualViewport?.addEventListener('resize', schedule);
+  windowRef.visualViewport?.addEventListener('resize', invalidate);
   windowRef.visualViewport?.addEventListener('scroll', schedule);
   return { dispose() {
     disposed = true; observer.disconnect(); resize?.disconnect(); hide();
     if (frame !== null) windowRef.cancelAnimationFrame(frame);
-    media.removeEventListener('change', schedule);
-    windowRef.removeEventListener('resize', schedule);
+    media.removeEventListener('change', invalidate);
+    windowRef.removeEventListener('resize', invalidate);
     windowRef.removeEventListener('scroll', schedule);
-    windowRef.visualViewport?.removeEventListener('resize', schedule);
+    windowRef.visualViewport?.removeEventListener('resize', invalidate);
     windowRef.visualViewport?.removeEventListener('scroll', schedule);
   } };
 }

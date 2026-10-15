@@ -1,12 +1,13 @@
 import { eligibleLedger, validateTotal } from './ledger-counter-client.js';
 
-export const COUNTER_TIMING = Object.freeze({ warmup: 2000, interval: 15000, duration: 15000,
+export const COUNTER_TIMING = Object.freeze({ warmup: 3000, interval: 15000, duration: 15000,
   deadline: 10000, backoff: 30000, maxBackoff: 120000, delayed: 45000 });
 export const formatTotal = total => total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 // Recent ledger-history growth between accepted receipts: not animation speed,
-// backend processing, or instantaneous TPS. This history never causes a query.
-export const RATE_WINDOW = 60000, RATE_MIN_SPAN = 15000, RATE_MAX_SAMPLES = 32;
+// backend processing, or instantaneous TPS. The 3s startup span is deliberately
+// short; later samples extend it toward a minute. This history never causes a query.
+export const RATE_WINDOW = 60000, RATE_MIN_SPAN = 3000, RATE_MAX_SAMPLES = 32;
 export function retainRateSamples(samples, sample) {
   if (!Number.isFinite(sample.at) || (samples.length && sample.at <= samples.at(-1).at)) return [];
   return [...samples.filter(s => sample.at - s.at <= RATE_WINDOW), sample].slice(-RATE_MAX_SAMPLES);
@@ -36,27 +37,31 @@ export function createLedgerCounter({ query, render, now = () => performance.now
   requestFrame = callback => requestAnimationFrame(callback), cancelFrame = cancelAnimationFrame,
   timing = COUNTER_TIMING,
 } = {}) {
-  let entry, generation = 0, disposed = false, paused = false, hidden = false, reduced = false;
+  let entry, generation = 0, disposed = false, hidden = false, reduced = false;
   let accepted = null, displayed = null, target = null, received = null, checked = null;
-  let samples = [], rate = null;
-  const clearRate = () => { samples = []; rate = null; };
+  let samples = [], rate = null, rateIsLastKnown = false;
+  const clearRate = () => { samples = []; rate = null; rateIsLastKnown = false; };
   let status = 'unavailable', failures = 0, lower = 0, warm = false, baseline = true;
   let poll = null, fresh = null, frame = null, active = null, animation = null;
-  const suspended = () => paused || hidden;
+  const suspended = () => hidden;
   const delayed = () => received !== null && now() - received >= timing.delayed;
   function emit() {
     if (disposed) return;
-    try { render({ entry, accepted, displayed, checked, reduced, paused, rate,
+    try { render({ entry, accepted, displayed, checked, reduced, rate, rateIsLastKnown,
       status: status === 'configuration' ? status : !eligibleLedger(entry) ? status
-        : suspended() ? (paused ? 'paused' : 'hidden')
+        : suspended() ? 'hidden'
           : lower >= 3 ? 'inconsistent' : delayed() ? 'delayed' : status });
     } catch {
       // A failed optional renderer must not leave requests or asynchronous errors.
       disposed = true; clearWork();
     }
   }
-  function clearWork() {
-    ++generation; clearRate();
+  function clearWork({ retainRate = false } = {}) {
+    ++generation;
+    // Retire transport/history on tab changes, while retaining the last displayed
+    // estimate. Fresh receipt samples must qualify before replacing that estimate.
+    if (retainRate) { samples = []; rateIsLastKnown = rate !== null; }
+    else clearRate();
     clearTimer(poll); poll = null;
     clearTimer(fresh); fresh = null;
     cancelFrame(frame); frame = null;
@@ -119,7 +124,7 @@ export function createLedgerCounter({ query, render, now = () => performance.now
         lower++;
         throw new Error('Ledger total decreased.');
       }
-      if (delayed()) clearRate();
+      if (delayed() && !rateIsLastKnown) clearRate();
       const direct = baseline || delayed() || accepted === null || reduced;
       if (direct) {
         displayed = total; target = total; animation = null;
@@ -129,7 +134,8 @@ export function createLedgerCounter({ query, render, now = () => performance.now
       }
       accepted = total; received = now(); checked = wallNow();
       samples = retainRateSamples(samples, { total, at: received });
-      rate = recentRate(samples);
+      const nextRate = recentRate(samples);
+      if (nextRate) { rate = nextRate; rateIsLastKnown = false; }
       baseline = false; failures = 0; lower = 0; status = 'current';
       scheduleFresh(); emit(); animate();
     }).catch(() => {
@@ -163,7 +169,6 @@ export function createLedgerCounter({ query, render, now = () => performance.now
     setLifecycle(next = {}) {
       if (disposed) return;
       const was = suspended();
-      if ('paused' in next) paused = Boolean(next.paused);
       if ('hidden' in next) hidden = Boolean(next.hidden);
       if ('reduced' in next && reduced !== Boolean(next.reduced)) {
         reduced = Boolean(next.reduced);
@@ -172,7 +177,7 @@ export function createLedgerCounter({ query, render, now = () => performance.now
         }
       }
       if (was !== suspended()) {
-        clearWork(); baseline = true;
+        clearWork({ retainRate: true }); baseline = true;
         if (!suspended()) { warm = false; scheduleFresh(); attempt(); }
       }
       emit();

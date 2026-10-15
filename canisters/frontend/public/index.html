@@ -59,7 +59,7 @@
         data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>
     </div>
 
-    <!-- Width/aspect alone is insufficient after shortened padding/counter reflow: the observer must prevent two visible brand titles. -->
+    <!-- The compact EVH. fits the artwork’s dark corner when the full title is below it. Never show both titles in the viewport; geometry/observation gates the link. -->
     <a class="hero__compact-mark" href="#hero-title" aria-label="Jump to the Event Horizon title">EVH.</a>
 
     <div class="hero__body">
@@ -70,27 +70,27 @@
     </div>
 
     <div class="hero__bottom">
-    <!-- Unboxed lower-right typography aligned near fact 04, without branding/artwork overlap. -->
-    <section class="ledger-stat" aria-labelledby="ledger-label">
+    <!-- Compact layouts reserve the artwork before the body; this separate region
+         keeps only the ledger statistic over the art, not the title or facts. -->
+    <div class="hero__stat-region">
+    <section class="ledger-stat" aria-labelledby="ledger-label" aria-describedby="ledger-explanation">
       <h2 id="ledger-label">ICP ledger transactions</h2>
       <div class="ledger-stat__reading">
+        <span id="ledger-rate" aria-hidden="true">— tx/s</span>
         <p id="ledger-count" class="ledger-stat__number" aria-hidden="true">—</p>
-        <span id="ledger-rate" aria-hidden="true"></span>
       </div>
       <p id="ledger-rate-description" class="visually-hidden">Recent average rate unavailable.</p>
       <p id="ledger-sample" class="visually-hidden">ICP ledger transactions: unavailable</p>
-      <p id="ledger-status">Ledger count requires JavaScript and an available ledger.</p>
-      <div class="ledger-stat__controls">
-        <details>
-          <summary>About this count</summary>
+      <p id="ledger-status" hidden></p>
+      <noscript><p>Ledger count requires JavaScript and an available ledger.</p></noscript>
+        <div class="visually-hidden" id="ledger-explanation">
           <p id="ledger-checked"></p>
           <p>Total transactions or records reported by the selected ledger, including history before Event Horizon. This is not a count of Event Horizon processing or notifications, or an indication that it is caught up or polling.</p>
           <p>The display is periodically refreshed and may lag the latest retrieved total while smoothing. Reduced motion shows samples directly. Last checked is the time of an accepted response; it does not prove the responding replica had the freshest state. Runtime totals are separate from frontend asset certification.</p>
-          <p>The approximate recent-average rate uses changes in accepted ledger totals over at least 15 seconds, retaining roughly the last minute of samples. It is not instantaneous network TPS, animation speed or Event Horizon throughput. Query latency and replica freshness limit precision; no additional requests are made for the rate.</p>
-        </details>
-        <button id="live-effects" type="button" aria-pressed="false" hidden>Pause live effects</button>
-      </div>
+          <p>The approximate recent-average rate uses changes in accepted ledger totals over at least 3 seconds, retaining roughly the last minute of samples. It is not instantaneous network TPS, animation speed or Event Horizon throughput. Query latency and replica freshness limit precision; no additional requests are made for the rate.</p>
+        </div>
     </section>
+    </div>
 
     <div class="hero__facts" aria-label="Protocol summary">
       <p><span>01</span>Open Source &amp; Verifiable</p>

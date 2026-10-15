@@ -37,3 +37,11 @@ test('missing/broken observer fails closed; disposal removes observers, frames/l
   assert.equal(f.time.frames.size, 0);
   for (const target of [f.win, f.media, f.win.visualViewport]) for (const listeners of target.listeners.values()) assert.equal(listeners.size, 0);
 });
+
+test('scrolling toward the anchor preserves focus while the full title is still below view', () => {
+  const f = fixture(); f.doc.activeElement = f.mark;
+  f.win.dispatch('scroll'); assert.equal(f.doc.activeElement, f.mark);
+  f.time.frame(); assert.equal(f.visible(), true); assert.equal(f.doc.activeElement, f.mark);
+  f.setTop(799); f.win.dispatch('scroll'); f.time.frame();
+  assert.equal(f.visible(), false); assert.equal(f.doc.activeElement, null); f.dispose();
+});

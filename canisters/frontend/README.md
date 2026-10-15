@@ -86,7 +86,7 @@ Unsupported calls and malformed or decreasing totals become component failures.
 | Setting | Default |
 | --- | --- |
 | First sample | Immediately |
-| One warm-up | 2 seconds after the first accepted baseline |
+| One warm-up | 3 seconds after the first accepted baseline |
 | Steady sample | 15 seconds after the previous attempt finishes |
 | Linear interpolation | 15 seconds |
 | Logical attempt deadline, including initialization | 10 seconds |
@@ -107,12 +107,11 @@ last known number and timestamp; stale status has its own timer. A lower sample
 never silently becomes an accepted high-water value. A later nondecreasing reply
 can recover. After a delayed episode or suspension the next sample is direct.
 
-The native **Pause live effects** button freezes numbers and polling and pauses
-both CSS animation and the artwork's SVG timeline. Hidden pages also suspend;
-visible but unfocused pages keep ledger sampling while artwork pauses. Resuming
-coalesces events into one refresh. Dynamic reduced motion shows direct samples
-with **Periodically refreshed** copy and static artwork. Removing it never
-cancels manual pause. Repeated object loads honor the current pause state. The
+Hidden pages suspend numeric updates and polling and pause both CSS animation
+and the artwork's SVG timeline. Visible but unfocused pages keep ledger sampling
+while artwork pauses. Resuming coalesces events into one refresh. Dynamic reduced
+motion shows direct samples and static artwork. There is no manual pause button
+or manual-pause state. Repeated object loads honor automatic suspension. The
 visual numeral is hidden from the accessibility tree; a quiet text alternative
 exposes the latest exact sampled total. No samples or totals are persisted.
 
@@ -136,29 +135,44 @@ limitations, see [testing](../../docs/development/testing.md) and the
 
 ## Hero branding and sampled recent rate
 
-The statistic is a single unboxed, lower-right typographic group immediately
-above/near fact 04. Rate and count may wrap; disclosures and long values expand
-flow. Short landscape uses a hero-scoped first region for statistic/facts, with
-the full heading below. The `EVH.` shortcut defaults hidden. An eligible
-width/aspect condition is necessary but insufficient: viewport observation must
-prove the actual heading is wholly below view. Any partial heading visibility,
-scrolling above view, portrait/zoom/resize or reflow hides it. Missing/broken
-IntersectionObserver fails closed; teardown removes observers and listeners.
+The compact hero restores the art-first spacing used before the counter
+(`41e088f`, following the layout in `63c4022`): the full heading, lead, CTA and
+facts follow the cropped SVG's complete height. Only the ledger statistic stays
+in its own lower-right artwork region, capped to the first viewport when the
+art is taller. Its label, left-hand unbracketed rate and right-aligned count stay
+unboxed; long/error content expands the row rather than overlapping the body.
+Wide desktop keeps its title/artwork composition and proximity to fact 04.
 
-`(~n tx/s)` is sampled recent-average growth in the same canonical ICP ledger's
+The `EVH.` shortcut fits the dark corner in compact landscape while the large
+heading would obscure the artwork. Show it only if the full heading is actually
+wholly below the viewport; hide it on any partial heading visibility or when
+it leaves upward. Tall screens, scrolling, text zoom and reflow make the media
+condition alone insufficient. The link defaults hidden, uses viewport observation
+and an initial geometry check, and fails closed without observation. Cleanup
+removes observers/listeners/frames. Keep the comments and browser regression
+checks when changing hero spacing; never show both titles simultaneously.
+
+Routine status and About copy stay visually hidden; the description remains
+accessible. Errors remain visible. There is no manual pause control.
+
+`n tx/s` is sampled recent-average growth in the same canonical ICP ledger's
 historical transaction total, not backend processing, animation speed or
 instantaneous network TPS. Generic ICRC-3 entries use `records/s`. The controller
 retains up to 32 accepted receipt samples from the last 60 seconds and requires
-at least 15 seconds between oldest and newest. The 2-second warm-up alone gives
-no rate. Actual monotonic receipt spacing supplies the denominator; BigInt
+at least 3 seconds between oldest and newest. Before the 3-second warm-up supplies a qualifying second sample, show
+an unavailable-rate placeholder (`— tx/s` or `— records/s`). The placeholder also remains visible during delay and retry; planned, unsupported and configuration-mismatched selections omit it. Actual monotonic receipt spacing supplies the denominator; BigInt
 fixed-point arithmetic preserves huge deltas. Rates round to one decimal; zero
 is genuine and positive rates below 0.1 say `<0.1`. No extra request or timer is
 introduced. Quiet accepted totals eventually give zero, not extrapolation.
 
-Failures, lower replies, delayed data, selection/mismatch, pause, hiding and
-disposal clear the rate history. Resume/recovery needs a fresh baseline and
+Failures, lower replies, delayed data, selection/mismatch and
+disposal clear the rate. Hiding clears only the sample history and holds the displayed estimate. Resume/recovery needs a fresh baseline and
 qualifying span. Reduced motion still samples rates but displays totals directly.
-The rate is not live-announced. Existing immediate/2-second warm-up/15-second
+The rate is not live-announced. Existing immediate/3-second warm-up/15-second
 steady sampling, 10-second deadline, 30/60/120-second backoff and 45-second delayed
-threshold remain unchanged. The disclosure explains smoothing lag and runtime
+threshold remain unchanged. The screen-reader description explains smoothing lag and runtime
 trust: static asset certification does not certify queried totals or rates.
+
+Tab suspension retains the last displayed sampled rate while resetting its receipt-sample history. On return, hold that estimate until at least 3 seconds of new accepted samples can replace it; identify the held estimate as last known in its accessible description. Hidden tabs still suspend polling and artwork. Failures, contradictory samples, freshness expiry during active sampling, and selection changes still clear the rate.
+
+The first rate may use the short three-second warm-up span and is correspondingly noisy; subsequent samples grow the averaging span toward the existing one-minute window. The three-second wait starts after the first accepted response; network latency can delay availability. Steady polling remains 15 seconds after attempt completion.
