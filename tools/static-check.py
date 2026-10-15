@@ -264,7 +264,7 @@ assert '<link rel="preload"' not in frontend_index
 assert '<object class="hero__detail" type="image/svg+xml" aria-hidden="true" data="/event-horizon.svg"' in frontend_index
 assert 'data-animated-src="/event-horizon.svg" data-static-src="/event-horizon-static.svg"></object>' in frontend_index
 assert 'event_horizon_animated.svg' not in frontend_index
-assert 'Event-driven infrastructure that notifies canisters about relevant transactions' in frontend_index
+assert 'Notifies event-driven subscriber canisters about relevant transactions' in frontend_index
 assert '<a class="hero__compact-mark" href="#hero-title" aria-label="Jump to the Event Horizon title">EVH.</a>' in frontend_index
 assert '<a class="wordmark" href="#hero-title" aria-label="Jump to the Event Horizon title">EVH<span class="wordmark__dot">.</span></a>' in frontend_index
 assert '<h1 id="hero-title"><span>Event</span><span>Horizon</span></h1>' in frontend_index
