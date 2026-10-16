@@ -1,7 +1,9 @@
 import { eligibleLedger, validateTotal } from './ledger-counter-client.js';
 
 export const COUNTER_TIMING = Object.freeze({ warmup: 3000, interval: 15000, duration: 15000,
-  deadline: 10000, backoff: 30000, maxBackoff: 120000, delayed: 45000 });
+  // Slow responses and isolated refresh failures are ordinary browser-network events.
+  // Keep transport bounded, but allow recovery before showing a delayed-data notice.
+  deadline: 30000, backoff: 30000, maxBackoff: 120000, delayed: 180000 });
 export const formatTotal = total => total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 // Recent ledger-history growth between accepted receipts: not animation speed,

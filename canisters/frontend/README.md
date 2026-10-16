@@ -130,9 +130,9 @@ Unsupported calls and malformed or decreasing totals become component failures.
 | One warm-up | 3 seconds after the first accepted baseline |
 | Steady sample | 15 seconds after the previous attempt finishes |
 | Linear interpolation | 15 seconds |
-| Logical attempt deadline, including initialization | 10 seconds |
+| Logical attempt deadline, including initialization | 30 seconds |
 | Failure retry | 30, 60, then at most 120 seconds |
-| Delayed indication | 45 seconds without an accepted sample |
+| Delayed indication | 3 minutes without an accepted sample |
 | Inconsistent indication | Three lower responses since acceptance |
 
 `ledger-counter.js` separates accepted total, displayed integer, target,
@@ -144,7 +144,12 @@ preserves every integer; long values wrap rather than overflow or truncate.
 
 The visible explanation describes smoothing lag and that **Last checked** means
 accepted-response time, not proof of freshest replica state. Failures retain the
-last known number and timestamp; stale status has its own timer. A lower sample
+last known number and timestamp; stale status has its own timer. An established
+count retries quietly through isolated failures; only a sustained three-minute
+gap shows the delayed-data notice. Contradictory responses and configuration
+mismatches retain their explicit indications. A permanent two-line notice slot
+prevents status appearance/recovery from moving the bottom-aligned count and
+label; unusually large text can still reflow normally. A lower sample
 never silently becomes an accepted high-water value. A later nondecreasing reply
 can recover. After a delayed episode or suspension the next sample is direct.
 

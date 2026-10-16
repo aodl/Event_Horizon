@@ -84,11 +84,23 @@ test('early retarget, clock reversal and stalled frames preserve the invariant',
 
 test('single flight includes hung query and timeout retires it with bounded backoff', async () => {
   const pending = deferred(); const f = fixture(() => pending.promise); f.select(live); await flush();
-  await f.time.tick(9999); assert.equal(f.calls.length, 1);
+  await f.time.tick(29999); assert.equal(f.calls.length, 1);
   await f.time.tick(1); assert.equal(f.calls[0].signal.aborted, true); assert.equal(f.last().status, 'unavailable');
   await f.time.tick(29999); assert.equal(f.calls.length, 1);
   await f.time.tick(1); assert.equal(f.calls.length, 2);
   pending.resolve(500n); await flush(); assert.equal(f.last().displayed, 500n); f.dispose();
+});
+
+test('a slow successful poll gets thirty seconds without concurrent retries or a failure state', async () => {
+  const pending = deferred(), f = fixture((_entry, _options, n) => n === 1 ? 100n : pending.promise);
+  f.select(live); await flush(); await f.time.tick(3000);
+  await f.time.tick(29999);
+  assert.equal(f.calls.length, 2); assert.equal(f.calls[1].signal.aborted, false);
+  assert.equal(f.last().status, 'current'); assert.equal(f.last().accepted, 100n);
+  pending.resolve(200n); await flush();
+  assert.equal(f.last().status, 'current'); assert.equal(f.last().accepted, 200n);
+  await f.time.tick(14999); assert.equal(f.calls.length, 2);
+  await f.time.tick(1); assert.equal(f.calls.length, 3); f.dispose();
 });
 
 test('failure backoff is 30/60/120 capped and equal success resets it', async () => {
@@ -99,11 +111,11 @@ test('failure backoff is 30/60/120 capped and equal success resets it', async ()
   fail = true; await f.time.tick(15000); const count = f.calls.length; await f.time.tick(30000); assert.equal(f.calls.length, count + 1); f.dispose();
 });
 
-test('freshness changes at 45 seconds independently of an idle numeral and recovery jumps directly', async () => {
+test('freshness allows three minutes independently of an idle numeral and recovery jumps directly', async () => {
   let fail = false, total = 100n; const f = fixture(async () => { if (fail) throw Error('offline'); return total; });
-  f.select(live); await flush(); fail = true; await f.time.tick(44999); assert.equal(f.last().status, 'retrying');
+  f.select(live); await flush(); fail = true; await f.time.tick(179999); assert.equal(f.last().status, 'retrying');
   await f.time.tick(1); assert.equal(f.last().status, 'delayed'); assert.equal(f.time.frames.size, 0);
-  fail = false; total = 10000n; await f.time.tick(48000);
+  fail = false; total = 10000n; await f.time.tick(33000);
   assert.equal(f.last().displayed, 10000n); assert.equal(f.time.frames.size, 0); f.dispose();
 });
 

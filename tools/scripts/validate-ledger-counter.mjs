@@ -9,7 +9,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/compact-title-aspect-gate/browser');
+const output = resolve(root, 'observations/ledger-counter-calm/browser');
 await mkdir(output, { recursive: true });
 const html = await readFile(resolve(root, 'canisters/frontend/public/index.html'), 'utf8');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -24,6 +24,7 @@ import { backendResult } from './canisters/frontend/test/helpers.mjs';
 import { clock, flush } from './canisters/frontend/test/counter-clock.mjs';
 const doc = globalThis.document, time = clock();
 let total = 123456789n, fail = false, calls = 0;
+let hold = false, release;
 let operatingFail = false, operatingCalls = 0;
 const operating = initOperatingStatus(doc, window, {dependencies:time, query:async () => {
   operatingCalls++; if (operatingFail) throw Error('status fixture failure');
@@ -34,12 +35,13 @@ const artwork = initHeroArtwork(doc, window);
 initHeroBackdrop(doc, window);
 const compact = initCompactHeading(doc, window);
 const counter = initLedgerCounter(doc, window, { dependencies: time,
-  query: async () => { calls++; if (fail) throw Error('fixture failure'); return total; } });
+  query: async () => { calls++; if (hold) await new Promise(resolve => {release=resolve;}); if (fail) throw Error('fixture failure'); return total; } });
 const reviewedFixture = { ...INSTANCES[0], id: 'generic-fixture', name: 'Reviewed fixture', ledgerCountSource: 'icrc3-log-length' };
 const app = createApp({ documentRef: doc, counter, operating, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10) });
 globalThis.counterFixture = { time, flush, calls: () => calls,
   operatingCalls:() => operatingCalls, operatingFail:value => {operatingFail = value;},
   sample: value => { total = BigInt(value); }, fail: value => { fail = value; },
+  hold:value => {hold=value;}, release:() => release?.(),
   dispose: () => { app.dispose(); artwork.dispose(); compact.dispose(); } };
 `, resolveDir: root }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022',
   // Suppress ONLY app.js's automatic document bootstrap in this separate harness;
@@ -235,7 +237,7 @@ try {
   assert.equal(await page.locator('#ledger-rate').textContent(), '<0.1 tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'small-rate.png') });
   await page.evaluate(() => counterFixture.fail(true));
-  await page.evaluate(async () => { await counterFixture.time.tick(45000); });
+  await page.evaluate(async () => { await counterFixture.time.tick(180000); });
   assert.match(await page.locator('#ledger-status').textContent(), /delayed/);
   assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
   await page.screenshot({ timeout: 60000, path: resolve(output, 'delayed.png') });
@@ -311,6 +313,42 @@ try {
   assert.equal(await page.locator('#operating-tier').textContent(), 'Planned');
   assert.equal(await page.locator('#operating-progress').isVisible(), false);
   evidence.fixtures.operatingStatus = {datedLiquidProgress:true, currentTotalBalance:true, responsive:true, failureIsolated:true, recovery:true, plannedNoRequests:true};
+  // Reproduce the reported jolt with the real layout and controller. Messages
+  // may appear after a sustained delay, but must never move the numeral/label.
+  evidence.fixtures.calmRefresh = [];
+  for (const [width,height] of [[1440,900],[1024,768],[873,804],[390,844],[360,640],[320,568]]) {
+    await page.setViewportSize({width,height}); await page.goto(`${origin}/fixture.html`);
+    await page.waitForFunction(() => document.getElementById('ledger-count').textContent === '123,456,789');
+    await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
+    await page.evaluate(async () => {await counterFixture.time.tick(18000);});
+    const rects = () => page.evaluate(() => ['ledger-count','ledger-label','hero-title'].map(id => {
+      const r=document.getElementById(id).getBoundingClientRect(); return {id,x:r.x,y:r.y,width:r.width,height:r.height};
+    }));
+    const baseline = await rects();
+    await page.evaluate(async () => {counterFixture.hold(true); await counterFixture.time.tick(35000);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), false);
+    assert.equal(await page.evaluate(() => counterFixture.calls()), 4);
+    assert.deepEqual(await rects(), baseline);
+    await page.evaluate(async () => {counterFixture.hold(false); counterFixture.release(); await counterFixture.flush(); counterFixture.fail(true); await counterFixture.time.tick(15000);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), false);
+    assert.deepEqual(await rects(), baseline);
+    await page.evaluate(async () => {counterFixture.fail(false); await counterFixture.time.tick(30000);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), false);
+    assert.deepEqual(await rects(), baseline);
+    await page.evaluate(async () => {counterFixture.fail(true); await counterFixture.time.tick(179999);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), false);
+    await page.evaluate(async () => {await counterFixture.time.tick(1);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), true);
+    assert.equal(await page.locator('#ledger-status').textContent(), 'Updates delayed · Showing last known total');
+    assert.deepEqual(await rects(), baseline);
+    await page.screenshot({path:resolve(output,`calm-delayed-${width}x${height}.png`)});
+    await page.evaluate(async () => {counterFixture.fail(false); await counterFixture.time.tick(45000);});
+    assert.equal(await page.locator('#ledger-status').isVisible(), false);
+    assert.deepEqual(await rects(), baseline);
+    evidence.fixtures.calmRefresh.push({width,height,stableBounds:baseline,slowPoll:true,transientQuiet:true,delayedAfterThreeMinutes:true,recovered:true});
+    await page.evaluate(() => counterFixture.dispose());
+    assert.equal(await page.evaluate(() => counterFixture.time.timers.size + counterFixture.time.frames.size), 0);
+  }
   if (process.argv.includes('--live')) {
     const liveContext = await browser.newContext();
     const livePage = await liveContext.newPage(), liveRequests = [];

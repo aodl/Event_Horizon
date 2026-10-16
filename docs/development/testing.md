@@ -201,12 +201,21 @@ check observed heading/compact visibility, dynamic scroll/resize, native anchor,
 bounded bottom-edge title peek (96px retained, 129px hidden), art-first compact text/facts, independently positioned ledger statistic, absence of the removed manual pause control, unboxed styling, fourth-fact alignment,
 overflow, rate pending/nonzero/zero/tiny values, delay/hidden suspension, long generic totals,
 reduced motion, SVG timeline/CSS pause, quiet accessibility and cleanup. Evidence
-is ignored under `observations/compact-title-aspect-gate/` (earlier evidence remains under `observations/ledger-counter-refinement/`). Browser emulation is
+is ignored under `observations/ledger-counter-calm/` (earlier evidence remains under `observations/compact-title-aspect-gate/` and `observations/ledger-counter-refinement/`). Browser emulation is
 not physical-device or cross-engine performance proof. Full `test_all` still
 runs every discovered ignored PocketIC scenario, including exact certified asset
 bytes and query-suffixed routing. See the
 [hero refinement validation report](../codex/ledger-hero-refinement-validation.md) and the
 [compact hero restoration validation](../codex/compact-hero-restoration-validation.md).
+
+The counter's calmer refresh regressions allow a successful response through
+30 seconds, keep transient retries quiet, and show a persistent delay only at
+three minutes without acceptance. The browser checks exact count, label and
+heading rectangles through a slow response, isolated failure, delayed notice
+and recovery at 1440×900, 1024×768, 873×804, 390×844, 360×640 and 320×568. The
+permanent notice slot must keep these rectangles unchanged. Transport abort,
+single flight, backoff, rate invalidation and contradictory-data checks remain
+covered by the existing deterministic suites.
 
 ## Instance operating status
 

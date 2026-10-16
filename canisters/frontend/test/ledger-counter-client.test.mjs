@@ -134,7 +134,7 @@ for (const phase of ['initialization', 'query']) test(`controller deadline cance
   }, createAgent: async options => { if (phase === 'initialization') await options.fetch('https://icp-api.io/init'); return options; },
     createActor: (_factory, { agent }) => ({ query_blocks: async () => agent.fetch('https://icp-api.io/query') }) });
   const c = createLedgerCounter({ ...t, query: client.query, render() {} }); c.select(live); await flush();
-  assert.equal(liveFetches, 1); await t.tick(10000); assert.equal(liveFetches, 0); assert.equal(requests, 1);
+  assert.equal(liveFetches, 1); await t.tick(30000); assert.equal(liveFetches, 0); assert.equal(requests, 1);
   await t.tick(30000); assert.equal(liveFetches, 1); assert.equal(requests, 2);
   c.dispose(); client.dispose(); await flush(); assert.equal(liveFetches, 0); assert.equal(t.timers.size, 0);
 });

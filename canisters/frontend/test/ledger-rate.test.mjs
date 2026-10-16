@@ -56,7 +56,7 @@ test('failure, timeout/backoff, lower replies, delayed data and recovery never r
   await f.time.tick(30000); await f.time.tick(60000); assert.equal(f.last().status, 'inconsistent'); assert.equal(f.last().rate, null);
   f.total(100n); await f.time.tick(120000); assert.equal(f.last().rate, null);
   await f.time.tick(15000); assert.equal(f.last().rate.text, '0');
-  f.fail(true); await f.time.tick(15000); assert.equal(f.last().rate, null); await f.time.tick(30000); assert.equal(f.last().status, 'delayed'); f.dispose();
+  f.fail(true); await f.time.tick(15000); assert.equal(f.last().rate, null); await f.time.tick(180000); assert.equal(f.last().status, 'delayed'); f.dispose();
 });
 test('reduced motion keeps sampled rate; every selection and mismatch clears rate independently of high-water', async () => {
   const f = fixture(); f.select(INSTANCES[0]); await flush(); await f.time.tick(18000); f.setLifecycle({ reduced: true }); assert.equal(f.last().rate.text, '0');
@@ -71,7 +71,7 @@ test('hung request deadline and late success cannot restore a retired rate', asy
     if (hung) return new Promise(r => { resolve = r; }); return 100n;
   } });
   c.select(INSTANCES[0]); await flush(); await time.tick(18000); assert.ok(states.at(-1).rate);
-  hung = true; await time.tick(25000); assert.equal(states.at(-1).rate, null); assert.equal(states.at(-1).status, 'retrying');
+  hung = true; await time.tick(45000); assert.equal(states.at(-1).rate, null); assert.equal(states.at(-1).status, 'retrying');
   c.setLifecycle({ hidden: true }); resolve(200n); await flush(); assert.equal(states.at(-1).rate, null);
   assert.equal(states.at(-1).accepted, 100n); c.dispose();
 });

@@ -91,15 +91,16 @@ export function initLedgerCounter(documentRef, windowRef, { query, dependencies 
         : `${label}: ${formatTotal(state.accepted)} (latest retrieved total)`);
       const messages = {
         loading: 'Checking selected ledger…', current: state.reduced ? 'Periodically refreshed' : 'Periodically refreshed · Smoothed display',
-        unavailable: 'Ledger count unavailable · Retrying', unsupported: 'Ledger count unavailable for this instance',
+        unavailable: 'Ledger count temporarily unavailable', unsupported: 'Ledger count unavailable for this instance',
         planned: 'Count unavailable until launch', hidden: 'Refresh suspended while hidden',
-        retrying: 'Refresh failed · Last known total · Retrying', delayed: 'Data delayed · Last known total · Retrying',
-        inconsistent: 'Inconsistent ledger responses · Last known total · Retrying',
+        retrying: 'Showing last known total', delayed: 'Updates delayed · Showing last known total',
+        inconsistent: 'Inconsistent ledger responses · Last known total',
         configuration: 'Count unavailable · Instance configuration mismatch',
       };
       write('ledger-status', messages[state.status]);
-      // Startup and tab suspension should not flash routine copy beside the total.
-      node('ledger-status').hidden = !state.entry || ['loading', 'current', 'hidden'].includes(state.status);
+      // Brief refresh failures stay quiet. A persistent delay or contradictory feed
+      // still gets a notice; its reserved slot must never jolt the bottom-aligned total.
+      node('ledger-status').hidden = !state.entry || ['loading', 'current', 'hidden', 'retrying'].includes(state.status);
       write('ledger-checked', state.checked === null ? '' : `Last checked ${new Date(state.checked).toISOString()}`);
     },
     ...dependencies,

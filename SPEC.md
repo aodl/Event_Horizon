@@ -463,7 +463,9 @@ regressions must preserve both the art-first layout and bounded bottom-edge titl
 The label precedes the large grouped count; the subdued rate is to its left,
 without brackets or a tilde, and may wrap on narrow screens. Routine refresh and
 About copy are hidden visually, with an accessible explanation and no manual
-pause control. Failure/delayed warnings stay visible. No viewport-fixed or sticky
+pause control. Transient refresh failures stay quiet; persistent delayed-data and
+inconsistent-data notices remain visible. Reserve space for the notices so their
+appearance/recovery cannot jolt the number or label. No viewport-fixed or sticky
 statistic is allowed; scrolling and text zoom must remain readable.
 
 The rate is recent average growth of accepted ledger-history totals, not
@@ -502,10 +504,12 @@ the latest exact sample once.
 
 Sampling is single flight: immediately, one warm-up approximately three seconds
 after the first accepted baseline, then approximately 15 seconds after each
-attempt completes. Each attempt has a ten-second deadline covering initialization
+attempt completes. Each attempt has a thirty-second deadline covering initialization
 and query transport; SDK transport retries are disabled in this client. Failures
 back off 30/60/120 seconds (capped), preserving the last accepted value and time.
-After 45 seconds without acceptance the display is marked delayed. Lower totals
+An established total retries quietly through brief failures. After three minutes
+without acceptance the display shows a restrained delayed-data notice. These
+are browser display settings, independent of backend polling cadence. Lower totals
 are rejected without refreshing time or resetting backoff; three such responses
 since the last acceptance produce an explicit inconsistent-data state. A later
 nondecreasing sample recovers it.

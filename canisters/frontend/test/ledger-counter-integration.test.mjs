@@ -35,6 +35,7 @@ test('positive mismatch has a typed path and retires the statistic; transport fa
   assert.throws(() => verifyInstanceConfiguration(a, wrong.instance), ConfigurationMismatchError);
   const pending = deferred(), f = fixture(() => pending.promise, async () => wrong);
   await f.app.load(); assert.match(f.doc.nodes['ledger-status'].textContent, /configuration mismatch/);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, false);
   pending.resolve(999n); await flush(); assert.equal(f.doc.nodes['ledger-count'].textContent, '—');
   assert.equal(f.doc.nodes.principal.disabled, true); f.app.dispose();
   const g = fixture(async () => 100n, async () => { throw Error('Configuration mismatch: misleading transport text'); });
@@ -138,4 +139,35 @@ test('startup is quiet before and during the first request; failures remain visi
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(html, /id="ledger-status" hidden/);
   assert.match(html, /<noscript><p>Ledger count requires JavaScript/);
+});
+
+test('brief refresh failures stay quiet; three-minute delay and recovery keep truthful samples', async () => {
+  let fail = false, total = 100n;
+  const f = fixture(async () => { if (fail) throw Error('temporary transport failure'); return total; });
+  await f.app.load(); await flush(); const checked = f.doc.nodes['ledger-checked'].textContent;
+  fail = true; await f.time.tick(179999);
+  assert.equal(f.doc.nodes['ledger-count'].textContent, '100');
+  assert.equal(f.doc.nodes['ledger-status'].hidden, true);
+  assert.equal(f.doc.nodes['ledger-checked'].textContent, checked);
+  assert.equal(f.doc.nodes['ledger-rate'].textContent, '— tx/s');
+  await f.time.tick(1);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, false);
+  assert.equal(f.doc.nodes['ledger-status'].textContent, 'Updates delayed · Showing last known total');
+  fail = false; total = 200n; await f.time.tick(33000);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, true);
+  assert.equal(f.doc.nodes['ledger-count'].textContent, '200');
+  assert.notEqual(f.doc.nodes['ledger-checked'].textContent, checked); f.app.dispose();
+});
+
+test('a recovered isolated failure never shows a notice; contradictory replies still warn promptly', async () => {
+  let fail = false, total = 100n;
+  const f = fixture(async () => { if (fail) throw Error('offline'); return total; });
+  await f.app.load(); await flush(); fail = true; await f.time.tick(3000);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, true);
+  fail = false; await f.time.tick(30000);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, true);
+  total = 99n; await f.time.tick(15000); await f.time.tick(30000); await f.time.tick(60000);
+  assert.equal(f.doc.nodes['ledger-status'].hidden, false);
+  assert.match(f.doc.nodes['ledger-status'].textContent, /Inconsistent ledger responses/);
+  assert.equal(f.doc.nodes['ledger-count'].textContent, '100'); f.app.dispose();
 });
