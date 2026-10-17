@@ -245,7 +245,7 @@ assert 'public, max-age=31536000, immutable' not in frontend
 assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
-assert 'styles.css?v=9' in frontend_index
+assert 'styles.css?v=10' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert 'id="ledger-count"' in frontend_index
 assert 'id="ledger-rate"' in frontend_index
@@ -288,13 +288,20 @@ assert 'Additional immutable instances can be deployed by anyone for compatible 
 assert '>EVH<span class="wordmark__dot">.</span></a>' in frontend_index
 assert 'Return to top &#8593;' in frontend_index
 assert 'deployed permissionlessly' not in frontend_index
-for number, label in [
-    ('01', 'Open Source &amp; Verifiable'),
-    ('02', 'Designed for Immutability'),
-    ('03', 'Productive Endowment Funding'),
-    ('04', 'Powered by Internet Computer Protocol'),
+hero_facts=re.search(r'<nav class="hero__facts" aria-label="Explore Event Horizon">([\s\S]*?)</nav>', frontend_index)
+assert hero_facts
+assert len(re.findall(r'<a\b', hero_facts[1])) == 4
+for target, label, icon in [
+    ('open-source', 'Open Source &amp; Verifiable', '/github-mark-white.svg'),
+    ('immutability', 'Designed for Immutability', '/favicon.ico?v=1'),
+    ('endowment-funding', 'Productive Endowment Funding', '/jupiter-faucet.ico'),
+    ('internet-computer', 'Powered by Internet Computer Protocol', '/icp-infinity.svg'),
 ]:
-    assert f'<p><span>{number}</span>{label}</p>' in frontend_index
+    link=re.search(fr'<a href="#{target}">([\s\S]*?)</a>', hero_facts[1])
+    assert link and f'<span>{label}</span>' in link[1]
+    assert f'src="{icon}" alt=""' in link[1]
+    assert frontend_index.count(f'id="{target}"') == 1
+    assert f'aria-labelledby="{target}-title"' in frontend_index
 frontend_not_found=(root/'canisters/frontend/public/404.html').read_text()
 assert 'src="/event-horizon-icon-512.png"' in frontend_not_found
 frontend_not_found_css=(root/'canisters/frontend/public/404.css').read_text()

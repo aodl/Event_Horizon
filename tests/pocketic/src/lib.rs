@@ -6124,6 +6124,21 @@ mod tests {
                 workspace_root()?.join("canisters/frontend/public/event-horizon-icon-512.png"),
                 "image/png",
             ),
+            (
+                "/github-mark-white.svg",
+                workspace_root()?.join("canisters/frontend/public/github-mark-white.svg"),
+                "image/svg+xml",
+            ),
+            (
+                "/jupiter-faucet.ico",
+                workspace_root()?.join("canisters/frontend/public/jupiter-faucet.ico"),
+                "image/x-icon",
+            ),
+            (
+                "/icp-infinity.svg",
+                workspace_root()?.join("canisters/frontend/public/icp-infinity.svg"),
+                "image/svg+xml",
+            ),
         ] {
             let response: HttpResponse = query(
                 &pic,
@@ -6201,7 +6216,7 @@ mod tests {
                 && value.contains("frame-ancestors 'none'")
         }));
         let html = String::from_utf8(index.body)?;
-        assert!(html.contains("styles.css?v=9"));
+        assert!(html.contains("styles.css?v=10"));
         assert!(html.contains("app.bundle.js?v=3"));
         assert!(html.contains("id=\"ledger-count\""));
         assert!(html.contains("id=\"ledger-rate\""));
@@ -6216,7 +6231,7 @@ mod tests {
 
         for (url, source) in [
             (
-                "/styles.css?v=9",
+                "/styles.css?v=10",
                 workspace_root()?.join("canisters/frontend/public/styles.css"),
             ),
             (

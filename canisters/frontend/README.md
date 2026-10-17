@@ -2,7 +2,7 @@
 
 The frontend is a separately controlled informational Rust canister. It embeds and certifies static HTML, JavaScript, CSS, SVG, PNG, and ICO assets; those exact asset bytes become part of the frontend Wasm and retain certified query responses. The main document declares the bundled multi-size favicon. Unknown paths receive a certified HTML `404` response which uses the bundled 512-pixel Event Horizon icon and links back to the homepage.
 
-HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and image responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The current HTML references `app.bundle.js?v=3` and `styles.css?v=9`; query-string changes have historically bypassed URLs cached under the former one-year immutable policy, but they are not an asset-versioning pipeline. Ongoing changes rely on revalidation rather than requiring a new suffix. The certified router serves query-suffixed asset URLs without weakening response certification or CSP.
+HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and image responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The current HTML references `app.bundle.js?v=3` and `styles.css?v=10`; query-string changes have historically bypassed URLs cached under the former one-year immutable policy, but they are not an asset-versioning pipeline. Ongoing changes rely on revalidation rather than requiring a new suffix. The certified router serves query-suffixed asset URLs without weakening response certification or CSP.
 
 ## Animated artwork
 
@@ -11,6 +11,24 @@ The hero uses the self-contained `event-horizon.svg`, which adds the approved wa
 The production page declares the animated relative URL directly on the same-origin `<object>` and replaces it with the static asset when the page-level `prefers-reduced-motion` preference matches; the animated asset also keeps a best-effort internal guard for direct viewing. An image preload is deliberately not used because an object-document request cannot consume it. HTML responses retain `frame-ancestors 'none'`, while SVG responses use a dedicated policy that permits only same-origin embedding and the certified SVG's inline styles. The object integration lets the parent page pause both CSS and SVG timeline animation while the document is hidden or the browser loses focus, then resume from the preserved frame when it becomes active. Both variants retain the existing cover crop, right-aligned portrait crop, blurred placeholder, load-aware fade, and responsive layout.
 
 Validation checks XML parsing, unique IDs, resolved fragment references, the 7 motion bundles and 18 glow uses, unchanged original image/path attributes, placement below all 14 foreground texture patches, absence of scripts and event handlers, the reduced-motion fallback, and the one-megabyte cap. Five secondary huge-blur strokes were removed to reduce animated filter work; the two primary outer halos remain, and the corresponding mid glows are slightly brighter. Firefox, Safari, and low-powered mobile performance remain browser/device review items.
+
+## Hero fact links and explanations
+
+The four hero facts are local fragment links to `#open-source`, `#immutability`,
+`#endowment-funding` and `#internet-computer`. Their explanation sections follow
+Principles and precede additional instances. Native anchors preserve URL/history,
+direct links and keyboard target focus; the existing reduced-motion scroll rule
+also applies. Icons have empty alternatives so each link has one complete text
+name. Wide desktop retains four columns, tablet uses two and narrow mobile one.
+
+The GitHub white mark, Jupiter Faucet ICO and ICP full-colour infinity SVG are
+small local certified assets; Event Horizon reuses `/favicon.ico?v=1`.
+No brand artwork is recoloured or distorted. The official ICP SVG's transparent
+favicon clear space is retained; its 44px image box displays the wide infinity
+at about 39×20px. The other icon boxes are 24px. No serving code, registry,
+runtime client or production dependency changes are needed. Asset provenance,
+hashes and validation evidence are in the
+[hero-facts validation report](../../docs/codex/hero-facts-validation.md).
 
 ## Static instance and network configuration
 
@@ -187,7 +205,7 @@ facts follow the cropped SVG's complete height. Only the ledger statistic stays
 in its own lower-right artwork region, capped to the first viewport when the
 art is taller. Its label, left-hand unbracketed rate and right-aligned count stay
 unboxed; long/error content expands the row rather than overlapping the body.
-Wide desktop keeps its title/artwork composition and proximity to fact 04.
+Wide desktop keeps its title/artwork composition and proximity to the fourth hero link.
 
 The `EVH.` shortcut fits the dark corner in the compact art-first layout while the large
 heading would obscure the artwork. Show it only if the full heading is actually

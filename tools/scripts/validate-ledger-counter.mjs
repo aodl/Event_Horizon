@@ -9,7 +9,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/ledger-counter-calm/browser');
+const output = resolve(root, 'observations/hero-facts/browser');
 await mkdir(output, { recursive: true });
 const html = await readFile(resolve(root, 'canisters/frontend/public/index.html'), 'utf8');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -135,7 +135,7 @@ try {
     if (height >= 640 || label === 'landscape') assert.ok(bounds.y + bounds.height <= height + 100, `${label}: statistic too far below first view`);
     await assertBranding(page);
     const geometry = await page.evaluate(() => {
-      const stat = document.querySelector('.ledger-stat'), fact = document.querySelector('.hero__facts p:last-child');
+      const stat = document.querySelector('.ledger-stat'), fact = document.querySelector('.hero__facts a:last-child');
       const a = stat.getBoundingClientRect(), b = fact.getBoundingClientRect(), style = getComputedStyle(stat);
       const art = document.querySelector('.hero__art').getBoundingClientRect(), body = document.querySelector('.hero__body').getBoundingClientRect();
       return { right: a.right, factRight: b.right, gap: b.top - a.bottom, border: style.borderTopWidth, background: style.backgroundColor, artBottom: art.bottom, bodyTop: body.top, factTop: b.top };
@@ -349,6 +349,75 @@ try {
     await page.evaluate(() => counterFixture.dispose());
     assert.equal(await page.evaluate(() => counterFixture.time.timers.size + counterFixture.time.frames.size), 0);
   }
+  // The hero facts are native links: test actual accessible names, image loading,
+  // keyboard/fragment history and direct loading, alongside the existing art/counter regressions.
+  const factTargets = [
+    ['open-source','Open Source & Verifiable'],['immutability','Designed for Immutability'],
+    ['endowment-funding','Productive Endowment Funding'],['internet-computer','Powered by Internet Computer Protocol'],
+  ];
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto(`${origin}/fixture.html`);
+  evidence.fixtures.heroFacts = [];
+  for (const [width,height] of [[1440,900],[1280,800],[1024,768],[873,804],[844,390],[390,844],[360,640],[320,568]]) {
+    await page.setViewportSize({width,height}); await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
+    const nav=page.getByRole('navigation',{name:'Explore Event Horizon'});
+    assert.equal(await nav.getByRole('link').count(),4);
+    const geometry = await nav.evaluate(n => ({columns:getComputedStyle(n).gridTemplateColumns.split(' ').length,
+      links:[...n.querySelectorAll('a')].map(a => {const r=a.getBoundingClientRect(),img=a.querySelector('img');return {
+        x:r.x,y:r.y,right:r.right,bottom:r.bottom,height:r.height,loaded:img.complete&&img.naturalWidth>0,
+        local:new URL(img.src).origin===location.origin,alt:img.alt,fit:getComputedStyle(img).objectFit,filter:getComputedStyle(img).filter,
+      };})}));
+    assert.equal(geometry.columns,width<=704?1:width<=1024?2:4);
+    for (const item of geometry.links) {assert.ok(item.loaded&&item.local);assert.equal(item.alt,'');assert.equal(item.fit,'contain');assert.equal(item.filter,'none');assert.ok(item.height>=44);}
+    for(let i=0;i<4;i++)for(let j=i+1;j<4;j++) {
+      const a=geometry.links[i],b=geometry.links[j];assert.ok(a.right<=b.x||b.right<=a.x||a.bottom<=b.y||b.bottom<=a.y,'overlapping hero links');
+    }
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await assertBranding(page);
+    evidence.fixtures.heroFacts.push({width,height,...geometry});
+    await page.screenshot({path:resolve(output,`facts-${width}x${height}.png`)});
+  }
+  await page.setViewportSize({width:1280,height:800});
+  const nav=page.getByRole('navigation',{name:'Explore Event Horizon'});
+  await nav.getByRole('link').first().focus(); await page.keyboard.press('Shift+Tab');
+  for (const [id,label] of factTargets) {
+    await page.keyboard.press('Tab');
+    assert.equal(await nav.getByRole('link',{name:label,exact:true}).evaluate(n=>n===document.activeElement),true);
+    const outline=await page.evaluate(()=>({visible:document.activeElement.matches(':focus-visible'),width:getComputedStyle(document.activeElement).outlineWidth,style:getComputedStyle(document.activeElement).outlineStyle}));
+    assert.deepEqual(outline,{visible:true,width:'2px',style:'solid'});
+  }
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollBehavior),'auto');
+  for (const [id,label] of factTargets) {
+    const previous=new URL(page.url()).hash;
+    await nav.getByRole('link',{name:label,exact:true}).focus(); await page.keyboard.press('Enter');
+    await page.waitForFunction(id=>location.hash===`#${id}`,id);
+    const target=page.getByRole('region',{name:label,exact:true});
+    assert.equal(await target.getByRole('heading',{name:label,exact:true,level:2}).count(),1);
+    const heading=await target.locator('h2').boundingBox();assert.ok(heading.y>=0&&heading.y+heading.height<=800);
+    assert.equal(await target.evaluate(n=>document.activeElement===n),true);
+    await page.goBack();assert.equal(new URL(page.url()).hash,previous);
+    await page.goForward();assert.equal(new URL(page.url()).hash,`#${id}`);
+    await page.screenshot({path:resolve(output,`section-${id}.png`)});
+  }
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollBehavior),'smooth');
+  // Direct fragments also work on the actual production bundle, with network
+  // queries deliberately offline; no injected query function is needed for navigation.
+  for (const [id,label] of factTargets) {
+    await page.goto(`${origin}/#${id}`);
+    const target=page.getByRole('region',{name:label,exact:true});
+    await page.waitForFunction(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=0&&r.top<innerHeight;},id);
+    assert.equal(new URL(page.url()).hash,`#${id}`);
+    assert.equal(await target.locator('h2').isVisible(),true);
+  }
+  await page.goto(`${origin}/fixture.html`); await page.setViewportSize({width:320,height:568});
+  await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+  await assertBranding(page);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:resolve(output,'facts-text-zoom.png'),fullPage:true});
+  evidence.fixtures.heroFactNavigation={keyboard:true,focusVisible:true,history:true,directProductionFragments:true,decorativeIcons:true,reducedMotion:true,textZoom:true};
+  await writeFile(resolve(output,'hero-facts-accessibility.yml'),await page.getByRole('navigation',{name:'Explore Event Horizon'}).ariaSnapshot());
+  assert.equal(evidence.console.filter(e=>e.type==='pageerror'||/Content Security Policy|violates.*directive/.test(e.text)).length,0);
   if (process.argv.includes('--live')) {
     const liveContext = await browser.newContext();
     const livePage = await liveContext.newPage(), liveRequests = [];

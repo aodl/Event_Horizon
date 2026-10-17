@@ -201,7 +201,7 @@ check observed heading/compact visibility, dynamic scroll/resize, native anchor,
 bounded bottom-edge title peek (96px retained, 129px hidden), art-first compact text/facts, independently positioned ledger statistic, absence of the removed manual pause control, unboxed styling, fourth-fact alignment,
 overflow, rate pending/nonzero/zero/tiny values, delay/hidden suspension, long generic totals,
 reduced motion, SVG timeline/CSS pause, quiet accessibility and cleanup. Evidence
-is ignored under `observations/ledger-counter-calm/` (earlier evidence remains under `observations/compact-title-aspect-gate/` and `observations/ledger-counter-refinement/`). Browser emulation is
+is ignored under `observations/hero-facts/` (earlier evidence remains under `observations/ledger-counter-calm/`, `observations/compact-title-aspect-gate/` and `observations/ledger-counter-refinement/`). Browser emulation is
 not physical-device or cross-engine performance proof. Full `test_all` still
 runs every discovered ignored PocketIC scenario, including exact certified asset
 bytes and query-suffixed routing. See the
@@ -216,6 +216,23 @@ and recovery at 1440×900, 1024×768, 873×804, 390×844, 360×640 and 320×568.
 permanent notice slot must keep these rectangles unchanged. Transport abort,
 single flight, backoff, rate invalidation and contradictory-data checks remain
 covered by the existing deterministic suites.
+
+## Hero fact navigation
+
+`hero-facts.test.mjs` checks the four native fragment links, exact labels and
+local icons, unique labelled destinations, section order, separate external
+actions, original asset hashes and inactive SVG contents. The existing ignored
+PocketIC certified-frontend scenario verifies exact icon bytes and SVG/ICO media
+types alongside the existing PNG/favicon checks.
+
+`node tools/scripts/validate-ledger-counter.mjs` exercises the built page and
+the separate query fixture. It checks locally loaded decorative icons, accessible
+link/region names, keyboard order/focus outlines, native fragment/history/direct
+loading, smooth versus reduced-motion scrolling, editorial targets, 200% text,
+and the existing hero title/art/counter regressions. Representative sizes include
+1440×900, 1280×800, 1024×768, 873×804, 844×390, 390×844, 360×640 and 320×568.
+Evidence is ignored under `observations/hero-facts/browser/`. See
+[hero-facts validation](../codex/hero-facts-validation.md).
 
 ## Instance operating status
 

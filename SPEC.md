@@ -404,6 +404,32 @@ used. IO remains planned and makes no ledger request. Missing or unknown source
 modes fail closed. The mainnet root key and normal SDK verification remain in
 force; static frontend certification does not certify the runtime total.
 
+### Hero fact navigation
+
+Keep the four hero facts in their existing sequence as a semantic navigation
+region labelled “Explore Event Horizon”. Each native fragment link contains a
+decorative local brand icon and its complete label: GitHub / Open Source &
+Verifiable (`#open-source`), the existing Event Horizon favicon / Designed for
+Immutability (`#immutability`), Jupiter Faucet's actual favicon / Productive
+Endowment Funding (`#endowment-funding`), and the official full-colour ICP
+infinity / Powered by Internet Computer Protocol (`#internet-computer`). Brand
+artwork retains its design/proportions and is served as certified local assets;
+do not add runtime icon services or recolour marks. Preserve the wide four-column
+hero layout and compact art/title/counter separation. Links must have visible
+keyboard focus, usable tap areas and responsive wrapping without overflow.
+
+Place four uniquely labelled explanation sections after Principles and before
+additional instances. Use native fragment navigation/history and reduced-motion
+scrolling, with unobscured focusable targets. Explain public source and
+reproducible Wasm separately from live canister/configuration/controller checks;
+describe controller removal as intended finalisation after operational
+acceptance, without asserting completion. The frontend remains separately
+controlled. Explain delayed evidence-based subscription admission, productive
+ICP principal, recurring pooled operating receipts, and conditional service.
+Explain ICP hosting and best-effort notifications without changing the ICP-only
+funding path for independent non-ICP observing instances. External resources
+are separate, clearly identifiable actions within these sections.
+
 ### Instance operating status
 
 The selected live instance's Network panel may independently read public native
@@ -440,7 +466,7 @@ lead, memo CTA and facts. These texts must not overlay the artwork. The ledger
 statistic is the sole content exception: keep it unboxed and right aligned in
 the artwork's lower-right first-view area, independently of the main text.
 Long values/errors may expand the region to preserve readable nonoverlapping flow.
-Wide desktop keeps its existing title/artwork composition and statistic near fact 04.
+Wide desktop keeps its existing title/artwork composition and statistic near the fourth hero link.
 
 The small `EVH.` link fits the artwork's dark corner on the same compact
 layouts as the art-first hero (maximum width 81.25rem OR aspect ratio at most
