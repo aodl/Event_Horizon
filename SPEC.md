@@ -378,6 +378,16 @@ Immutability means an empty controller list, not transfer to a blackhole caniste
 
 The frontend is a separately controlled Rust canister serving certified HTTP assets embedded into its Wasm. Its module hash therefore commits to both serving logic and frontend assets.
 
+The canonical public frontend origin is
+`https://www.event-horizon-icp.com/`. The frontend must certify and serve the
+exact ownership declaration at `/.well-known/ic-domains`, and must serve its
+versioned social-preview JPEG locally with static canonical, Open Graph and X
+metadata in the original HTML. The apex-domain redirect is external operator
+infrastructure, not canister routing. The custom asset origin must not replace
+the reviewed `https://icp-api.io` host used by browser agents, and it must not
+introduce host-derived runtime configuration. Static certification covers the
+HTML and image bytes; it does not make the image's Ledger-count snapshot live.
+
 The certified frontend embeds a reviewed static instance registry in its JavaScript asset and therefore in the frontend Wasm. Browser queries use each selected backend principal directly. No frontend update call is involved. It uses `get_instance` to verify immutable configuration/profile and `get_pricing` for authoritative admission prices. It displays authoritative account/range/global current and frozen prices, exact UTC timestamps, floor/latest observations, and stale carry-forward state. Its builder exposes global, ordinary single/range, and neuron single/range modes when supported, validates without repairing input, and continuously reports complete memo bytes against the 32-byte limit. The exact CMC integer rates are formatted for display with four decimal places as XDR/ICP. It recommends a frozen higher upcoming requirement because Faucet payout and admission are delayed; it does not recommend a lower frozen price before that price becomes effective. Backend admission remains authoritative.
 
 Selecting another live instance immediately clears the previous memo and

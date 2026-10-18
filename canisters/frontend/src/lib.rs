@@ -83,6 +83,22 @@ fn certify_all_assets() {
             aliased_by: vec![],
             encodings: vec![],
         },
+        AssetConfig::File {
+            path: ".well-known/ic-domains".to_string(),
+            content_type: Some("text/plain; charset=utf-8".to_string()),
+            headers: headers(NO_CACHE, PAGE_CSP),
+            fallback_for: vec![],
+            aliased_by: vec![],
+            encodings: vec![],
+        },
+        AssetConfig::File {
+            path: "og/event-horizon-preview-v1.jpg".to_string(),
+            content_type: Some("image/jpeg".to_string()),
+            headers: headers(REVALIDATE, PAGE_CSP),
+            fallback_for: vec![],
+            aliased_by: vec![],
+            encodings: vec![],
+        },
         AssetConfig::Pattern {
             pattern: "**/*.js".to_string(),
             content_type: Some("text/javascript".to_string()),

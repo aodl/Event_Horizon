@@ -172,6 +172,12 @@ for asset, expected in {
     actual = hashlib.sha256((root/'canisters/frontend/public'/asset).read_bytes()).hexdigest()
     assert actual == expected, f'unexpected {asset} digest {actual}'
 
+ownership=(root/'canisters/frontend/public/.well-known/ic-domains').read_bytes()
+assert ownership == b'www.event-horizon-icp.com\n'
+preview=(root/'canisters/frontend/public/og/event-horizon-preview-v1.jpg').read_bytes()
+assert len(preview) == 173285
+assert hashlib.sha256(preview).hexdigest() == '1dd854f28501ce6706468e446fdb684d2b55d1d4119dc8b52cd1264c41dda3d2'
+
 backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
 assert 'get_pricing : () -> (Pricing) query;' in backend_did
 assert 'get_instance : () -> (InstanceInfo) query;' in backend_did
@@ -245,6 +251,23 @@ assert 'public, max-age=31536000, immutable' not in frontend
 assert 'const REVALIDATE: &str = "public, no-cache"' in frontend
 frontend_index=(root/'canisters/frontend/public/index.html').read_text()
 frontend_styles=(root/'canisters/frontend/public/styles.css').read_text()
+assert frontend_index.count('<link rel="canonical" href="https://www.event-horizon-icp.com/">') == 1
+for metadata in [
+    '<meta property="og:type" content="website">',
+    '<meta property="og:url" content="https://www.event-horizon-icp.com/">',
+    '<meta property="og:image" content="https://www.event-horizon-icp.com/og/event-horizon-preview-v1.jpg">',
+    '<meta property="og:image:secure_url" content="https://www.event-horizon-icp.com/og/event-horizon-preview-v1.jpg">',
+    '<meta property="og:image:type" content="image/jpeg">',
+    '<meta property="og:image:width" content="1200">',
+    '<meta property="og:image:height" content="630">',
+    '<meta name="twitter:card" content="summary_large_image">',
+    '<meta name="twitter:image" content="https://www.event-horizon-icp.com/og/event-horizon-preview-v1.jpg">',
+]:
+    assert frontend_index.count(metadata) == 1, f'missing or duplicate social metadata: {metadata}'
+assert 'path: ".well-known/ic-domains".to_string()' in frontend
+assert 'content_type: Some("text/plain; charset=utf-8".to_string())' in frontend
+assert 'path: "og/event-horizon-preview-v1.jpg".to_string()' in frontend
+assert 'content_type: Some("image/jpeg".to_string())' in frontend
 assert 'styles.css?v=10' in frontend_index
 assert 'app.bundle.js?v=3' in frontend_index
 assert 'id="ledger-count"' in frontend_index

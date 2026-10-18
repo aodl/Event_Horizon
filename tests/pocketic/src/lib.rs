@@ -6113,31 +6113,48 @@ mod tests {
             name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
         }));
 
-        for (url, source, content_type) in [
+        for (url, source, content_type, cache_control) in [
             (
                 "/favicon.ico?v=1",
                 workspace_root()?.join("canisters/frontend/public/favicon.ico"),
                 "image/x-icon",
+                "public, no-cache",
             ),
             (
                 "/event-horizon-icon-512.png",
                 workspace_root()?.join("canisters/frontend/public/event-horizon-icon-512.png"),
                 "image/png",
+                "public, no-cache",
             ),
             (
                 "/github-mark-white.svg",
                 workspace_root()?.join("canisters/frontend/public/github-mark-white.svg"),
                 "image/svg+xml",
+                "public, no-cache",
             ),
             (
                 "/jupiter-faucet.ico",
                 workspace_root()?.join("canisters/frontend/public/jupiter-faucet.ico"),
                 "image/x-icon",
+                "public, no-cache",
             ),
             (
                 "/icp-infinity.svg",
                 workspace_root()?.join("canisters/frontend/public/icp-infinity.svg"),
                 "image/svg+xml",
+                "public, no-cache",
+            ),
+            (
+                "/.well-known/ic-domains",
+                workspace_root()?.join("canisters/frontend/public/.well-known/ic-domains"),
+                "text/plain; charset=utf-8",
+                "public, no-cache, no-store",
+            ),
+            (
+                "/og/event-horizon-preview-v1.jpg",
+                workspace_root()?.join("canisters/frontend/public/og/event-horizon-preview-v1.jpg"),
+                "image/jpeg",
+                "public, no-cache",
             ),
         ] {
             let response: HttpResponse = query(
@@ -6158,9 +6175,30 @@ mod tests {
                 name.eq_ignore_ascii_case("content-type") && value == content_type
             }));
             assert!(response.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("cache-control") && value == cache_control
+            }));
+            assert!(response.headers.iter().any(|(name, value)| {
                 name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
             }));
         }
+
+        let missing_preview: HttpResponse = query(
+            &pic,
+            id,
+            "http_request",
+            HttpRequest {
+                method: "GET".to_string(),
+                url: "/og/missing.jpg".to_string(),
+                headers: vec![],
+                body: vec![],
+                certificate_version: Some(2),
+            },
+        )?;
+        assert_eq!(missing_preview.status_code, 404);
+        assert_eq!(
+            missing_preview.body,
+            std::fs::read(workspace_root()?.join("canisters/frontend/public/404.html"))?
+        );
 
         let removed_update = pic.update_call(
             id,
@@ -6225,6 +6263,14 @@ mod tests {
         assert!(html.contains("id=\"operating-balance\""));
         assert!(html.contains("id=\"operating-progress\""));
         assert!(html.contains("ICP ledger transactions"));
+        assert_eq!(
+            html.matches("<link rel=\"canonical\" href=\"https://www.event-horizon-icp.com/\">")
+                .count(),
+            1
+        );
+        assert!(html.contains("<meta property=\"og:type\" content=\"website\">"));
+        assert!(html.contains("<meta property=\"og:image\" content=\"https://www.event-horizon-icp.com/og/event-horizon-preview-v1.jpg\">"));
+        assert!(html.contains("<meta name=\"twitter:card\" content=\"summary_large_image\">"));
         assert!(!html.contains("id=\"live-effects\""));
         assert!(!html.contains("href=\"styles.css\""));
         assert!(!html.contains("src=\"app.bundle.js\""));

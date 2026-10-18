@@ -42,6 +42,70 @@ canonical hash with its reviewed baseline and retain its existing registry pin.
 No deployment is part of counter validation. See the
 [validation report](../codex/ledger-counter-validation.md).
 
+## Custom domain and social-preview operator checklist
+
+The canonical public origin is `https://www.event-horizon-icp.com/`. The apex
+`event-horizon-icp.com` is forwarded externally by GoDaddy; it is not registered
+or redirected by the canister. The frontend embeds and certifies both
+`/.well-known/ic-domains` and the versioned social-preview JPEG, while social
+metadata is present in the original static HTML. Browser agents continue to use
+`https://icp-api.io` independently of the page origin. The backend is unaffected.
+
+These are deliberate operator steps. Preparing or reviewing source does not
+authorise any of them.
+
+1. Confirm the existing `event_horizon_frontend` deployment mapping is
+   `ej7c4-lyaaa-aaaar-qchrq-cai`. Do not create a replacement canister.
+2. Configure these GoDaddy DNS records. GoDaddy may append the zone automatically;
+   enter only the host portion shown so the domain suffix is not duplicated.
+
+   | Record | GoDaddy host | Value |
+   | --- | --- | --- |
+   | CNAME | `www` | `www.event-horizon-icp.com.icp1.io` |
+   | TXT | `_canister-id.www` | `ej7c4-lyaaa-aaaar-qchrq-cai` |
+   | CNAME | `_acme-challenge.www` | `_acme-challenge.www.event-horizon-icp.com.icp2.io` |
+
+3. After separate approval, deploy the reviewed canonical frontend artifact
+   using the normal installed-canister **upgrade** path below. Do not use the
+   exceptional backend reinstall procedure.
+4. Before domain registration, verify the deployed ownership declaration through
+   the original canister hostname:
+
+   ```bash
+   curl -fsSL \
+     https://ej7c4-lyaaa-aaaar-qchrq-cai.icp.net/.well-known/ic-domains
+   ```
+
+   The exact output is `www.event-horizon-icp.com` followed by a newline.
+5. Ask ICP to validate the hostname and inspect the result:
+
+   ```bash
+   curl -fsSL \
+     "https://icp.net/custom-domains/v1/www.event-horizon-icp.com/validate" | jq
+   ```
+
+6. Only after successful validation and explicit operator approval, register it:
+
+   ```bash
+   curl -fsSL -X POST \
+     "https://icp.net/custom-domains/v1/www.event-horizon-icp.com" | jq
+   ```
+
+7. Check status and wait for registration and TLS propagation:
+
+   ```bash
+   curl -fsSL \
+     "https://icp.net/custom-domains/v1/www.event-horizon-icp.com" | jq
+   ```
+
+8. Configure GoDaddy to forward `https://event-horizon-icp.com/` permanently
+   (HTTP 301, no masking) to `https://www.event-horizon-icp.com/`. Keep the
+   `www` CNAME as DNS, not a forwarding record.
+9. Verify the public homepage, ownership file, social-preview JPEG, static social
+   metadata, TLS certificate and apex 301. In a browser, confirm calls still go
+   to the approved ICP API host and that the Ledger counter, operating status,
+   pricing and memo builder work normally.
+
 ## Exceptional prelaunch pricing-reset decision
 
 Before authorising reinstall, use read-only production records, current

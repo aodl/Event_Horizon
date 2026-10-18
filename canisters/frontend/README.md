@@ -4,6 +4,32 @@ The frontend is a separately controlled informational Rust canister. It embeds a
 
 HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and image responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The current HTML references `app.bundle.js?v=3` and `styles.css?v=10`; query-string changes have historically bypassed URLs cached under the former one-year immutable policy, but they are not an asset-versioning pipeline. Ongoing changes rely on revalidation rather than requiring a new suffix. The certified router serves query-suffixed asset URLs without weakening response certification or CSP.
 
+## Custom origin and social preview
+
+The canonical public origin is `https://www.event-horizon-icp.com/`. The
+frontend embeds and certifies `/.well-known/ic-domains`, whose sole hostname is
+`www.event-horizon-icp.com`, so ownership can be checked through the original
+`ej7c4-lyaaa-aaaar-qchrq-cai.icp.net` hostname before registration. The apex
+`event-horizon-icp.com` is outside the canister and is intended to be forwarded
+permanently to `www` by GoDaddy.
+
+The versioned `/og/event-horizon-preview-v1.jpg` is a locally hosted, certified
+1200×630 sRGB JPEG. Canonical, Open Graph and X metadata are static in
+`index.html`; the transaction number visible in that approved image is a fixed
+snapshot, not a runtime Ledger reading. The image uses the existing revalidation
+cache policy, while the ownership file uses `no-cache, no-store` so registration
+checks cannot retain stale content. Both are public and require no JavaScript,
+cookies, authentication, backend pricing or application initialization.
+
+The pinned asset router certifies complete `GET` responses. It does not provide
+a separate certified empty-body `HEAD` representation, so this release relies on
+the fully tested `GET` path rather than adding a second HTTP-serving framework.
+The browser application still sends ICP API requests to the reviewed
+`https://icp-api.io` host; neither the custom page origin nor `window.location`
+selects a replica gateway. Registration, DNS changes and frontend deployment are
+separate operator actions documented in the
+[deployment runbook](../../docs/operations/deployment.md).
+
 ## Animated artwork
 
 The hero uses the self-contained `event-horizon.svg`, which adds the approved warm ivory rim-glow animation beneath the original foreground texture patches. The 952,419-byte asset preserves the static master’s view box, title, description, 15 embedded images, 118 original paths, and 55 original IDs; its 10 motion-specific IDs are uniquely prefixed with `ehm-`. The 936,331-byte static master is retained as `event-horizon-static.svg` for the reduced-motion presentation. Both SVG roots use the same right-aligned `slice` crop as the placeholder so every hero aspect ratio is fully covered without letterboxing.
