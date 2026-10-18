@@ -483,18 +483,76 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
     position: absolute;
     top: var(--gutter);
     left: var(--gutter);
+    padding-bottom: .21em;
     z-index: 2;
     color: var(--paper);
     text-decoration: none;
+    text-shadow:
+      0 0 .035em rgb(255 240 219 / .48),
+      0 0 .12em rgb(244 223 197 / .45),
+      0 0 .36em rgb(205 158 126 / .34),
+      0 0 .75em rgb(155 106 78 / .2);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .hero__compact-arrow {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: calc(100% - .075em);
+    height: .18em;
+    /* Keep the glow on an unclipped wrapper. Applying filter to the clipped
+       polygon itself clips away the halo that should match the lettering. */
+    filter:
+      drop-shadow(0 0 .035em rgb(255 240 219 / .48))
+      drop-shadow(0 0 .12em rgb(244 223 197 / .45))
+      drop-shadow(0 0 .36em rgb(205 158 126 / .34))
+      drop-shadow(0 0 .75em rgb(155 106 78 / .2));
+    transition: filter .45s ease-out;
+    pointer-events: auto;
+  }
+  .hero__compact-arrow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--paper);
+    clip-path: polygon(0 0, 100% 0, 100% 28%, 50% 100%, 0 28%);
   }
   /* EVH fits the dark corner without covering the ring. Width/aspect alone
      cannot prove the full title is below view (tall viewports, zoom and reflow).
      Keep the observer gate: a bounded bottom-edge title reveal is tolerated;
      a substantially visible full heading replaces the compact brand. */
-  .hero__compact-mark--visible { display: block; }
+  /* Keep display gated by JS so no-script and observer failures stay closed.
+     Opacity smooths real viewport/zoom transitions; visibility waits for the
+     fade while JS removes the hidden link from focus/accessibility immediately. */
+  .hero__compact-mark--ready {
+    display: block;
+    transition: opacity .7s cubic-bezier(.22, 1, .36, 1), visibility 0s linear .7s, text-shadow .45s ease-out;
+  }
+  .hero__compact-mark--visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
   .hero__compact-mark:focus-visible {
     outline: 1px solid var(--paper);
     outline-offset: .2em;
+  }
+  .hero__compact-mark:is(:hover, :focus-visible) {
+    text-shadow:
+      0 0 .035em rgb(255 240 219 / .67),
+      0 0 .12em rgb(244 223 197 / .64),
+      0 0 .36em rgb(205 158 126 / .48),
+      0 0 .75em rgb(155 106 78 / .3);
+  }
+  .hero__compact-mark:is(:hover, :focus-visible) .hero__compact-arrow {
+    filter:
+      drop-shadow(0 0 .035em rgb(255 240 219 / .67))
+      drop-shadow(0 0 .12em rgb(244 223 197 / .64))
+      drop-shadow(0 0 .36em rgb(205 158 126 / .48))
+      drop-shadow(0 0 .75em rgb(155 106 78 / .3));
   }
 }
 
@@ -532,14 +590,36 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .hero__detail { transition: none; }
+  .hero__compact-mark--ready,
+  .hero__compact-arrow { transition: none; }
 }
 
 /* Unboxed lower-right typography: above the fourth hero link on wide desktop, in a separate
    artwork region on compact screens. Long values/errors expand normal flow. */
 .hero__stat-region { display: contents; }
 .hero__bottom { display: flex; flex-direction: column; gap: 1.25rem; margin-top: auto; min-width: 0; }
-.ledger-stat { align-self: flex-end; width: min(100%, 40rem); text-align: right; text-shadow: 0 1px 6px #000; }
-.ledger-stat h2 { margin: 0; font-size: .72rem; font-weight: 600; line-height: 1.5; color: var(--paper-muted); text-shadow: 0 1px 2px #000, 0 0 5px #000, 0 0 12px #000; letter-spacing: .13em; text-transform: uppercase; overflow-wrap: anywhere; }
+.ledger-stat { align-self: flex-end; width: min(100%, 40rem); text-align: right; text-shadow: 0 1px 2px rgb(0 0 0 / .98), 0 0 8px rgb(0 0 0 / .95), 0 0 20px rgb(0 0 0 / .82), 0 0 36px rgb(0 0 0 / .6); }
+.ledger-stat h2 {
+  margin: 0;
+  font-size: .72rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--paper-muted);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  /* The small label crosses the brightest part of the artwork. Give it a
+     tighter, denser shadow than the larger rate and total without adding a panel. */
+  text-shadow:
+    -1px -1px 1px #000,
+    1px -1px 1px #000,
+    -1px 1px 1px #000,
+    1px 1px 1px #000,
+    0 2px 4px #000,
+    0 0 10px #000,
+    0 0 22px #000,
+    0 0 40px rgb(0 0 0 / .95);
+}
 .ledger-stat__reading { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; gap: .25rem .8rem; margin: .35rem 0; font-variant-numeric: tabular-nums; }
 .ledger-stat__number { margin: 0; min-height: 1.15em; max-width: 100%; font-size: clamp(2rem, 4.1vw, 4rem); font-weight: 400; line-height: 1.15; overflow-wrap: anywhere; }
 #ledger-rate { text-align: right; min-width: 9ch; min-height: 1.5em; color: var(--paper-muted); font-size: .95rem; overflow-wrap: anywhere; max-width: 100%; }

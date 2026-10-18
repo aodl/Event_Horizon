@@ -7,19 +7,24 @@ function fixture({ observer = true, broken = false, resizeBroken = false, headin
   const time = clock(), media = { ...eventTarget(), matches: true }, classes = new Set();
   let top = 900, intersect, resize, disconnected = 0, reads = 0;
   const title = { isConnected: true, getBoundingClientRect() { reads++; return { top, height: headingHeight, width: 200 }; } };
-  const mark = { classList: { add: x => classes.add(x), remove: x => classes.delete(x) }, blur() { doc.activeElement = null; } };
+  const attributes = new Map();
+  const mark = { classList: { add: x => classes.add(x), remove: x => classes.delete(x) },
+    setAttribute: (name, value) => attributes.set(name, value), removeAttribute: name => attributes.delete(name),
+    blur() { doc.activeElement = null; } };
   const doc = { activeElement: null, getElementById: () => title, querySelector: s => s === '.hero' ? {} : mark };
   const win = { ...eventTarget(), ...time, requestAnimationFrame: time.requestFrame, cancelAnimationFrame: time.cancelFrame, innerHeight: 800, matchMedia: query => { assert.equal(query, '(max-width: 81.25rem), (max-aspect-ratio: 1/1)'); return media; }, visualViewport: { ...eventTarget(), offsetTop: 0, height: 800 },
     IntersectionObserver: observer ? class { constructor(fn) { if (broken) throw Error('unsupported'); intersect = fn; } observe() {} disconnect() { disconnected++; } } : null,
     ResizeObserver: class { constructor(fn) { if (resizeBroken) throw Error('resize unavailable'); resize = fn; } observe() {} disconnect() { disconnected++; } } };
   const controller = initCompactHeading(doc, win);
-  return { ...controller, doc, mark, title, win, media, time, visible: () => classes.size > 0, setTop: n => { top = n; },
+  return { ...controller, doc, mark, title, win, media, time, visible: () => classes.has('hero__compact-mark--visible'), ready: () => classes.has('hero__compact-mark--ready'),
+    attribute: name => attributes.get(name), setTop: n => { top = n; },
     intersect: () => { intersect?.(); time.frame(); }, resize: () => resize?.(), reads: () => reads, disconnected: () => disconnected };
 }
 test('compact mark tolerates a 128px bottom-edge peek; substantial and above-view headings hide it', () => {
-  const f = fixture(); assert.equal(f.visible(), true);
+  const f = fixture(); assert.equal(f.ready(), true); assert.equal(f.visible(), true);
+  assert.equal(f.attribute('aria-hidden'), undefined); assert.equal(f.attribute('tabindex'), undefined);
   for (const top of [900, 800, 799.9, 704, 672]) { f.setTop(top); f.intersect(); assert.equal(f.visible(), true); }
-  for (const top of [671.9, 600, 0, -200]) { f.setTop(top); f.intersect(); assert.equal(f.visible(), false); }
+  for (const top of [671.9, 600, 0, -200]) { f.setTop(top); f.intersect(); assert.equal(f.visible(), false); assert.equal(f.attribute('aria-hidden'), 'true'); assert.equal(f.attribute('tabindex'), '-1'); }
   f.setTop(900); f.intersect(); assert.equal(f.visible(), true);
   f.media.matches = false; f.media.dispatch('change'); f.time.frame(); assert.equal(f.visible(), false); f.dispose();
 });
@@ -31,10 +36,17 @@ test('resize, reflow, media and visual viewport changes coalesce; hiding a focus
   f.win.visualViewport.height = 700; f.intersect(); assert.equal(f.visible(), true);
   f.title.isConnected = false; f.intersect(); assert.equal(f.visible(), false); f.dispose();
 });
+
+test('resize invalidation waits for coalesced geometry instead of flickering the mark off', () => {
+  const f = fixture(); assert.equal(f.visible(), true);
+  f.win.dispatch('resize'); f.resize(); f.win.visualViewport.dispatch('resize');
+  assert.equal(f.visible(), true); assert.equal(f.time.frames.size, 1);
+  f.time.frame(); assert.equal(f.visible(), true); f.dispose();
+});
 test('missing/broken observer fails closed; disposal removes observers, frames/listeners and ignores late callbacks', () => {
-  for (const options of [{ observer: false }, { broken: true }, { resizeBroken: true }]) { const f = fixture(options); assert.equal(f.visible(), false); f.intersect(); assert.equal(f.visible(), false); f.dispose(); }
+  for (const options of [{ observer: false }, { broken: true }, { resizeBroken: true }]) { const f = fixture(options); assert.equal(f.ready(), false); assert.equal(f.visible(), false); f.intersect(); assert.equal(f.visible(), false); f.dispose(); }
   const f = fixture(); f.win.dispatch('resize'); f.dispose(); const reads = f.reads();
-  f.intersect(); f.resize(); f.time.frame(); assert.equal(f.reads(), reads); assert.equal(f.visible(), false); assert.equal(f.disconnected(), 2);
+  f.intersect(); f.resize(); f.time.frame(); assert.equal(f.reads(), reads); assert.equal(f.ready(), false); assert.equal(f.visible(), false); assert.equal(f.disconnected(), 2);
   assert.equal(f.time.frames.size, 0);
   for (const target of [f.win, f.media, f.win.visualViewport]) for (const listeners of target.listeners.values()) assert.equal(listeners.size, 0);
 });

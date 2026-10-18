@@ -198,7 +198,9 @@ production test switches. Use the installed pinned Playwright Chromium (or set
 
 The browser matrix covers 1440×900, 1280×800, 1024×768, 1000×800 branding, 1000×900 and 1000×1000 near-square media regressions, the reported 873×804 → 873×940 height-only transition, 844×390 landscape, 390×844, 360×640, 320×568 and 200% text. Assertions
 check observed heading/compact visibility, dynamic scroll/resize, native anchor,
-bounded bottom-edge title peek (96px retained, 129px hidden), art-first compact text/facts, independently positioned ledger statistic, absence of the removed manual pause control, unboxed styling, fourth-fact alignment,
+bounded bottom-edge title peek (96px retained, 129px hidden), coalesced non-flickering
+remeasurement, the 700ms fade and immediate hidden-link focus/accessibility state,
+art-first compact text/facts, independently positioned ledger statistic, absence of the removed manual pause control, unboxed styling, layered shadow contrast, fourth-fact alignment,
 overflow, rate pending/nonzero/zero/tiny values, delay/hidden suspension, long generic totals,
 reduced motion, SVG timeline/CSS pause, quiet accessibility and cleanup. Evidence
 is ignored under `observations/hero-facts/` (earlier evidence remains under `observations/ledger-counter-calm/`, `observations/compact-title-aspect-gate/` and `observations/ledger-counter-refinement/`). Browser emulation is

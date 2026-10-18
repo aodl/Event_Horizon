@@ -217,6 +217,21 @@ aspect ratio at most 1/1), not a separate landscape-only gate. It defaults hidde
 and an initial geometry check, and fails closed without observation. Cleanup
 removes observers/listeners/frames. Keep the comments and browser regression
 checks when changing hero spacing; hide the compact mark once the full heading exceeds the documented allowance.
+Resize/reflow events are coalesced before state changes, and the mark fades over
+700ms instead of flashing between states. It becomes noninteractive and leaves
+the accessibility tree as soon as hiding begins. Reduced motion disables the fade.
+Its compact underline has short vertical shoulders before a full-width shallow
+downward point. A paper-coloured core and separate warm halo mirror the lettering's
+glow. The underline sits inside the anchor's click target and reinforces the title
+link's direction without adding another accessible element. The clipped core is a
+child of the element carrying the filter so the polygon cannot clip away its halo.
+The resting lettering and arrow use a restrained glow; pointer hover and keyboard
+focus enhance both together. Reduced motion applies the state change immediately.
+
+The unboxed Ledger label, sampled rate and grouped total use layered dark text
+shadows so they remain legible across the artwork without introducing a panel.
+The small uppercase label has an extra dense shadow because it crosses the
+brightest part of the artwork.
 
 Routine status and About copy stay visually hidden; the description remains
 accessible. Errors remain visible. There is no manual pause control.

@@ -483,8 +483,13 @@ viewport width/aspect alone does not establish title visibility on tall or zoome
 screens. A viewport observer plus initial geometry check, resize/reflow/scroll
 handling and cleanup must enforce this rule. Fail closed if observation cannot
 be established. Hidden branding must not be focusable or clickable. Preserve
-the title anchor and the existing `EVH.` spelling. Source comments and browser
-regressions must preserve both the art-first layout and bounded bottom-edge title tolerance.
+the title anchor and the existing `EVH.` spelling. Visibility changes use a
+short opacity transition so viewport and text reflow do not make the mark flash;
+bursty geometry events are coalesced before changing state. A fading-out link is
+removed from focus, pointer interaction and the accessibility tree immediately.
+Reduced motion changes visibility without a transition. Source comments and
+browser regressions must preserve the art-first layout, bounded bottom-edge title
+tolerance and non-flickering transition.
 
 The label precedes the large grouped count; the subdued rate is to its left,
 without brackets or a tilde, and may wrap on narrow screens. Routine refresh and
@@ -493,6 +498,8 @@ pause control. Transient refresh failures stay quiet; persistent delayed-data an
 inconsistent-data notices remain visible. Reserve space for the notices so their
 appearance/recovery cannot jolt the number or label. No viewport-fixed or sticky
 statistic is allowed; scrolling and text zoom must remain readable.
+The label, rate and count use a substantial dark text shadow for contrast over
+both the light and dark portions of the artwork, without adding a panel or fill.
 
 The rate is recent average growth of accepted ledger-history totals, not
 instantaneous TPS, animation speed, Event Horizon throughput or all Internet

@@ -11,7 +11,13 @@ export function initCompactHeading(documentRef, windowRef) {
   let disposed = false, frame = null, observer, resize;
   const hide = () => {
     mark.classList.remove('hero__compact-mark--visible');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.setAttribute('tabindex', '-1');
     if (documentRef.activeElement === mark) mark.blur();
+  };
+  const retire = () => {
+    hide();
+    mark.classList.remove('hero__compact-mark--ready');
   };
   hide();
   const media = windowRef.matchMedia?.(ELIGIBLE);
@@ -21,7 +27,7 @@ export function initCompactHeading(documentRef, windowRef) {
   // Hide EVH once more than 128px (or three quarters of a small heading) enters
   // view. Actual geometry still matters on tall/zoomed screens.
   // Without a working viewport observer fail closed, rather than guessing geometry.
-  if (!media || !windowRef.IntersectionObserver || !windowRef.requestAnimationFrame) return { dispose: hide };
+  if (!media || !windowRef.IntersectionObserver || !windowRef.requestAnimationFrame) return { dispose: retire };
   const update = () => {
     frame = null;
     if (disposed) return;
@@ -31,17 +37,20 @@ export function initCompactHeading(documentRef, windowRef) {
     const peek = Math.min(BOTTOM_PEEK_PX, rect.height * .75);
     const show = media.matches && title.isConnected && rect.width > 0 && rect.height > 0
       && rect.top >= Math.max(viewport?.offsetTop ?? 0, bottom - peek);
-    if (show) mark.classList.add('hero__compact-mark--visible');
-    else hide();
+    if (show) {
+      mark.removeAttribute('aria-hidden');
+      mark.removeAttribute('tabindex');
+      mark.classList.add('hero__compact-mark--visible');
+    } else hide();
   };
   const schedule = () => {
     if (disposed) return;
     if (frame === null) frame = windowRef.requestAnimationFrame(update);
   };
-  // Do not hide/show the focused anchor on every scroll event: that can interrupt
-  // its native smooth-scroll navigation. Coalesce scroll geometry; invalidate the
-  // gate immediately for layout/media changes that could expose a substantial second title.
-  const invalidate = () => { if (!disposed) { hide(); schedule(); } };
+  // Resize and reflow can emit several events for one visual change. Re-measure
+  // once on the next frame instead of briefly hiding and restoring EVH between
+  // those events. The eventual state still comes only from title geometry.
+  const invalidate = schedule;
   try {
     observer = new windowRef.IntersectionObserver(schedule, { root: null, threshold: 0 });
     observer.observe(title);
@@ -49,7 +58,8 @@ export function initCompactHeading(documentRef, windowRef) {
       resize = new windowRef.ResizeObserver(invalidate);
       resize.observe(documentRef.querySelector('.hero'));
     }
-  } catch { disposed = true; observer?.disconnect(); resize?.disconnect(); hide(); return { dispose: hide }; }
+  } catch { disposed = true; observer?.disconnect(); resize?.disconnect(); retire(); return { dispose: retire }; }
+  mark.classList.add('hero__compact-mark--ready');
   update();
   media.addEventListener('change', invalidate);
   windowRef.addEventListener('resize', invalidate);
@@ -57,7 +67,7 @@ export function initCompactHeading(documentRef, windowRef) {
   windowRef.visualViewport?.addEventListener('resize', invalidate);
   windowRef.visualViewport?.addEventListener('scroll', schedule);
   return { dispose() {
-    disposed = true; observer.disconnect(); resize?.disconnect(); hide();
+    disposed = true; observer.disconnect(); resize?.disconnect(); retire();
     if (frame !== null) windowRef.cancelAnimationFrame(frame);
     media.removeEventListener('change', invalidate);
     windowRef.removeEventListener('resize', invalidate);

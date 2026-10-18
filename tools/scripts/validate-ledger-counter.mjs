@@ -68,16 +68,19 @@ async function assertBranding(page) {
   // Observe actual title visibility, including resize/scroll/reflow, before showing the compact brand.
   const handle = await page.waitForFunction(() => {
     const mark = document.querySelector('.hero__compact-mark'), title = document.querySelector('#hero-title');
-    const visible = n => { const r = n.getBoundingClientRect(); return getComputedStyle(n).display !== 'none' && r.bottom > 0 && r.top < innerHeight; };
+    const visible = n => { const r = n.getBoundingClientRect(), style = getComputedStyle(n); return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > .01 && r.bottom > 0 && r.top < innerHeight; };
     const rect = title.getBoundingClientRect(), viewport = visualViewport ? visualViewport.offsetTop + visualViewport.height : innerHeight;
     const eligible = matchMedia('(max-width: 81.25rem), (max-aspect-ratio: 1/1)').matches;
-    const result = { heading: visible(title), compact: visible(mark), withinPeek: rect.top >= Math.max(visualViewport?.offsetTop ?? 0, viewport - Math.min(128, rect.height * .75)), eligible,
-      display: getComputedStyle(mark).display, titleTop: rect.top, markTop: mark.getBoundingClientRect().top, scrollY };
-    return result.display !== 'none' === (eligible && result.withinPeek) ? result : false;
+    const style = getComputedStyle(mark), compact = mark.classList.contains('hero__compact-mark--visible');
+    const result = { heading: visible(title), compact, compactVisual: visible(mark), withinPeek: rect.top >= Math.max(visualViewport?.offsetTop ?? 0, viewport - Math.min(128, rect.height * .75)), eligible,
+      display: style.display, visibility: style.visibility, opacity: Number(style.opacity), ariaHidden: mark.getAttribute('aria-hidden'), tabindex: mark.getAttribute('tabindex'),
+      titleTop: rect.top, markTop: mark.getBoundingClientRect().top, scrollY };
+    return compact === (eligible && result.withinPeek) ? result : false;
   });
   const result = await handle.jsonValue(); await handle.dispose();
   assert.ok(!result.compact || result.withinPeek, JSON.stringify(result));
-  assert.equal(result.display !== 'none', result.eligible && result.withinPeek, JSON.stringify(result));
+  assert.equal(result.compact, result.eligible && result.withinPeek, JSON.stringify(result));
+  if (!result.compact) { assert.equal(result.ariaHidden, 'true'); assert.equal(result.tabindex, '-1'); }
   return result;
 }
 
@@ -136,11 +139,13 @@ try {
     await assertBranding(page);
     const geometry = await page.evaluate(() => {
       const stat = document.querySelector('.ledger-stat'), fact = document.querySelector('.hero__facts a:last-child');
-      const a = stat.getBoundingClientRect(), b = fact.getBoundingClientRect(), style = getComputedStyle(stat);
+      const a = stat.getBoundingClientRect(), b = fact.getBoundingClientRect(), style = getComputedStyle(stat), labelStyle = getComputedStyle(document.querySelector('#ledger-label'));
       const art = document.querySelector('.hero__art').getBoundingClientRect(), body = document.querySelector('.hero__body').getBoundingClientRect();
-      return { right: a.right, factRight: b.right, gap: b.top - a.bottom, border: style.borderTopWidth, background: style.backgroundColor, artBottom: art.bottom, bodyTop: body.top, factTop: b.top };
+      return { right: a.right, factRight: b.right, gap: b.top - a.bottom, border: style.borderTopWidth, background: style.backgroundColor, textShadow: style.textShadow, labelTextShadow: labelStyle.textShadow, artBottom: art.bottom, bodyTop: body.top, factTop: b.top };
     });
     assert.equal(geometry.border, '0px'); assert.equal(geometry.background, 'rgba(0, 0, 0, 0)');
+    assert.ok((geometry.textShadow.match(/rgba?\(/g) ?? []).length >= 4, `${label}: ledger shadow is too weak`);
+    assert.ok((geometry.labelTextShadow.match(/rgba?\(/g) ?? []).length >= 8, `${label}: ledger label shadow is too weak`);
     assert.ok(Math.abs(geometry.right - geometry.factRight) < 2);
     if (compact) {
       assert.ok(geometry.bodyTop >= geometry.artBottom, `${label}: full text overlays artwork`);
@@ -153,8 +158,25 @@ try {
   }
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  await page.waitForFunction(() => scrollY === 0 && getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   const shown = await assertBranding(page); assert.equal(shown.compact, true, JSON.stringify(shown));
+  await page.mouse.move(800, 350);
+  const restingGlow = await page.locator('.hero__compact-mark').evaluate(mark => ({ text: getComputedStyle(mark).textShadow, arrow: getComputedStyle(mark.querySelector('.hero__compact-arrow')).filter }));
+  await page.locator('.hero__compact-mark').hover();
+  await page.waitForFunction(resting => {
+    const mark = document.querySelector('.hero__compact-mark');
+    return getComputedStyle(mark).textShadow !== resting.text && getComputedStyle(mark.querySelector('.hero__compact-arrow')).filter !== resting.arrow;
+  }, restingGlow);
+  const hoverGlow = await page.locator('.hero__compact-mark').evaluate(mark => ({ text: getComputedStyle(mark).textShadow, arrow: getComputedStyle(mark.querySelector('.hero__compact-arrow')).filter }));
+  assert.notEqual(hoverGlow.text, restingGlow.text); assert.notEqual(hoverGlow.arrow, restingGlow.arrow);
+  const arrowPoint = await page.locator('.hero__compact-arrow').evaluate(arrow => {
+    const rect = arrow.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  await page.mouse.click(arrowPoint.x, arrowPoint.y);
+  await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
+  await page.evaluate(() => { history.replaceState(null, '', location.pathname); scrollTo({ top: 0, behavior: 'instant' }); });
+  await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   await page.locator('.hero__compact-mark').focus();
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
@@ -167,7 +189,7 @@ try {
   await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().bottom + scrollY + 30, behavior: 'instant' }));
   await assertBranding(page);
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  await page.waitForFunction(() => scrollY === 0 && getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   const returned = await assertBranding(page); assert.equal(returned.compact, true, JSON.stringify(returned));
   for (const size of [{width:1000,height:800},{width:390,height:844},{width:1024,height:768},{width:844,height:390}]) {
     await page.setViewportSize(size); await assertBranding(page);
@@ -178,13 +200,17 @@ try {
   await page.setViewportSize({width:873,height:804});
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
   const reported = await assertBranding(page); assert.equal(reported.compact, true);
+  assert.match(await page.locator('.hero__compact-mark').evaluate(n => getComputedStyle(n).transitionDuration), /0\.7s/);
   await page.setViewportSize({width:873,height:940});
   const tallerReported = await assertBranding(page); assert.equal(tallerReported.heading, true); assert.equal(tallerReported.compact, false);
+  assert.equal(tallerReported.ariaHidden, 'true'); assert.equal(tallerReported.tabindex, '-1');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.hero__compact-mark')).visibility === 'hidden');
+  assert.equal(await page.locator('.hero__compact-mark').evaluate(n => Number(getComputedStyle(n).opacity)), 0);
   await page.screenshot({path:resolve(output,'reported-873x940.png')});
   // A layout change within the SAME eligible media condition must also hide EVH.
   await page.setViewportSize({ width: 1000, height: 830 });
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
-  await page.waitForFunction(() => getComputedStyle(document.querySelector('.hero__compact-mark')).display === 'block');
+  await page.waitForFunction(() => document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   // Only the fixture moves the title: verify a 96px peek is tolerated, while a
   // 129px reveal hides the compact mark without changing the media condition.
   const placeHeading = async pixels => page.evaluate(px => {
@@ -410,7 +436,7 @@ try {
     assert.equal(new URL(page.url()).hash,`#${id}`);
     assert.equal(await target.locator('h2').isVisible(),true);
   }
-  await page.goto(`${origin}/fixture.html`); await page.setViewportSize({width:320,height:568});
+  await page.goto(`${origin}/fixture.html`, { timeout: 60000 }); await page.setViewportSize({width:320,height:568});
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
   await assertBranding(page);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
