@@ -5,7 +5,7 @@ const BOTTOM_PEEK_PX = 128;
 const ELIGIBLE = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
 
 export function initCompactHeading(documentRef, windowRef) {
-  const title = documentRef.getElementById('hero-title');
+  const title = documentRef.getElementById('info');
   const mark = documentRef.querySelector('.hero__compact-mark');
   if (!title || !mark) return { dispose() {} };
   let disposed = false, frame = null, observer, resize;

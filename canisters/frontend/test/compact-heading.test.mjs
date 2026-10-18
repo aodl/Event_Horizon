@@ -11,7 +11,7 @@ function fixture({ observer = true, broken = false, resizeBroken = false, headin
   const mark = { classList: { add: x => classes.add(x), remove: x => classes.delete(x) },
     setAttribute: (name, value) => attributes.set(name, value), removeAttribute: name => attributes.delete(name),
     blur() { doc.activeElement = null; } };
-  const doc = { activeElement: null, getElementById: () => title, querySelector: s => s === '.hero' ? {} : mark };
+  const doc = { activeElement: null, getElementById: id => { assert.equal(id, 'info'); return title; }, querySelector: s => s === '.hero' ? {} : mark };
   const win = { ...eventTarget(), ...time, requestAnimationFrame: time.requestFrame, cancelAnimationFrame: time.cancelFrame, innerHeight: 800, matchMedia: query => { assert.equal(query, '(max-width: 81.25rem), (max-aspect-ratio: 1/1)'); return media; }, visualViewport: { ...eventTarget(), offsetTop: 0, height: 800 },
     IntersectionObserver: observer ? class { constructor(fn) { if (broken) throw Error('unsupported'); intersect = fn; } observe() {} disconnect() { disconnected++; } } : null,
     ResizeObserver: class { constructor(fn) { if (resizeBroken) throw Error('resize unavailable'); resize = fn; } observe() {} disconnect() { disconnected++; } } };

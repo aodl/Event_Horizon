@@ -67,7 +67,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 async function assertBranding(page) {
   // Observe actual title visibility, including resize/scroll/reflow, before showing the compact brand.
   const handle = await page.waitForFunction(() => {
-    const mark = document.querySelector('.hero__compact-mark'), title = document.querySelector('#hero-title');
+    const mark = document.querySelector('.hero__compact-mark'), title = document.querySelector('#info');
     const visible = n => { const r = n.getBoundingClientRect(), style = getComputedStyle(n); return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > .01 && r.bottom > 0 && r.top < innerHeight; };
     const rect = title.getBoundingClientRect(), viewport = visualViewport ? visualViewport.offsetTop + visualViewport.height : innerHeight;
     const eligible = matchMedia('(max-width: 81.25rem), (max-aspect-ratio: 1/1)').matches;
@@ -174,19 +174,19 @@ try {
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   });
   await page.mouse.click(arrowPoint.x, arrowPoint.y);
-  await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
+  await page.waitForFunction(() => location.hash === '#info' && document.querySelector('#info').getBoundingClientRect().top < innerHeight);
   await page.evaluate(() => { history.replaceState(null, '', location.pathname); scrollTo({ top: 0, behavior: 'instant' }); });
   await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   await page.locator('.hero__compact-mark').focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => location.hash === '#hero-title' && document.querySelector('#hero-title').getBoundingClientRect().top < innerHeight);
+  await page.waitForFunction(() => location.hash === '#info' && document.querySelector('#info').getBoundingClientRect().top < innerHeight);
   const anchored = await assertBranding(page); assert.equal(anchored.heading, true); assert.equal(anchored.compact, false);
   // Let native smooth anchor navigation finish before the next scripted scroll.
-  await page.waitForFunction(() => { const title = document.querySelector('#hero-title'); return Math.abs(title.getBoundingClientRect().top - parseFloat(getComputedStyle(title).scrollMarginTop)) < 1; });
-  await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().top + scrollY - innerHeight + .5, behavior: 'instant' }));
+  await page.waitForFunction(() => { const title = document.querySelector('#info'); return Math.abs(title.getBoundingClientRect().top - parseFloat(getComputedStyle(title).scrollMarginTop)) < 1; });
+  await page.evaluate(() => scrollTo({ top: document.querySelector('#info').getBoundingClientRect().top + scrollY - innerHeight + .5, behavior: 'instant' }));
   assert.equal((await assertBranding(page)).display, 'block');
-  assert.equal(await page.locator('.hero__compact-mark').getAttribute('href'), '#hero-title');
-  await page.evaluate(() => scrollTo({ top: document.querySelector('#hero-title').getBoundingClientRect().bottom + scrollY + 30, behavior: 'instant' }));
+  assert.equal(await page.locator('.hero__compact-mark').getAttribute('href'), '#info');
+  await page.evaluate(() => scrollTo({ top: document.querySelector('#info').getBoundingClientRect().bottom + scrollY + 30, behavior: 'instant' }));
   await assertBranding(page);
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
@@ -214,7 +214,7 @@ try {
   // Only the fixture moves the title: verify a 96px peek is tolerated, while a
   // 129px reveal hides the compact mark without changing the media condition.
   const placeHeading = async pixels => page.evaluate(px => {
-    const body = document.querySelector('.hero__body'), title = document.querySelector('#hero-title');
+    const body = document.querySelector('.hero__body'), title = document.querySelector('#info');
     body.style.marginTop = `${parseFloat(getComputedStyle(body).marginTop) + innerHeight - px - title.getBoundingClientRect().top}px`;
   }, pixels);
   await placeHeading(96);
@@ -347,7 +347,7 @@ try {
     await page.waitForFunction(() => document.getElementById('ledger-count').textContent === '123,456,789');
     await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
     await page.evaluate(async () => {await counterFixture.time.tick(18000);});
-    const rects = () => page.evaluate(() => ['ledger-count','ledger-label','hero-title'].map(id => {
+    const rects = () => page.evaluate(() => ['ledger-count','ledger-label','info'].map(id => {
       const r=document.getElementById(id).getBoundingClientRect(); return {id,x:r.x,y:r.y,width:r.width,height:r.height};
     }));
     const baseline = await rects();
