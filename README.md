@@ -1,5 +1,7 @@
 # Event Horizon
 
+![img](/canisters/frontend/public/og/event-horizon-preview-v1.jpg)
+
 Event Horizon is a ledger-generic low-latency wake-up service funded by
 productive endowments through Jupiter Faucet. Endowed ICP principal contributes
 to Jupiter's productive neuron stake; it does not become Event Horizon's liquid
