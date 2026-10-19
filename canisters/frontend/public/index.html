@@ -83,7 +83,7 @@
       <p class="kicker">Ledger signals at the edge of finality</p>
       <h1 id="info"><span>Event</span><span>Horizon</span></h1>
       <p class="hero__lead">Notifies event-driven subscriber canisters about relevant transactions</p>
-      <a class="hero__action" href="#builder">Build a subscription memo <span aria-hidden="true">&#8595;</span></a>
+      <a class="hero__action" href="#network">How it works <span aria-hidden="true">&#8595;</span></a>
     </div>
 
     <div class="hero__bottom">
@@ -111,8 +111,8 @@
 
     <nav class="hero__facts" aria-label="Explore Event Horizon">
       <a href="#open-source"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span></a>
-      <a href="#immutability"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Designed for Immutability</span></a>
-      <a href="#endowment-funding"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Productive Endowment Funding</span></a>
+      <a href="#immutability"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span></a>
+      <a href="#endowment-funding"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span></a>
       <a href="#internet-computer"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span></a>
     </nav>
     </div>
@@ -121,16 +121,16 @@
   <main id="main-content">
     <section class="manifesto" aria-labelledby="manifesto-title">
       <p class="section-label">The protocol</p>
-      <h2 id="manifesto-title">A fast path for ledger-aware canisters.</h2>
-      <p>Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The signal is intentionally lean; your canister remains the source of truth.</p>
+      <h2 id="manifesto-title">A cost-effective path for ledger-aware canisters.</h2>
+      <p>Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The ledger remains the source of truth.</p>
     </section>
 
     <section class="section" id="network" aria-labelledby="network-title">
       <header class="section__header">
-        <p class="section-label">01 / Network</p>
+        <p class="section-label">01 / Choose</p>
         <div>
-          <h2 id="network-title">Choose an instance.</h2>
-          <p>Configuration is verified against the certified registry before the builder becomes available.</p>
+          <h2 id="network-title">Select a supported ledger.</h2>
+          <p>If the ledger you need is not yet supported you can <a href="#open-deployment">add it yourself</a>.</p>
         </div>
       </header>
 
@@ -168,10 +168,10 @@
 
     <section class="section builder-section" id="builder" aria-labelledby="builder-title">
       <header class="section__header">
-        <p class="section-label">02 / Subscribe</p>
+        <p class="section-label">02 / Compose</p>
         <div>
-          <h2 id="builder-title">Compose the declaration.</h2>
-          <p>Choose a ledger-wide, subaccount, or neuron trigger. The memo is validated continuously against Jupiter Faucet’s complete 32-byte limit.</p>
+          <h2 id="builder-title">Compose the subscription.</h2>
+          <p>A declaration identifies the subscriber canister, the subaccounts or neuron accounts it's interested in, and the ICP transaction significance threshold for triggering a notification.</p>
         </div>
       </header>
 
@@ -211,18 +211,39 @@
           </span>
         </form>
 
-        <div class="memo-result">
-          <p class="memo-result__label">Generated declaration</p>
-          <output id="memo-output" class="memo"></output>
-          <p id="memo-help" class="help"></p>
+        <p class="builder-card__footnote">A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.<br><a href="#complete">Review your generated declaration in step 03 <span aria-hidden="true">&#8595;</span></a></p>
+      </div>
+    </section>
+
+    <section class="section" id="complete" aria-labelledby="complete-title">
+      <header class="section__header">
+        <p class="section-label">03 / Complete</p>
+        <div>
+          <h2 id="complete-title">Endow the subscription.</h2>
+          <p>Register the generated subscription memo with <a href="https://www.jupiter-faucet.com/">Jupiter Faucet</a></p>
         </div>
-        <p class="builder-card__footnote">A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.</p>
+      </header>
+      <div class="network-grid completion-layout">
+        <div class="panel memo-result">
+          <div class="panel__topline"><p id="memo-result-label" class="memo-result__label">Generated declaration</p></div>
+          <output id="memo-output" class="memo" aria-labelledby="memo-result-label" aria-describedby="memo-help"></output>
+          <p id="memo-help" class="help"></p>
+          <p class="memo-result__edit"><a href="#builder">Edit inputs in 02 / Compose <span aria-hidden="true">&#8593;</span></a></p>
+        </div>
+        <div class="panel completion-guide">
+          <div class="panel__topline"><h3 class="panel__eyebrow">Register with Jupiter Faucet</h3></div>
+          <div class="pricing">
+          <p>Jupiter keeps the endowed ICP principal in its productive staking path. Recurring maturity-derived ICP payouts reach Event Horizon; retained payouts are converted into pooled operating cycles, helping fund notifications over time rather than spending the principal on each wake-up.</p>
+          <p>Creating the endowment does not immediately activate the subscription. Event Horizon must observe a qualifying Faucet payout and complete Historian evidence for the exact declaration before admitting it. Recognition and payout timing can delay admission; ongoing service depends on realised receipts and costs.</p>
+          <p><a href="https://www.jupiter-faucet.com/">Complete an endowment with Jupiter Faucet <span aria-hidden="true">↗</span></a> · <a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscriber guide <span aria-hidden="true">↗</span></a></p>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="section" id="protocol" aria-labelledby="protocol-title">
       <header class="section__header">
-        <p class="section-label">03 / Principles</p>
+        <p class="section-label">04 / Principles</p>
         <div>
           <h2 id="protocol-title">Small surface. Clear contract.</h2>
           <p>Event Horizon adds a prompt signal path without taking ownership of application correctness.</p>
@@ -263,7 +284,7 @@
     </section>
 
     <section class="project-detail" id="immutability" aria-labelledby="immutability-title" tabindex="-1">
-      <h2 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Designed for Immutability</span></h2>
+      <h2 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span></h2>
       <div>
         <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
         <p>Once controller removal is complete, the backend cannot ordinarily be upgraded or reconfigured. The frontend remains separately controlled and can continue to evolve.</p>
@@ -272,7 +293,7 @@
     </section>
 
     <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title" tabindex="-1">
-      <h2 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Productive Endowment Funding</span></h2>
+      <h2 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span></h2>
       <div>
         <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
         <p>Endowing principal does not immediately admit a subscription: admission requires a qualifying Faucet payout and Historian evidence. Ongoing operation depends on realised receipts and costs. Perpetual service is an objective, not a guarantee.</p>
@@ -289,7 +310,7 @@
       </div>
     </section>
 
-    <section class="instances-note" aria-labelledby="instances-title">
+    <section class="instances-note" id="open-deployment" aria-labelledby="instances-title">
       <p class="section-label">Open deployment</p>
       <div>
         <h2 id="instances-title">Additional immutable instances.</h2>

@@ -316,8 +316,8 @@ assert hero_facts
 assert len(re.findall(r'<a\b', hero_facts[1])) == 4
 for target, label, icon in [
     ('open-source', 'Open Source &amp; Verifiable', '/github-mark-white.svg'),
-    ('immutability', 'Designed for Immutability', '/favicon.ico?v=1'),
-    ('endowment-funding', 'Productive Endowment Funding', '/jupiter-faucet.ico'),
+    ('immutability', 'Engineered for Immutability', '/favicon.ico?v=1'),
+    ('endowment-funding', 'Perpetual Endowment Funding', '/jupiter-faucet.ico'),
     ('internet-computer', 'Powered by Internet Computer Protocol', '/icp-infinity.svg'),
 ]:
     link=re.search(fr'<a href="#{target}">([\s\S]*?)</a>', hero_facts[1])

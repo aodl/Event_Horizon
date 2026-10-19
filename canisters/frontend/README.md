@@ -109,6 +109,14 @@ and the ICP [management query documentation](https://docs.internetcomputer.org/r
 
 ## Declaration builder
 
+Step 02 contains the subscription inputs and a native link to step 03. Step 03
+shows the single live generated declaration, validation and funding requirement
+beside the Jupiter Faucet completion guidance. Moving between steps does not
+submit a transaction; output still clears immediately on instance changes.
+The completion area reuses the ledger-selection panel styles. Input errors name
+02 / Compose, with a native link back to edit; verification and pricing states
+remain separate from input corrections.
+
 The browser builds all five declaration modes: global ledger, single subaccount, subaccount range, single neuron nonce, and neuron nonce range. Target parsing uses `BigInt` throughout the full `u64` domain; ranges contain at most 256 inclusive targets. Neuron modes are available only when the verified profile supplies `neuron_governance`.
 
 The builder preserves exact declaration text and enforces Jupiter Faucet's complete 32-byte memo limit after Principal validation and normalization. Backend parsing, Historian route evidence, pricing, and admission remain authoritative even if the display is stale, unavailable, or modified by a frontend controller.

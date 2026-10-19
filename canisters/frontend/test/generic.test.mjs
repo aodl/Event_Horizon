@@ -34,6 +34,29 @@ import { deferred, liveEntry, backendResult, fakeDocument, principal } from './h
 
 function appFixture(instances,queryBackend){const documentRef=fakeDocument();const app=createApp({documentRef,instances,queryBackend,autoLoad:false});return{...app,documentRef}};
 
+test('completion errors direct input corrections to Compose and recover to funding guidance', async () => {
+  const entry = liveEntry('a', 'backend-a');
+  const fixture = appFixture([entry], async () => backendResult(entry, 10));
+  const nodes = fixture.documentRef.nodes;
+  await fixture.load();
+  nodes.principal.value = 'uuc56-gyb';
+  nodes.subaccount.value = '7';
+  nodes.amount.value = 'invalid';
+  fixture.documentRef.dispatch('input');
+  assert.equal(nodes['memo-output'].textContent, '—');
+  assert.match(nodes['memo-help'].textContent, /^Update the inputs in 02 \/ Compose: .+/);
+  assert.ok(nodes['memo-help'].classList.values.has('error'));
+  nodes.amount.value = '0.01';
+  fixture.documentRef.dispatch('input');
+  assert.match(nodes['memo-output'].textContent, /\.7:0\.01$/);
+  assert.match(nodes['memo-help'].textContent, /Minimum qualifying cumulative endowment: 10 ICP/);
+  assert.ok(!nodes['memo-help'].classList.values.has('error'));
+  nodes.scope.value = 'neuron';
+  fixture.documentRef.dispatch('input');
+  assert.match(nodes['memo-help'].textContent, /does not support neuron targets.*02 \/ Compose/);
+  fixture.dispose();
+});
+
 test('latest selection wins when an older success arrives last',async()=>{const a=liveEntry('a','backend-a'),b=liveEntry('b','backend-b'),calls={a:deferred(),b:deferred()};const fixture=appFixture([a,b],({canisterId})=>calls[canisterId.endsWith('a')?'a':'b'].promise);const first=fixture.load();fixture.documentRef.nodes.instance.value='b';const second=fixture.load();calls.b.resolve(backendResult(b,22));await second;calls.a.resolve(backendResult(a,11));await first;assert.match(fixture.documentRef.nodes['instance-info'].innerHTML,/Backend: backend-b/);assert.match(fixture.documentRef.nodes.pricing.innerHTML,/Account subscription: 22 ICP/)});
 test('stale failure cannot overwrite the latest successful selection',async()=>{const a=liveEntry('a','backend-a'),b=liveEntry('b','backend-b'),calls={a:deferred(),b:deferred()};const fixture=appFixture([a,b],({canisterId})=>calls[canisterId.endsWith('a')?'a':'b'].promise);const first=fixture.load();fixture.documentRef.nodes.instance.value='b';const second=fixture.load();calls.b.resolve(backendResult(b,22));await second;calls.a.reject(new Error('late A failure'));await first;assert.match(fixture.documentRef.nodes.pricing.innerHTML,/Account subscription: 22 ICP/);assert.doesNotMatch(fixture.documentRef.nodes.pricing.textContent,/late A failure/)});
 test('planned selection invalidates an outstanding live response',async()=>{const a=liveEntry('a','backend-a'),planned={...liveEntry('planned',null),status:'planned',observedLedgerCanisterId:null,expectedBackendWasmSha256:null};const pending=deferred();const fixture=appFixture([a,planned],()=>pending.promise);const first=fixture.load();fixture.documentRef.nodes.instance.value='planned';await fixture.load();pending.resolve(backendResult(a,11));await first;assert.equal(fixture.documentRef.nodes.pricing.textContent,'Pricing unavailable until launch.');assert.equal(fixture.documentRef.nodes.principal.disabled,true)});

@@ -7,11 +7,33 @@ const publicFile = name => new URL(`../public/${name}`, import.meta.url);
 const html = await readFile(publicFile('index.html'), 'utf8');
 const expected = [
   ['open-source','Open Source & Verifiable','/github-mark-white.svg'],
-  ['immutability','Designed for Immutability','/favicon.ico?v=1'],
-  ['endowment-funding','Productive Endowment Funding','/jupiter-faucet.ico'],
+  ['immutability','Engineered for Immutability','/favicon.ico?v=1'],
+  ['endowment-funding','Perpetual Endowment Funding','/jupiter-faucet.ico'],
   ['internet-computer','Powered by Internet Computer Protocol','/icp-infinity.svg'],
 ];
 const nav = html.match(/<nav class="hero__facts"[^>]*>([\s\S]*?)<\/nav>/)?.[1];
+
+test('how-it-works flow links to ledger selection and completes the declaration through Jupiter', () => {
+  assert.match(html, /class="hero__action" href="#network">How it works/);
+  assert.match(html, /<a href="#open-deployment">add it yourself<\/a>/);
+  assert.equal([...html.matchAll(/id="open-deployment"/g)].length, 1);
+  const steps = [...html.matchAll(/<p class="section-label">(0[1-4] \/ [^<]+)<\/p>/g)].map(match => match[1]);
+  assert.deepEqual(steps, ['01 / Choose', '02 / Compose', '03 / Complete', '04 / Principles']);
+  assert.ok(html.indexOf('id="builder"') < html.indexOf('id="complete"'));
+  assert.ok(html.indexOf('id="complete"') < html.indexOf('id="protocol"'));
+  const complete = html.match(/<section class="section" id="complete"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(complete);
+  assert.match(complete, /href="https:\/\/www\.jupiter-faucet\.com\/"/);
+  assert.match(complete, /Register the generated subscription memo with/);
+  assert.match(complete, /does not immediately activate/);
+  assert.match(complete, /complete Historian evidence/);
+  const compose = html.match(/<section class="section builder-section" id="builder"[\s\S]*?<\/section>/)?.[0];
+  assert.match(compose, /id="memo-form"/);
+  assert.match(compose, /href="#complete"/);
+  assert.doesNotMatch(compose, /id="memo-output"|id="memo-help"/);
+  assert.match(complete, /<output id="memo-output"[^>]*aria-describedby="memo-help"/);
+  assert.match(complete, /id="memo-help"/);
+});
 
 test('four hero fact links retain their order, labels, local icons and native fragment destinations', () => {
   assert.ok(nav); assert.match(html, /<nav class="hero__facts" aria-label="Explore Event Horizon">/);

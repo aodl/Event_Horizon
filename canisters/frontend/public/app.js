@@ -192,7 +192,7 @@ export function createApp({
     }
     if (neuron && !profile.neuron_governance.length) {
       out.textContent = '—';
-      help.textContent = 'This instance does not support neuron targets.';
+      help.textContent = 'This instance does not support neuron targets. Choose a supported subscription mode in 02 / Compose.';
       help.classList.add('error');
       return;
     }
@@ -221,7 +221,7 @@ export function createApp({
       help.classList.remove('error');
     } catch (error) {
       out.textContent = '—';
-      help.textContent = error.message;
+      help.textContent = `Update the inputs in 02 / Compose: ${error.message}`;
       help.classList.add('error');
     }
   }
