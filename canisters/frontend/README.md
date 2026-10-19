@@ -230,7 +230,9 @@ The compact hero restores the art-first spacing used before the counter
 facts follow the cropped SVG's complete height. Only the ledger statistic stays
 in its own lower-right artwork region, capped to the first viewport when the
 art is taller. Its label, left-hand unbracketed rate and right-aligned count stay
-unboxed; long/error content expands the row rather than overlapping the body.
+unboxed. Narrow portrait layouts place the group close to the SVG's lower edge
+while keeping its complete layout box inside the artwork; long/error content
+expands the row rather than overlapping the body.
 Wide desktop keeps its title/artwork composition and proximity to the fourth hero link.
 
 The `EVH.` shortcut fits the dark corner in the compact art-first layout while the large

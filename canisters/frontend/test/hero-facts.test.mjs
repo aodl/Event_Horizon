@@ -28,13 +28,17 @@ test('four hero fact links retain their order, labels, local icons and native fr
 
 test('every hero destination is a unique labelled section after Principles and before additional instances', () => {
   const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)[1];
-  const order = expected.map(([id,label]) => {
+  const order = expected.map(([id,label,icon]) => {
     assert.equal([...html.matchAll(new RegExp(`id="${id}"`, 'g'))].length, 1);
     const section = main.match(new RegExp(`<section class="project-detail" id="${id}" aria-labelledby="([^"]+)" tabindex="-1">([\\s\\S]*?)<\\/section>`));
     assert.ok(section, id);
     const [,headingId,content] = section;
     assert.equal([...html.matchAll(new RegExp(`id="${headingId}"`, 'g'))].length, 1);
-    assert.ok(content.includes(`<h2 id="${headingId}">${label.replaceAll('&','&amp;')}</h2>`));
+    const heading = content.match(new RegExp(`<h2 id="${headingId}">([\\s\\S]*?)<\\/h2>`))?.[1];
+    assert.ok(heading);
+    assert.ok(heading.includes(`src="${icon}"`));
+    assert.match(heading, /<img [^>]*alt=""/);
+    assert.ok(heading.includes(`<span>${label.replaceAll('&','&amp;')}</span>`));
     assert.ok(content.includes('class="project-detail__links"'));
     const links = [...content.matchAll(/<a href="([^"]+)"/g)];
     assert.ok(links.length > 0); assert.ok(links.every(([,href]) => href.startsWith('https://')));

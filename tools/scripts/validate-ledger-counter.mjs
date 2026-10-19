@@ -151,6 +151,12 @@ try {
       assert.ok(geometry.bodyTop >= geometry.artBottom, `${label}: full text overlays artwork`);
       assert.ok(geometry.factTop >= geometry.artBottom, `${label}: facts overlay artwork`);
       assert.ok(bounds.y + bounds.height <= artView + 1, `${label}: count left artwork’s first view`);
+      if (height > width && width <= 704) {
+        const lowerEdgeGap = geometry.artBottom - (bounds.y + bounds.height);
+        assert.ok(lowerEdgeGap >= -1, `${label}: count extends below artwork`);
+        assert.ok(lowerEdgeGap <= 14, `${label}: count is not close to artwork’s lower edge`);
+        evidence.fixtures[`${label}-lower-edge-gap`] = lowerEdgeGap;
+      }
     } else assert.ok(geometry.gap >= 0 && geometry.gap < 160);
     evidence.fixtures[label] = { bounds, geometry };
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

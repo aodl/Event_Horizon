@@ -475,6 +475,8 @@ reserve the cropped SVG's full aspect-ratio height before the full heading,
 lead, memo CTA and facts. These texts must not overlay the artwork. The ledger
 statistic is the sole content exception: keep it unboxed and right aligned in
 the artwork's lower-right first-view area, independently of the main text.
+On narrow portrait screens, place it close to the artwork's lower edge without
+allowing any part of its layout box to extend below the SVG background.
 Long values/errors may expand the region to preserve readable nonoverlapping flow.
 Wide desktop keeps its existing title/artwork composition and statistic near the fourth hero link.
 
