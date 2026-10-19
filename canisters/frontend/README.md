@@ -4,6 +4,30 @@ The frontend is a separately controlled informational Rust canister. It embeds a
 
 HTML retains the non-stale `public, no-cache, no-store` policy. Mutable JavaScript, CSS, and image responses use `public, no-cache`, so browsers may store them but must revalidate before reuse. The current HTML references `app.bundle.js?v=3` and `styles.css?v=10`; query-string changes have historically bypassed URLs cached under the former one-year immutable policy, but they are not an asset-versioning pipeline. Ongoing changes rely on revalidation rather than requiring a new suffix. The certified router serves query-suffixed asset URLs without weakening response certification or CSP.
 
+## Mainnet identity
+
+- CLI name: `event_horizon_frontend`.
+- Frontend canister: `ej7c4-lyaaa-aaaar-qchrq-cai`.
+- Public origin: [www.event-horizon-icp.com](https://www.event-horizon-icp.com/).
+- Canister URL: [ej7c4-lyaaa-aaaar-qchrq-cai.icp.net](https://ej7c4-lyaaa-aaaar-qchrq-cai.icp.net/).
+- Canonical ICP backend: `event_horizon`, `eo6ei-gaaaa-aaaar-qchra-cai`;
+  see its [README](../event-horizon/README.md).
+
+From the repository root, check the existing frontend's mainnet mapping without
+deploying:
+
+```bash
+icp canister status event_horizon_frontend -e ic --id-only
+```
+
+The expected result is `ej7c4-lyaaa-aaaar-qchrq-cai`. `icp.yaml` declares the
+name, while the ignored operator-local `.icp/data/mappings/ic.ids.json` resolves
+it for `-e ic`. Restore that mapping on a fresh checkout using the
+[deployment runbook](../../docs/operations/deployment.md#canister-name-resolution).
+The browser's reviewed backend registry is separate from CLI deployment mappings;
+editing either does not update the other. Frontend upgrades target only the
+frontend canister and do not require a backend upgrade.
+
 ## Custom origin and social preview
 
 The canonical public origin is `https://www.event-horizon-icp.com/`. The

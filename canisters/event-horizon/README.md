@@ -2,6 +2,28 @@
 
 This canister observes one immutable configured ledger, admits Jupiter Faucet-funded subscriber declarations, and sends best-effort one-way wake-up hints when qualifying transfers appear. Subscribers retain authoritative cursors and reconciliation responsibility.
 
+## Mainnet identity
+
+- CLI name: `event_horizon`.
+- Canonical ICP backend: `eo6ei-gaaaa-aaaar-qchra-cai`.
+- Companion frontend: `event_horizon_frontend`, `ej7c4-lyaaa-aaaar-qchrq-cai`;
+  see its [README](../frontend/README.md).
+
+These are the existing mainnet canisters. Local replicas and additional Ledger
+instances have separate IDs. From the repository root, check name resolution
+without deploying:
+
+```bash
+icp canister status event_horizon -e ic --id-only
+```
+
+The expected result is `eo6ei-gaaaa-aaaar-qchra-cai`. `icp.yaml` declares the
+name; the ignored operator-local `.icp/data/mappings/ic.ids.json` binds it to
+the mainnet principal. A fresh checkout must restore that mapping. See
+[canister name resolution](../../docs/operations/deployment.md#canister-name-resolution)
+before any deployment. Documented identity does not establish the live module
+hash or controller state; verify those independently.
+
 ## Immutable configuration and ledger modes
 
 Installation persists `observed_ledger`, optional `sns_root`, and optional `surplus_canister` exactly once. The latter is an independent canister principal whose default all-zero-subaccount ICP AccountIdentifier receives eligible surplus ICP. `null` disables diversion. Ordinary upgrades take no configuration argument, and production exposes no setter or administrator method. The ICP Ledger, CMC, NNS Governance, Jupiter Historian, and Jupiter Faucet remain Wasm-level protocol anchors, so every instance uses the same reviewed backend bytes.

@@ -2,6 +2,20 @@
 
 [`SPEC.md`](../SPEC.md) is the normative protocol. Current explanatory documentation is grouped by concern; `docs/codex/` and `docs/provenance/` are historical evidence rather than live protocol definitions.
 
+## Mainnet deployment identities
+
+| CLI name | Existing canister ID |
+| --- | --- |
+| `event_horizon` (backend) | `eo6ei-gaaaa-aaaar-qchra-cai` |
+| `event_horizon_frontend` (frontend) | `ej7c4-lyaaa-aaaar-qchrq-cai` |
+
+The [deployment runbook](operations/deployment.md#canister-name-resolution)
+explains how the `ic` environment resolves these names through the local mapping
+file, including setup on a fresh checkout. The
+[backend README](../canisters/event-horizon/README.md#mainnet-identity) and
+[frontend README](../canisters/frontend/README.md#mainnet-identity) document each
+component's identity and role.
+
 ## Architecture
 
 - [Overview](architecture/overview.md)

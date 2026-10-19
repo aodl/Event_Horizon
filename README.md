@@ -39,6 +39,21 @@ Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but conta
 
 A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 
+## Mainnet canisters
+
+| Component / CLI name | Canister ID | Component documentation |
+| --- | --- | --- |
+| Backend: `event_horizon` | `eo6ei-gaaaa-aaaar-qchra-cai` | [Backend README](canisters/event-horizon/README.md) |
+| Frontend: `event_horizon_frontend` | `ej7c4-lyaaa-aaaar-qchrq-cai` | [Frontend README](canisters/frontend/README.md) |
+
+The public site is [www.event-horizon-icp.com](https://www.event-horizon-icp.com/);
+the frontend also has its [canister URL](https://ej7c4-lyaaa-aaaar-qchrq-cai.icp.net/).
+These IDs identify the existing canonical ICP deployment, not local replicas or
+future additional instances. `icp.yaml` declares the CLI names;
+`.icp/data/mappings/ic.ids.json` resolves them in the `ic` environment. This
+operator-local file is ignored by Git, so restore and verify it on a fresh
+checkout using the [deployment runbook](docs/operations/deployment.md#canister-name-resolution).
+
 ## Dynamic admission pricing
 
 Event Horizon observes the CMC ICP/XDR conversion rate roughly daily and retains at most 1,461 UTC-day observations. With retained floor `F` and latest rate `C`:

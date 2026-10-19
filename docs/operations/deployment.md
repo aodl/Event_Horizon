@@ -21,6 +21,48 @@ This mapping is local deployment state and must not be committed as application 
 
 > **Do not run a mainnet deploy until the mapping has been checked. Otherwise a deployment tool may create new canisters rather than use the permanent Event Horizon canisters.**
 
+### Canister name resolution
+
+`icp.yaml` declares `event_horizon` and `event_horizon_frontend` and includes both
+in the `ic` environment. For `-e ic`, `icp-cli` resolves those names through
+`.icp/data/mappings/ic.ids.json`. Markdown IDs and the frontend's static backend
+registry do not configure CLI name resolution. Supplying a principal directly
+targets that principal instead of resolving a project name.
+
+This repository ignores all of `.icp/`. The mapping already exists in the
+operator workspace, but a fresh clone does not contain it. With the installed
+`icp-cli` 1.2.0, restore missing entries from the repository root using:
+
+```bash
+icp canister link event_horizon eo6ei-gaaaa-aaaar-qchra-cai -e ic
+icp canister link event_horizon_frontend ej7c4-lyaaa-aaaar-qchrq-cai -e ic
+```
+
+`link` records an existing principal locally; it does not create, deploy, or
+upgrade a canister. Do not use `--force` to replace an unexpected mapping without
+investigating it. Verify both entries before an authorised deployment:
+
+```bash
+icp canister status event_horizon -e ic --id-only
+# eo6ei-gaaaa-aaaar-qchra-cai
+icp canister status event_horizon_frontend -e ic --id-only
+# ej7c4-lyaaa-aaaar-qchrq-cai
+```
+
+These ID-only checks confirm local name resolution, not the installed module or
+controller state. Local managed-network IDs use the separate
+`.icp/cache/mappings/local.ids.json`; never substitute them for mainnet IDs.
+Use `--no-create` on authorised mainnet deployments so a missing entry fails
+rather than creating a replacement canister. See the matching upstream
+[ICP CLI project model](https://cli.internetcomputer.org/1.2/concepts/project-model/#canister-ids)
+for the mapping locations. Identity documentation is also available in the
+[backend README](../../canisters/event-horizon/README.md#mainnet-identity),
+[frontend README](../../canisters/frontend/README.md#mainnet-identity),
+[repository README](../../README.md#mainnet-canisters), and
+[documentation index](../README.md#mainnet-deployment-identities).
+
+### Backend deployment policy
+
 The canonical ICP backend is already installed. This 1,000 ICP global-pricing
 release is an exceptional prelaunch state-policy boundary: old stable global
 prices cannot safely be interpreted using the new range divisor. The selected
