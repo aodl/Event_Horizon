@@ -3049,25 +3049,31 @@ mod tests {
     fn global_fanout_reserve_skips_still_attempt_all_recipients() -> Result<()> {
         let env = Env::with_event_horizon_wasm_and_surplus_mode(
             wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
-            1_003_000_000_000,
+            900_000_000_000,
             false,
             true,
             false,
         )?;
-        env.poll()?;
         env.seed_subscribers("global", 1_024)?;
         env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
+        let before = env.state()?;
         env.poll()?;
-        let counts = env.poke_counts()?;
-        assert_eq!(
-            counts[0], 1_024,
-            "reserve skips do not stop dispatch iteration"
-        );
-        assert!(counts[1] > 0, "initial liquid headroom permits some sends");
-        assert!(counts[1] < counts[0], "later sends preserve the reserve");
-        assert_eq!(env.state()?.observed_next_block, 1);
-        // This is send-side evidence only: synthetic recipients do not confirm
-        // remote execution. Execution charges may themselves consume reserve.
+        assert_eq!(env.poke_counts()?, vec![0, 0]);
+        assert_eq!(env.state()?.observed_next_block, before.observed_next_block);
+        assert!(!env.state()?.observed_bootstrapped);
+
+        // Restore ample local funding. A prospective bootstrap still must not
+        // produce global wakes; later live activity resumes the full fan-out.
+        env.pic.add_cycles(env.event_horizon, 2_000_000_000_000_000);
+        env.poll()?;
+        assert!(env.state()?.observed_bootstrapped);
+        assert_eq!(env.poke_counts()?, vec![0, 0]);
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
+        env.poll()?;
+        assert_eq!(env.poke_counts()?, vec![1_024, 1_024]);
+        assert_eq!(env.state()?.observed_next_block, 2);
+        // These are attempted/accepted sends, not confirmed remote execution.
+
         Ok(())
     }
 
