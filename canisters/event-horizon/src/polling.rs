@@ -23,6 +23,25 @@ struct MatchState {
     global: bool,
     subs: BTreeMap<WatchTarget, Nat>,
 }
+
+fn dispatch_matches(
+    matches: BTreeMap<Principal, MatchState>,
+    mut poke: impl FnMut(Principal, Vec<subscriber::PokeMatch>) -> bool,
+) {
+    // Partition already-coalesced entries once, preserving principal order in
+    // each phase. Payload shape does not identify actual global eligibility.
+    let (globals, specifics): (Vec<_>, Vec<_>) =
+        matches.into_iter().partition(|(_, state)| state.global);
+    for (principal, state) in globals.into_iter().chain(specifics) {
+        let hint = state
+            .subs
+            .into_iter()
+            .map(|(target, max_amount)| subscriber::PokeMatch { target, max_amount })
+            .collect();
+        // A failed or reserve-protected attempt must not stop later attempts.
+        let _ = poke(principal, hint);
+    }
+}
 struct SharedGlobalOrder {
     existing: BTreeSet<Principal>,
     admitted_at: BTreeMap<Principal, u64>,
@@ -738,17 +757,7 @@ pub async fn run_poll() {
             }
         }
     }
-    for (p, m) in out {
-        let hint = if m.subs.is_empty() {
-            vec![]
-        } else {
-            m.subs
-                .into_iter()
-                .map(|(target, max_amount)| subscriber::PokeMatch { target, max_amount })
-                .collect()
-        };
-        let _ = subscriber::poke(p, hint);
-    }
+    dispatch_matches(out, subscriber::poke);
 }
 
 #[cfg(test)]
@@ -759,6 +768,116 @@ mod target_match_tests {
         blocks::{ArchivedBlocks, BlockWithId, GetBlocksRequest},
     };
     use std::str::FromStr;
+
+    #[test]
+    fn dispatches_global_matches_first_in_principal_order_with_specific_payload_precedence() {
+        let principals: Vec<_> = (1..=5).map(|n| Principal::from_slice(&[n])).collect();
+        assert!(principals.windows(2).all(|pair| pair[0] < pair[1]));
+        let mut matches = BTreeMap::new();
+        // Deliberately insert out of principal order; mixed matches must remain
+        // in the global phase despite their nonempty payload.
+        for index in [4, 2, 0, 3, 1] {
+            let mut state = MatchState {
+                global: index >= 2,
+                ..MatchState::default()
+            };
+            if index != 3 {
+                record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(100u8));
+            }
+            matches.insert(principals[index], state);
+        }
+        let mut attempts = Vec::new();
+        dispatch_matches(matches, |principal, hint| {
+            attempts.push((principal, hint));
+            true
+        });
+        assert_eq!(
+            attempts.iter().map(|(p, _)| *p).collect::<Vec<_>>(),
+            [2, 3, 4, 0, 1].map(|i| principals[i])
+        );
+        for (principal, hint) in attempts {
+            if principal == principals[3] {
+                assert!(hint.is_empty());
+            } else {
+                assert_eq!(
+                    hint,
+                    vec![subscriber::PokeMatch {
+                        target: WatchTarget::Subaccount(7),
+                        max_amount: Nat::from(100u8),
+                    }]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn failed_global_attempts_do_not_block_specific_attempts() {
+        let specific = Principal::from_slice(&[1]);
+        let global = Principal::from_slice(&[2]);
+        let mut specific_state = MatchState::default();
+        record_match(
+            &mut specific_state,
+            WatchTarget::Subaccount(7),
+            Nat::from(1u8),
+        );
+        let matches = BTreeMap::from([
+            (specific, specific_state),
+            (
+                global,
+                MatchState {
+                    global: true,
+                    ..MatchState::default()
+                },
+            ),
+        ]);
+        let mut attempts = Vec::new();
+        dispatch_matches(matches, |principal, _| {
+            attempts.push(principal);
+            false // Includes a synchronous send failure or an unaffordable call.
+        });
+        assert_eq!(attempts, vec![global, specific]);
+    }
+
+    #[test]
+    fn dispatch_preserves_bounded_sorted_maxima_in_both_phases() {
+        let huge = Nat::from_str("18446744073709551616000000000000000000").unwrap();
+        for global in [false, true] {
+            let mut state = MatchState {
+                global,
+                ..MatchState::default()
+            };
+            record_match(&mut state, WatchTarget::NeuronNonce(1), Nat::from(9u8));
+            for n in (0..255u64).rev() {
+                record_match(&mut state, WatchTarget::Subaccount(n), Nat::from(n));
+            }
+            record_match(&mut state, WatchTarget::Subaccount(300), Nat::from(1u8));
+            record_match(&mut state, WatchTarget::Subaccount(7), huge.clone());
+            record_match(&mut state, WatchTarget::Subaccount(7), Nat::from(1u8));
+            let principal = Principal::from_slice(&[1]);
+            let mut attempts = 0;
+            dispatch_matches(BTreeMap::from([(principal, state)]), |recipient, hint| {
+                attempts += 1;
+                assert_eq!(recipient, principal);
+                assert_eq!(hint.len(), MAX_SPECIFIC_TARGETS_PER_POKE);
+                for (n, matched) in hint[..255].iter().enumerate() {
+                    assert_eq!(matched.target, WatchTarget::Subaccount(n as u64));
+                    assert_eq!(
+                        matched.max_amount,
+                        if n == 7 { huge.clone() } else { Nat::from(n) }
+                    );
+                }
+                assert_eq!(
+                    hint[255],
+                    subscriber::PokeMatch {
+                        target: WatchTarget::NeuronNonce(1),
+                        max_amount: Nat::from(9u8),
+                    }
+                );
+                true
+            });
+            assert_eq!(attempts, 1);
+        }
+    }
 
     #[test]
     fn maxima_order_and_arbitrary_precision_are_preserved() {

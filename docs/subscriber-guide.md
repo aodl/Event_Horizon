@@ -102,6 +102,16 @@ Numeric subaccount `N` means subscriber ownership with `24 zero bytes || N.to_be
 
 `max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. It is a prefilter hint, not proof of payment. Specific matches take precedence over simultaneous global activity. `poke([])` means global-only activity. Non-empty targets are ordered as numeric subaccounts ascending and then neuron nonces ascending, with at most 256 retained targets per subscriber per poll. Any omission affects wake-up latency only.
 
+Within each completed poll, Event Horizon attempts all globally matched
+subscribers before specific-only subscribers, in ascending principal order
+within each phase. A mixed match receives one poke in the global phase with
+the specific payload. This fixed rule is independent of endowment amounts,
+subscriber balances and polling cadence; there are no configurable priority
+tiers. It orders outbound attempts only, without awaiting acknowledgement or
+completion. Delivery and remote execution order between different canisters
+remain unguaranteed, as does ordering across independent Event Horizon
+instances. There is no retry or durable notification queue.
+
 ## Subscribing to multiple ledgers
 
 One subscriber can trust and subscribe through multiple independent Event Horizon backend instances. Each instance has exactly one immutable observed-ledger context, so the ledger identity is supplied by the authenticated caller rather than repeated in every `PokeMatch`:
@@ -186,6 +196,8 @@ poke(matches):
 # - bounds and rate-limits work according to the application's own policy
 # - reads authoritative Ledger/Index state using independent per-Ledger cursors
 # - processes only locally authorised activity, not just the supplied hints
+# - for Index-dependent work, shares one pending delayed follow-up after the
+#   initial pass, where appropriate; see Index catch-up below
 # The independent periodic timer schedules this same reconciliation path.
 ```
 
@@ -196,6 +208,70 @@ consumer must not process `poke([])` merely because its caller is trusted.
 
 Reconciliation state must be independent per observed Ledger. Never advance a
 cursor, accept a payment or perform accounting from a poke alone.
+
+## Index catch-up
+
+A global subscription can provide accelerated wake-ups to an Index canister
+that supports `poke`. Applications may query that Index when they receive
+their own specific-target pokes. Even with global-first dispatch, the
+application can query before the Index has ingested the triggering Ledger
+transaction. This is an eventual-consistency timing issue, not necessarily a
+missed notification:
+
+```text
+Ledger records transaction
+        |
+Event Horizon completes poll
+        |
+        +--> Global poke attempted: Index
+        |
+        +--> Specific poke attempted: Application
+                                        |
+                                        +--> Immediate Index query
+                                        |    Transaction may be absent
+                                        |
+                                        +--> Delayed Index query (~5s)
+                                             Transaction may now be visible
+```
+
+For reconciliation that depends on an Index, the recommended sequence is:
+
+1. Authenticate Event Horizon as caller and resolve its Ledger context.
+2. Filter supplied targets and amount hints against local approved interests,
+   cheaply rejecting unapproved targets, below-local-threshold amounts and
+   unwanted global-only pokes.
+3. Coalesce an accepted poke with any already pending reconciliation.
+4. Perform the initial Index reconciliation with sensible work bounds.
+5. After that first pass, schedule a second reconciliation approximately five
+   seconds later where appropriate. Skip it if the application can reliably
+   establish that the Index has already caught up sufficiently.
+6. If the Index is still behind, retain pending work and use bounded retry/backoff
+   or the application's independent periodic reconciliation.
+7. Process transactions idempotently using authoritative transaction history
+   and persistent local cursors.
+
+Use a one-shot timer or equivalent scheduled task; return from `poke` promptly
+instead of keeping it open while waiting. Five seconds is an illustrative
+starting point, not an exact mandatory delay or protocol guarantee. An Index
+may lag longer, and timer execution itself can be delayed. An empty initial
+result or an unsuccessful five-second retry is not proof that no transaction
+exists.
+
+Multiple accepted notifications should share a pending follow-up; do not create
+one timer and Index query per incoming poke or continually postpone the pending
+check. Prevent concurrent or overlapping reconciliation across initial,
+follow-up and periodic work. Bound and rate-limit that work and retain the
+independent periodic timer. Schedule follow-ups only after the local interest
+check, so unsolicited callbacks do not create a new cycles-drain opportunity.
+Timers do not survive upgrades: restore needed scheduling from persistent work
+and cursors as appropriate for the application.
+
+Subscribers reading the Ledger directly do not need this Index-specific second
+check. Each subscriber owns its retry policy; there is no new Event Horizon
+callback setting. Event Horizon remains Index-independent: it never discovers,
+queries, inspects or waits for an Index. See the current ICP guidance on
+[message execution](https://docs.internetcomputer.org/references/message-execution-properties/)
+and [timers](https://docs.internetcomputer.org/guides/backends/timers/).
 
 ## Local thresholds and poke poisoning
 
@@ -278,3 +354,6 @@ of an unsolicited irrelevant target or a below-local-threshold hint. Choosing
 party from funding unwanted specific subscriptions. It is not inherently insecure;
 safety depends on the intentionally bounded work performed after each authenticated
 wake-up. Existing Index canisters are not assumed to export `poke`.
+An Index that uses zero-argument `poke()` must still authenticate the caller
+and bound/coalesce its indexing work; the interface does not establish catch-up
+or completion before another subscriber executes.

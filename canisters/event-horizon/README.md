@@ -51,6 +51,20 @@ reports sorted target/maximum-raw-amount pairs; an empty vector represents
 global-only activity. Specific matches take precedence when both match, so an
 intentionally global consumer treats either vector shape as a wake-up.
 
+Within each completed poll, the backend attempts all actually globally matched
+recipients first, including mixed matches with specific payloads, then
+specific-only recipients. Each phase uses ascending principal order regardless
+of endowment amount. This fixed rule adds no configurable priority tiers or
+preferential cadence. Failed or unaffordable sends do not block later attempts;
+per-call reserve checks remain in force. Outbound attempt order guarantees
+neither delivery nor remote execution order between different canisters, Index
+catch-up, or ordering across independent instances. No acknowledgement or
+completion response is awaited, and there is no durable notification queue.
+Event Horizon never discovers, queries, inspects or waits for an Index.
+Index-dependent subscribers should consider a bounded, coalesced follow-up
+approximately five seconds after their initial reconciliation; see
+[Index catch-up](../../docs/subscriber-guide.md#index-catch-up).
+
 Any patron may fund account, range, neuron or global declarations without
 subscriber consent, including irrelevant targets or weaker thresholds. Scoped
 subscribers should normally implement `poke(vec PokeMatch)`, authenticate the

@@ -3046,6 +3046,33 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn global_fanout_reserve_skips_still_attempt_all_recipients() -> Result<()> {
+        let env = Env::with_event_horizon_wasm_and_surplus_mode(
+            wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+            1_003_000_000_000,
+            false,
+            true,
+            false,
+        )?;
+        env.poll()?;
+        env.seed_subscribers("global", 1_024)?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
+        env.poll()?;
+        let counts = env.poke_counts()?;
+        assert_eq!(
+            counts[0], 1_024,
+            "reserve skips do not stop dispatch iteration"
+        );
+        assert!(counts[1] > 0, "initial liquid headroom permits some sends");
+        assert!(counts[1] < counts[0], "later sends preserve the reserve");
+        assert_eq!(env.state()?.observed_next_block, 1);
+        // This is send-side evidence only: synthetic recipients do not confirm
+        // remote execution. Execution charges may themselves consume reserve.
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn capacity_specific_fanout_256_and_1024_records() -> Result<()> {
         for subscribers in [256u64, 1_024] {
             let env = Env::new_two_ledgers_for_capacity()?;
@@ -3340,6 +3367,72 @@ mod tests {
             before,
             "neither earlier activity nor the admission block wakes the new subscriber"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn specific_payload_survives_global_admission_after_relevant_activity() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let before = env.subscriber_observation()?.pokes;
+        let counts = env.poke_counts()?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            23,
+            None,
+        )?;
+        env.append_global_admission(GLOBAL_BASE_E8S)?;
+        env.poll()?;
+        let received = env.wait_for_pokes(before + 1)?;
+        assert!(env.global_subscription()?);
+        assert_eq!(received.pokes, before + 1);
+        assert_eq!(received.last_caller, Some(env.event_horizon));
+        assert_eq!(
+            received.matches,
+            vec![PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                max_amount: candid::Nat::from(23u8),
+            }]
+        );
+        assert_eq!(env.poke_counts()?, vec![counts[0] + 1, counts[1] + 1]);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn trapping_global_receiver_does_not_prevent_specific_only_delivery() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
+        env.admit_for(env.subscriber_no_args, 7, None, 1_000_000_000)?;
+        // Drain the earlier global wake before enabling the receiver trap.
+        for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+            env.pic.tick();
+        }
+        let global_before = env.subscriber_observation()?.pokes;
+        let specific_before = env.no_args_subscriber_observation()?.pokes;
+        let counts = env.poke_counts()?;
+        update::<_, ()>(&env.pic, env.subscriber, "debug_set_trap", true)?;
+        env.append(
+            account_id(Principal::from_slice(&[9]), [0; 32]),
+            account_id(env.subscriber_no_args, numbered(7)),
+            13,
+            None,
+        )?;
+        env.poll()?;
+        let received = env.wait_for_no_args_pokes(specific_before + 1)?;
+        assert_eq!(received.pokes, specific_before + 1);
+        assert_eq!(received.last_caller, Some(env.event_horizon));
+        assert_eq!(env.poke_counts()?, vec![counts[0] + 2, counts[1] + 2]);
+        for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+            env.pic.tick();
+        }
+        assert_eq!(env.subscriber_observation()?.pokes, global_before);
+        // Receiver results establish isolation and compatibility, not relative
+        // execution order between these two different canisters.
         Ok(())
     }
 

@@ -6,6 +6,18 @@ A first successful zero-length Ledger read bootstraps prospectively. Each later 
 
 Each transfer performs one direct watched-account lookup. Qualifying matches accumulate as `subscriber -> WatchTarget -> maximum qualifying Nat`, with deterministic target ordering and a 256-target per-poke bound. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one target-aware poke per subscriber: a non-empty specific-target vector wins; otherwise a global match sends an empty vector.
 
+Within each completed poll, outbound poke attempts use two phases: actual
+global matches first (including mixed matches), then specific-only matches,
+with ascending principal order within each phase. Admission timing remains
+authoritative. Failed or unaffordable pokes do not stop subsequent attempts;
+each retains its liquid-cycles reserve check. This fixed rule is independent
+of endowment amounts and cadence. No acknowledgement or completion is awaited,
+and delivery or execution order between different canisters is not guaranteed.
+It provides no cross-instance ordering or Index catch-up guarantee. Event
+Horizon has no Index dependency, retry or durable notification queue. See the
+[subscriber guide](../subscriber-guide.md#index-catch-up) for the recommended
+coalesced Index follow-up approximately five seconds after initial reconciliation.
+
 Public logs are intentionally episode-based. A repeated reader failure may be
 suppressed until a successful scan clears that failure episode. A daily
 `HEALTH` line proves that maintenance ran, not that either reader completed or

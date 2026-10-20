@@ -126,7 +126,7 @@ A declaration is eligible for permanent admission only after both are true:
 
 The approved mainnet Faucet payout source is fixed in the production Wasm.
 
-Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, priority tier, or administration interface.
+Admission is permanent. There is no expiry, deletion, subscriber balance, subscriber quota, configurable subscriber priority tier, or administration interface. The fixed global-first dispatch rule below does not create paid priority or preferential polling cadence.
 
 The displayed price is the minimum qualifying cumulative productive endowment
 for that exact declaration. A patron transfers ICP to Jupiter Faucet's
@@ -159,6 +159,23 @@ Each poll captures a fixed exclusive ending boundary from the Ledger chain lengt
 For each relevant transfer to an admitted watched account, Event Horizon records the maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still update their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
 Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
+
+Within a single completed poll, Event Horizon attempts all globally matched
+subscriber pokes before attempting specific-only subscriber pokes. Each phase
+uses deterministic ascending principal order; endowment amounts do not determine
+ordering within a phase. Classification uses actual global-match state for the
+relevant live activity, including admission timing, rather than an empty payload
+or merely having a global declaration. A mixed global/specific match belongs to
+the global phase and still receives exactly one poke with its specific payload.
+A failed or unaffordable global poke does not stop remaining attempts; every
+attempt retains the liquid-cycles reserve check.
+
+This is ordering of outbound call attempts by Event Horizon, not a guarantee of
+delivery or remote execution order between different canisters. It does not
+establish Index catch-up or completion and does not apply across independent
+Event Horizon instances. No acknowledgement or completion response is awaited;
+there is no retry or durable notification queue. Event Horizon does not discover,
+query, inspect or wait for Index canisters.
 
 ## 7. Archives and history gaps
 
@@ -236,7 +253,7 @@ There is:
 - no retry;
 - no durable notification queue;
 - no delivery journal;
-- no ordering or delivery guarantee.
+- no delivery or remote execution ordering guarantee (the fixed outbound-attempt ordering is defined in section 6).
 
 Caller authentication identifies the instance, not subscriber consent or local
 authorisation. Each receiver maintains its own trusted-caller-to-observed-Ledger
@@ -262,7 +279,15 @@ defence in depth, not backend-enforced authorisation. See the
 [subscriber guide](docs/subscriber-guide.md) for the recommended handler and
 threshold-poisoning example.
 
-Because Event Horizon reads the Ledger directly, a poke may arrive before the ICP Index exposes the triggering transaction. The subscriber owns any Index retry/backoff policy.
+Because Event Horizon reads the Ledger directly, a poke may arrive before an
+Index exposes the triggering transaction, even with global-first dispatch.
+Index-dependent subscribers should consider a coalesced second reconciliation
+approximately five seconds after the initial pass, unless sufficient catch-up
+is already reliably established. This illustrative delay is not a protocol
+guarantee: an Index may lag longer. The subscriber owns bounded retry/backoff
+and independent periodic reconciliation; direct Ledger readers need no
+Index-specific second check. See the subscriber guide for timing and cycles
+safety.
 
 ## 9. Pooled funding
 
