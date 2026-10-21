@@ -301,6 +301,7 @@ mod tests {
     #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
     struct PokeMatch {
         target: WatchTarget,
+        first_block_index: u64,
         max_amount: candid::Nat,
     }
     fn targets(matches: &[PokeMatch]) -> Vec<WatchTarget> {
@@ -1298,10 +1299,12 @@ mod tests {
         let matches = vec![
             PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: (1u64 << 53) + 1,
                 max_amount: candid::Nat::from(9u8),
             },
             PokeMatch {
                 target: WatchTarget::NeuronNonce(11),
+                first_block_index: u64::MAX,
                 max_amount: candid::Nat::from_str("18446744073709551616")?,
             },
         ];
@@ -1330,6 +1333,198 @@ mod tests {
             query::<_, Option<Principal>>(&pic, no_args_subscriber, "debug_last_caller", ())?,
             Some(Principal::anonymous())
         );
+        let full: Vec<_> = (0..256u64)
+            .map(|n| PokeMatch {
+                target: WatchTarget::Subaccount(n),
+                first_block_index: u64::MAX - n,
+                max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(n),
+            })
+            .collect();
+        let payload = encode_one(&full)?;
+        for subscriber in [vector_subscriber, no_args_subscriber] {
+            decode_args::<()>(&update_raw(&pic, subscriber, "poke", payload.clone())?)?;
+        }
+        assert_eq!(
+            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?,
+            full
+        );
+        assert_eq!(
+            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
+            3
+        );
+        assert_eq!(
+            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
+            4
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn first_block_index_spans_pages_thresholds_namespaces_and_upgrade() -> Result<()> {
+        for generic in [false, true] {
+            let env = if generic {
+                Env::new_sns()?
+            } else {
+                Env::new()?
+            };
+            env.poll()?;
+            let source = account_id(Principal::from_slice(&[91]), [0; 32]);
+            let threshold = 100_000_000u64;
+            // This genuine incoming transfer predates admission and is excluded.
+            let before_admission = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                50 * threshold,
+                None,
+            )?;
+            env.admit_range(7, 8, Some("1"), 2_000_000_000)?;
+            let memo = format!("{}.n42:1", env.subscriber.to_text().replace('-', "")).into_bytes();
+            env.set_route(memo.clone(), 1_000_000_000)?;
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(env.event_horizon, [0; 32]),
+                1,
+                Some(memo),
+            )?;
+            env.poll()?;
+            assert!(
+                env.target_subscription(WatchTarget::NeuronNonce(42))?
+                    .is_some(),
+                "generic={generic} state={:?} logs={}",
+                env.state()?,
+                env.public_logs()?
+            );
+            if generic {
+                // Make admission and observed Ledger namespaces visibly different.
+                env.append_ledger_batch(DebugBatchKind::Irrelevant, 19)?;
+                env.poll()?;
+            }
+            let cursor = env.state()?.observed_next_block;
+            let before = env.subscriber_observation()?.pokes;
+            env.append_observed(
+                source.clone(),
+                account_id(Principal::from_slice(&[92]), [0; 32]),
+                1,
+                None,
+            )?;
+            let below = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                threshold - 1,
+                None,
+            )?;
+            let first_seven = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                4 * threshold,
+                None,
+            )?;
+            let first_eight = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(8)),
+                3 * threshold,
+                None,
+            )?;
+            let governance = if generic {
+                env.cmc
+            } else {
+                Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?
+            };
+            let neuron_account = account_id(governance, neuron_staking(env.subscriber, 42));
+            let below_neuron =
+                env.append_observed(source.clone(), neuron_account.clone(), threshold - 1, None)?;
+            let first_neuron =
+                env.append_observed(source.clone(), neuron_account.clone(), 2 * threshold, None)?;
+            env.append_observed_batch(DebugBatchKind::Irrelevant, 512)?;
+            let largest_seven = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                15 * threshold,
+                None,
+            )?;
+            env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                8 * threshold,
+                None,
+            )?;
+            env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(8)),
+                2 * threshold,
+                None,
+            )?;
+            env.append_observed(source.clone(), neuron_account, 20 * threshold, None)?;
+            assert!(before_admission < first_seven && cursor < first_seven && below < first_seven);
+            assert!(below_neuron < first_neuron && first_seven < largest_seven);
+            let method = if generic {
+                "debug_icrc3_get_blocks_calls"
+            } else {
+                "debug_legacy_query_blocks_calls"
+            };
+            let calls_before = query::<_, u64>(&env.pic, env.event_horizon, method, ())?;
+            env.poll()?;
+            let received = env.wait_for_pokes(before + 1)?;
+            assert_eq!(received.pokes, before + 1);
+            assert_eq!(received.last_caller, Some(env.event_horizon));
+            assert_eq!(
+                received.matches,
+                vec![
+                    PokeMatch {
+                        target: WatchTarget::Subaccount(7),
+                        first_block_index: first_seven,
+                        max_amount: candid::Nat::from(15 * threshold)
+                    },
+                    PokeMatch {
+                        target: WatchTarget::Subaccount(8),
+                        first_block_index: first_eight,
+                        max_amount: candid::Nat::from(3 * threshold)
+                    },
+                    PokeMatch {
+                        target: WatchTarget::NeuronNonce(42),
+                        first_block_index: first_neuron,
+                        max_amount: candid::Nat::from(20 * threshold)
+                    },
+                ]
+            );
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.event_horizon, method, ())? - calls_before,
+                3
+            );
+            if generic {
+                assert_ne!(
+                    env.state()?.admission_next_block,
+                    env.state()?.observed_next_block
+                );
+            }
+            let committed = env.state()?;
+            env.upgrade_same_debug_wasm()?;
+            let upgraded = env.state()?;
+            assert_eq!(upgraded.observed_next_block, committed.observed_next_block);
+            assert_eq!(
+                upgraded.admission_next_block,
+                committed.admission_next_block
+            );
+            assert_eq!(upgraded.subscriptions, committed.subscriptions);
+            let next_index = env.append_observed(
+                source,
+                account_id(env.subscriber, numbered(7)),
+                threshold,
+                None,
+            )?;
+            env.poll()?;
+            let next = env.wait_for_matches(&[PokeMatch {
+                target: WatchTarget::Subaccount(7),
+                first_block_index: next_index,
+                max_amount: candid::Nat::from(threshold),
+            }])?;
+            assert_eq!(
+                next.pokes,
+                before + 2,
+                "transient aggregates do not survive polls or upgrades"
+            );
+        }
         Ok(())
     }
 
@@ -1377,13 +1572,14 @@ mod tests {
         let no_args_specific_before = no_args_global.pokes;
         let dispatch_specific_before = env.poke_counts()?;
         let source = account_id(Principal::from_slice(&[92]), [0; 32]);
+        let mut matching_indices = Vec::new();
         for amount in [3, 9] {
-            env.append(
+            matching_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(7)),
                 amount,
                 None,
-            )?;
+            )?);
         }
         for amount in [4, 8] {
             env.append(
@@ -1400,6 +1596,7 @@ mod tests {
             vector_specific.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(9u8),
             }],
             "specific matches take precedence over the same subscriber's global interest"
@@ -1444,13 +1641,14 @@ mod tests {
         let no_args_before = env.no_args_subscriber_observation()?.pokes;
         let dispatch_before = env.poke_counts()?;
         let source = account_id(Principal::from_slice(&[93]), [0; 32]);
+        let mut matching_indices = Vec::new();
         for amount in [5, 13] {
-            env.append_observed(
+            matching_indices.push(env.append_observed(
                 source.clone(),
                 account_id(env.subscriber, numbered(19)),
                 amount,
                 None,
-            )?;
+            )?);
             env.append_observed(
                 source.clone(),
                 account_id(env.subscriber_no_args, numbered(19)),
@@ -1466,6 +1664,7 @@ mod tests {
             vector.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(19),
+                first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(13u8),
             }]
         );
@@ -1500,7 +1699,7 @@ mod tests {
         );
 
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
-        env.append(
+        let seven_index = env.append(
             source.clone(),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -1512,7 +1711,7 @@ mod tests {
             999_999,
             None,
         )?;
-        env.append(
+        let eight_index = env.append(
             source,
             account_id(env.subscriber, numbered(8)),
             1_000_000,
@@ -1530,6 +1729,8 @@ mod tests {
             targets(&matches),
             vec![WatchTarget::Subaccount(7), WatchTarget::Subaccount(8)]
         );
+        assert_eq!(matches[0].first_block_index, seven_index);
+        assert_eq!(matches[1].first_block_index, eight_index);
         assert_eq!(matches[0].max_amount, candid::Nat::from(1u8));
         assert_eq!(matches[1].max_amount, candid::Nat::from(1_000_000u64));
         Ok(())
@@ -1546,7 +1747,7 @@ mod tests {
             .target_subscription(WatchTarget::NeuronNonce(nonce))?
             .is_some());
         let governance = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?;
-        env.append(
+        let matching_index = env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(governance, neuron_staking(env.subscriber, nonce)),
             2_000_000,
@@ -1555,6 +1756,7 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::NeuronNonce(nonce),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(2_000_000u64),
         }])?;
         let matches =
@@ -1578,7 +1780,7 @@ mod tests {
         );
         let nonce = 1_000_000;
         env.admit_neuron(nonce, 1_000_000_000)?;
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.cmc, neuron_staking(env.subscriber, nonce)),
             77,
@@ -1593,6 +1795,7 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::NeuronNonce(nonce),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(77u8),
         }])?;
         let matches =
@@ -1755,7 +1958,7 @@ mod tests {
             99,
             None,
         )?;
-        env.append_observed(
+        let matching_index = env.append_observed(
             source,
             account_id(env.subscriber, numbered(256)),
             123_456,
@@ -1764,12 +1967,14 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(256),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(123_456u64),
         }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(256),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(123_456u64),
             }]
         );
@@ -1798,13 +2003,13 @@ mod tests {
             query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
             0
         );
-        env.append(
+        let nonce_two_index = env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(governance, neuron_staking(env.subscriber, 2)),
             200,
             None,
         )?;
-        env.append(
+        let nonce_zero_index = env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(governance, neuron_staking(env.subscriber, 0)),
             100,
@@ -1817,10 +2022,12 @@ mod tests {
             vec![
                 PokeMatch {
                     target: WatchTarget::NeuronNonce(0),
+                    first_block_index: nonce_zero_index,
                     max_amount: candid::Nat::from(100u8),
                 },
                 PokeMatch {
                     target: WatchTarget::NeuronNonce(2),
+                    first_block_index: nonce_two_index,
                     max_amount: candid::Nat::from(200u16),
                 },
             ]
@@ -1850,13 +2057,14 @@ mod tests {
                 .is_some());
         }
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let mut matching_indices = Vec::new();
         for (nonce, amount) in [(0, 10), (1, 20), (2, 30)] {
-            env.append_observed(
+            matching_indices.push(env.append_observed(
                 source.clone(),
                 account_id(env.cmc, neuron_staking(env.subscriber, nonce)),
                 amount,
                 None,
-            )?;
+            )?);
         }
         env.append_observed(
             source,
@@ -1868,14 +2076,17 @@ mod tests {
         let expected = vec![
             PokeMatch {
                 target: WatchTarget::NeuronNonce(0),
+                first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(10u8),
             },
             PokeMatch {
                 target: WatchTarget::NeuronNonce(1),
+                first_block_index: matching_indices[1],
                 max_amount: candid::Nat::from(20u8),
             },
             PokeMatch {
                 target: WatchTarget::NeuronNonce(2),
+                first_block_index: matching_indices[2],
                 max_amount: candid::Nat::from(30u8),
             },
         ];
@@ -1895,7 +2106,7 @@ mod tests {
         env.admit(256, None, 1_000_000_000)?;
         let amount = candid::Nat::from(18_446_744_073_709_551_616u128)
             * candid::Nat::from(1_000_000_000_000_000_000u128);
-        env.append_observed_nat(
+        let matching_index = env.append_observed_nat(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(256)),
             amount.clone(),
@@ -1903,12 +2114,14 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(256),
+            first_block_index: matching_index,
             max_amount: amount.clone(),
         }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(256),
+                first_block_index: matching_index,
                 max_amount: amount,
             }]
         );
@@ -1924,14 +2137,16 @@ mod tests {
         env.admit(256, None, 1_000_000_000)?;
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+        let mut matching_indices = Vec::new();
         for subaccount in 0..=256 {
-            env.append(
+            matching_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(subaccount)),
                 subaccount + 1,
                 None,
-            )?;
+            )?);
         }
+        let cost_before = env.pic.cycle_balance(env.event_horizon);
         env.poll()?;
         env.wait_for_pokes(before + 1)?;
         assert_eq!(
@@ -1940,11 +2155,24 @@ mod tests {
         );
         let matches =
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?;
+        println!(
+            "maximum_payload targets={} candid_bytes={} backend_cycles={} total_memory={}",
+            matches.len(),
+            encode_one(&matches)?.len(),
+            cost_before.saturating_sub(env.pic.cycle_balance(env.event_horizon)),
+            env.pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|e| anyhow!("status: {e:?}"))?
+                .memory_size
+        );
         assert_eq!(matches.len(), 256);
         assert_eq!(
             targets(&matches),
             (0..256).map(WatchTarget::Subaccount).collect::<Vec<_>>()
         );
+        for (matched, index) in matches.iter().zip(&matching_indices) {
+            assert_eq!(matched.first_block_index, *index);
+        }
         assert_eq!(matches[255].max_amount, candid::Nat::from(256u16));
         Ok(())
     }
@@ -1965,23 +2193,26 @@ mod tests {
             candid::Nat::from(0u8)
         );
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let mut matching_indices = Vec::new();
         for amount in [100_000, 2_000_000, 500_000] {
-            env.append(
+            matching_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(7)),
                 amount,
                 None,
-            )?;
+            )?);
         }
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_indices[0],
             max_amount: candid::Nat::from(2_000_000u64),
         }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(2_000_000u64),
             }]
         );
@@ -2013,7 +2244,7 @@ mod tests {
             before,
             "unrelated ICP activity is not observed-token activity"
         );
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -2022,6 +2253,7 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
         }])?;
         assert_eq!(
@@ -2263,7 +2495,7 @@ mod tests {
             env.subscription(7)?.is_some(),
             "parked payout must be admitted after readiness"
         );
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[99]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -2272,12 +2504,14 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
         }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -2370,7 +2604,7 @@ mod tests {
             1,
             Some(memo),
         )?;
-        later_transfer.append(
+        let matching_index = later_transfer.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(later_transfer.subscriber, numbered(7)),
             1,
@@ -2379,6 +2613,7 @@ mod tests {
         later_transfer.poll()?;
         later_transfer.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
         }])?;
         assert_eq!(
@@ -2390,6 +2625,7 @@ mod tests {
             )?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -2403,7 +2639,7 @@ mod tests {
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
         env.admit_global(GLOBAL_BASE_E8S)?;
-        env.append_observed_transfer_from(
+        let matching_index = env.append_observed_transfer_from(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -2411,12 +2647,14 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
         }])?;
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -2454,7 +2692,7 @@ mod tests {
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
         let source = account_id(Principal::from_slice(&[91]), [0; 32]);
-        env.append_observed(
+        let matching_index = env.append_observed(
             source.clone(),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -2496,6 +2734,7 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -2647,7 +2886,7 @@ mod tests {
         )?;
         env.set_legacy_reject_starts(vec![admission_failure_cursor])?;
         let pokes_before = env.subscriber_observation()?.pokes;
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[95]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             1,
@@ -2673,6 +2912,7 @@ mod tests {
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -2841,7 +3081,7 @@ mod tests {
             1,
             Some(memo.clone()),
         )?;
-        env.append(
+        let matching_index = env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             41,
@@ -2856,6 +3096,7 @@ mod tests {
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(41u8),
             }]
         );
@@ -2973,13 +3214,14 @@ mod tests {
         );
 
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
+        let mut matching_indices = Vec::new();
         for subaccount in [0, 128, 255] {
-            env.append(
+            matching_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(subaccount)),
                 1,
                 None,
-            )?;
+            )?);
         }
         env.poll()?;
         env.wait_for_pokes(1)?;
@@ -2988,14 +3230,17 @@ mod tests {
             vec![
                 PokeMatch {
                     target: WatchTarget::Subaccount(0),
+                    first_block_index: matching_indices[0],
                     max_amount: candid::Nat::from(1u8)
                 },
                 PokeMatch {
                     target: WatchTarget::Subaccount(128),
+                    first_block_index: matching_indices[1],
                     max_amount: candid::Nat::from(1u8)
                 },
                 PokeMatch {
                     target: WatchTarget::Subaccount(255),
+                    first_block_index: matching_indices[2],
                     max_amount: candid::Nat::from(1u8)
                 },
             ]
@@ -3158,7 +3403,7 @@ mod tests {
         env.poll()?;
         env.admit(512, None, 1_000_000_000)?;
         let amount = candid::Nat::from_str(&"9".repeat(2_048))?;
-        env.append_observed_nat(
+        let matching_index = env.append_observed_nat(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(512)),
             amount.clone(),
@@ -3166,6 +3411,7 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(512),
+            first_block_index: matching_index,
             max_amount: amount,
         }])?;
         assert_eq!(env.state()?.observed_next_block, 1);
@@ -3183,6 +3429,7 @@ mod tests {
         let source = account_id(Principal::from_slice(&[9]), [0; 32]);
         let before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
 
+        let mut first_indices = Vec::new();
         for (subaccount, amount) in [
             (6, 100_000_000),
             (7, 9_999_999),
@@ -3190,12 +3437,12 @@ mod tests {
             (18, 100_000_000),
             (19, 100_000_000),
         ] {
-            env.append(
+            first_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(subaccount)),
                 amount,
                 None,
-            )?;
+            )?);
         }
         env.poll()?;
         env.wait_for_pokes(before + 1)?;
@@ -3208,10 +3455,12 @@ mod tests {
             vec![
                 PokeMatch {
                     target: WatchTarget::Subaccount(11),
+                    first_block_index: first_indices[2],
                     max_amount: candid::Nat::from(10_000_000u64)
                 },
                 PokeMatch {
                     target: WatchTarget::Subaccount(18),
+                    first_block_index: first_indices[3],
                     max_amount: candid::Nat::from(100_000_000u64)
                 },
             ],
@@ -3242,13 +3491,14 @@ mod tests {
             env.subscription(7)?.unwrap().minimum_units,
             candid::Nat::from(0u8)
         );
+        let mut later_indices = Vec::new();
         for subaccount in [18, 7, 11, 7] {
-            env.append(
+            later_indices.push(env.append(
                 source.clone(),
                 account_id(env.subscriber, numbered(subaccount)),
                 1,
                 None,
-            )?;
+            )?);
         }
         let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
         env.poll()?;
@@ -3261,6 +3511,7 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: later_indices[1],
                 max_amount: candid::Nat::from(1u8),
             }],
             "only account 7 is unfiltered; thresholded range accounts remain filtered"
@@ -3384,7 +3635,7 @@ mod tests {
         env.admit(7, None, 1_000_000_000)?;
         let before = env.subscriber_observation()?.pokes;
         let counts = env.poke_counts()?;
-        env.append(
+        let matching_index = env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             23,
@@ -3400,6 +3651,7 @@ mod tests {
             received.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(23u8),
             }]
         );
@@ -3486,7 +3738,8 @@ mod tests {
             None,
         )?;
         env.append_account_admission(7, None, 1_000_000_000)?;
-        env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
+        let matching_index =
+            env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
 
         env.set_abort_after_staged_admission(true)?;
         env.poll()?;
@@ -3512,6 +3765,7 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }]
         );
@@ -3669,7 +3923,8 @@ mod tests {
             1,
             None,
         )?;
-        env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
+        let matching_index =
+            env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
         env.poll()?;
         env.wait_for_pokes(before + 2)?;
         assert_eq!(
@@ -3680,6 +3935,7 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }],
             "specific account information takes precedence over the global empty hint"
@@ -3938,6 +4194,7 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: live,
                 max_amount: candid::Nat::from(17u8),
             }]
         );
@@ -4068,7 +4325,7 @@ mod tests {
         assert!(env.subscription(7)?.is_some());
         assert_eq!(env.poke_counts()?, catch_up_poke_counts);
 
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[94]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             5,
@@ -4077,6 +4334,7 @@ mod tests {
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(5u8),
         }])?;
         Ok(())
@@ -4130,6 +4388,7 @@ mod tests {
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: live,
                 max_amount: candid::Nat::from(23u8),
             }]
         );
@@ -4185,6 +4444,7 @@ mod tests {
         assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: live,
             max_amount: candid::Nat::from(29u8),
         }])?;
         Ok(())
@@ -4287,7 +4547,7 @@ mod tests {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
-        env.append_observed(
+        let matching_index = env.append_observed(
             account_id(Principal::from_slice(&[8]), [0; 32]),
             account_id(env.subscriber, numbered(7)),
             31,
@@ -4325,6 +4585,7 @@ mod tests {
         assert_eq!(env.state()?.observed_next_block, 1);
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
             max_amount: candid::Nat::from(31u8),
         }])?;
         assert_eq!(env.subscriber_observation()?.pokes, 1);
@@ -4377,6 +4638,7 @@ mod tests {
         assert_eq!(env.state()?.observed_next_block, start + 257);
         env.wait_for_matches(&[PokeMatch {
             target: WatchTarget::Subaccount(7),
+            first_block_index: start + 256,
             max_amount: candid::Nat::from(37u8),
         }])?;
         Ok(())

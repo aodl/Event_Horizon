@@ -186,6 +186,8 @@ assert backend_did.count(' query;') == 2
 assert ' -> ();' not in backend_did
 subscriber_did=(root/'candid/subscriber.did').read_text()
 assert 'target : PokeTarget' in subscriber_did and 'max_amount : nat' in subscriber_did
+assert 'first_block_index : nat64' in subscriber_did
+assert 'first_block_index : opt' not in subscriber_did
 assert 'vec nat8' not in subscriber_did
 install_args=(root/'canisters/event-horizon/mainnet-icp-install-args.did').read_text()
 assert 'observed_ledger = principal' in install_args
@@ -347,7 +349,11 @@ legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async
 assert 'state::global_subscribers()' not in legacy_page
 assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
-assert 'PokeMatch { target, max_amount }' in polling
+assert 'BTreeMap<WatchTarget, TargetMatch>' in polling
+for field in ['first_block_index: matched.first_block_index', 'max_amount: matched.max_amount']:
+    assert field in polling
+assert 'PokeMatch { target, max_amount }' not in polling
+assert 'existing.first_block_index.min(first_block_index)' in polling
 funding=(root/'canisters/event-horizon/src/funding.rs').read_text()
 ledger=(root/'canisters/event-horizon/src/clients/icp_ledger.rs').read_text()
 assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
@@ -426,7 +432,7 @@ for required in [
     assert required in live_text, f'live documentation is missing developer command {required}'
 
 subscriber_guide=(root/'docs/subscriber-guide.md').read_text()
-for marker in ['## Subscribing to multiple ledgers', 'caller', 'max_amount', 'neuron_nonce']:
+for marker in ['## Subscribing to multiple ledgers', 'caller', 'max_amount', 'neuron_nonce', 'first_block_index', '## Direct Ledger reconciliation']:
     assert marker in subscriber_guide, f'subscriber guide missing current guidance {marker}'
 
 spec=(root/'SPEC.md').read_text()
@@ -541,3 +547,11 @@ for document in link_docs:
 
 print('workspace_members', len(members))
 print('static checkpoint checks passed')
+
+# All live callback record definitions retain the required exact-width hint.
+for path in ['canisters/event-horizon/src/clients/subscriber.rs', 'tests/mocks/mock-subscriber/src/lib.rs', 'tests/pocketic/src/lib.rs']:
+    text = (root/path).read_text()
+    record = text.split('struct PokeMatch {', 1)[1].split('}', 1)[0]
+    assert 'first_block_index: u64' in record
+    assert 'Option<' not in record
+assert 'no block index, complete transaction record' not in spec

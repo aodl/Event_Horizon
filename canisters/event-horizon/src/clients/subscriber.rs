@@ -10,6 +10,7 @@ use crate::subscription::WatchTarget;
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct PokeMatch {
     pub target: WatchTarget,
+    pub first_block_index: u64,
     pub max_amount: Nat,
 }
 
@@ -53,10 +54,12 @@ mod tests {
         vec![
             PokeMatch {
                 target: WatchTarget::Subaccount(7),
+                first_block_index: (1u64 << 53) + 1,
                 max_amount: Nat::from(u64::MAX),
             },
             PokeMatch {
                 target: WatchTarget::NeuronNonce(u64::MAX),
+                first_block_index: u64::MAX,
                 max_amount: Nat::from_str("18446744073709551616").expect("u64 max plus one"),
             },
         ]
@@ -111,6 +114,7 @@ mod tests {
                 } else {
                     WatchTarget::NeuronNonce(value)
                 },
+                first_block_index: u64::MAX - value,
                 max_amount: Nat::from(value),
             })
             .collect();

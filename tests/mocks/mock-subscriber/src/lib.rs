@@ -13,6 +13,7 @@ enum PokeTarget {
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 struct PokeMatch {
     target: PokeTarget,
+    first_block_index: u64,
     max_amount: Nat,
 }
 
@@ -65,3 +66,29 @@ fn debug_set_trap(value: bool) {
 }
 
 ic_cdk::export_candid!();
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn generated_poke_record_matches_normative_candid() {
+        let generated = super::__export_service();
+        let normative = include_str!("../../../../candid/subscriber.did");
+        fn fields(did: &str) -> BTreeSet<String> {
+            did.split("type PokeMatch = record {")
+                .nth(1)
+                .unwrap()
+                .split('}')
+                .next()
+                .unwrap()
+                .split(';')
+                .map(|s| s.split_whitespace().collect::<String>())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
+        assert_eq!(fields(&generated), fields(normative));
+        assert_eq!(fields(&generated).len(), 3);
+        assert!(generated.contains("poke : (vec PokeMatch) -> ()"));
+    }
+}

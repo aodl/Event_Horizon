@@ -4,7 +4,7 @@
 
 A first successful zero-length Ledger read bootstraps prospectively. Each later poll pins the first response's exclusive `chain_length`, processes only that interval, and persists page progress. Proven archived prefixes are logged and skipped without archive calls. A legacy empty `blocks` vector gives no meaning to `first_block_index`; only explicit contiguous archive ranges can advance it. Partial evidence advances only its covered prefix, and a response below the pinned boundary with neither live blocks nor usable evidence fails without moving the cursor.
 
-Each transfer performs one direct watched-account lookup. Qualifying matches accumulate as `subscriber -> WatchTarget -> maximum qualifying Nat`, with deterministic target ordering and a 256-target per-poke bound. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one target-aware poke per subscriber: a non-empty specific-target vector wins; otherwise a global match sends an empty vector.
+Each transfer performs one direct watched-account lookup. Qualifying matches accumulate as `subscriber -> WatchTarget -> { minimum qualifying u64 block index; maximum qualifying Nat }`, with deterministic target ordering and a 256-target per-poke bound. If at least one transaction was processed, the backend adds admitted global subscribers once after reaching the boundary. It sends at most one target-aware poke per subscriber: a non-empty specific-target vector wins; otherwise a global match sends an empty vector.
 
 Within each completed poll, outbound poke attempts use two phases: actual
 global matches first (including mixed matches), then specific-only matches,

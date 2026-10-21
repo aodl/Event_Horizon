@@ -69,7 +69,7 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - incomplete or faulted Historian rejection and later natural admission on another Faucet payout;
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;
-- one poke carrying deterministic target/maximum-amount matches per subscriber per poll, bounded to 256 specific targets;
+- one poke carrying deterministic target/first-block-index/maximum-amount matches per subscriber per poll, bounded to 256 specific targets;
 - zero-argument wake-up receivers alongside payload-aware receivers, including
   real entry-point arity rejection, global and specific delivery, caller
   authentication evidence, coalescing, precedence, and no-new-work behavior;
@@ -254,3 +254,9 @@ must remain separate from deterministic fixture evidence. The certified-asset
 PocketIC regression checks the operating markup as well as exact served
 bundle/CSS bytes. See [operating-status validation](../codex/operating-status-validation.md)
 for evidence and the limitations of dated mode/liquid readings.
+
+Specific-match regressions independently aggregate the earliest qualifying observed
+Ledger block index and largest individual amount across pages, thresholds,
+admissions and archive gaps. Both real receiver styles decode the new payload;
+full-width `nat64` indices and 256-entry Candid vectors are covered. Aggregates
+remain transient across ordinary upgrades and separate polls.

@@ -81,6 +81,7 @@ type PokeTarget = variant {
 
 type PokeMatch = record {
   target : PokeTarget;
+  first_block_index : nat64;
   max_amount : nat;
 };
 
@@ -166,30 +167,17 @@ poke(matches):
     if context is absent:
         return
 
-    # This flag is intentional LOCAL policy, not inferred from admission.
-    # Specific hints replace the empty global hint when both match a poll,
-    # so a global consumer accepts either vector shape as a wake-up.
-    if context.wants_global_activity:
-        schedule_coalesced_reconciliation(context.observed_ledger)
+    relevant_matches = filter_by_local_approved_targets_and_amounts(
+        context, matches
+    )
+    if not context.wants_global_activity and relevant_matches is empty:
         return
 
-    if matches is empty:
-        return
-
-    relevant = false
-    for match in matches:
-        policy = context.approved_targets.get(match.target)
-        if policy is absent:
-            continue
-        if match.max_amount < policy.minimum_atomic_amount:
-            continue
-        relevant = true
-        break
-
-    if not relevant:
-        return
-
-    schedule_coalesced_reconciliation(context.observed_ledger)
+    earliest_hint = none
+    if relevant_matches is not empty:
+        earliest_hint = minimum(match.first_block_index
+                                for match in relevant_matches)
+    schedule_coalesced_reconciliation(context.observed_ledger, earliest_hint)
 
 # Scheduled work, not an inline Ledger/Index call from poke:
 # - coalesces repeated wakes and prevents overlapping/redundant reconciliation
@@ -208,6 +196,70 @@ consumer must not process `poke([])` merely because its caller is trusted.
 
 Reconciliation state must be independent per observed Ledger. Never advance a
 cursor, accept a payment or perform accounting from a poke alone.
+
+## Direct Ledger reconciliation
+
+Each specific match has a required `first_block_index : nat64`: the earliest
+qualifying transfer Event Horizon actually observed for that target during the
+completed poll, under its effective admission and threshold policy. It is
+relative to the authenticated caller's observed Ledger. Global-only `poke([])`
+has no index; mixed matches retain their specific entries in one global-phase
+poke. Zero-argument receivers intentionally discard these hints.
+
+The index and `max_amount` aggregate independently. Transfers to subaccount 7 at
+blocks 12,450 (4 ICP), 12,453 (15 ICP), and 12,461 (8 ICP) produce index 12450
+and maximum 15 ICP in atomic units. They may describe different transactions.
+If Event Horizon's threshold is 1 ICP but your local minimum is 10 ICP, block 100
+(2 ICP) followed by block 110 (15 ICP) produces index 100 and maximum 15 ICP.
+Inspect the authoritative history with your own policy: the first hinted block
+need not itself meet your local minimum.
+
+A direct-Ledger subscriber needs no Index canister. After authenticating the
+caller and filtering locally approved interests and amount hints, share a
+bounded worker and coalesce accepted hints (including the earliest relevant
+pending hint). Use the Ledger context from the trusted caller registry:
+
+- **Canonical ICP:** use the legacy `query_blocks` block-history interface with
+  bounded `{ start; length }` ranges. Returned live blocks begin at the response's
+  `first_block_index`; use it only for a nonempty block vector. Older requested
+  blocks may require the corresponding `archived_blocks` callback and archive
+  `get_blocks` retrieval path. Validate returned indices and coverage.
+- **Generic ICRC-3:** use `icrc3_get_blocks` with bounded block ranges. Returned
+  blocks have explicit IDs; validate those IDs and use the returned
+  `archived_blocks` callback arguments to retrieve archived portions when needed.
+  An ICRC-3 ID belongs to this observed Ledger, never the ICP admission Ledger.
+
+Subscribers must support the appropriate archive retrieval themselves if they
+need that history. Event Horizon never follows archives and serves no historical
+transaction data. See the primary [ICP Ledger interface](https://github.com/dfinity/ic/blob/master/rs/ledger_suite/icp/ledger.did)
+and [ICRC-3 specification](https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3).
+Preserve `nat64` indices exactly (for example JavaScript `BigInt`, not `Number`).
+
+**Your durable next-unprocessed cursor is authoritative.** If it is 100 and the
+hint is 150, do not jump to 150: blocks 100–149 may contain unprocessed activity
+from earlier or missed wakes. Reconcile from the existing cursor under your
+independently established initialization policy. Prospective-only initialization
+is an explicit application choice, not a guarantee from Event Horizon. If the
+cursor is already beyond a hint, do not automatically rewind and process history
+again. A hint identifies relevant work, accelerates scheduling and can help detect
+a lagging Ledger view; it never authorizes skipping history.
+
+Fetching only the hinted block does not establish completion. Continue bounded
+pages to discover further relevant transactions, with persistent cursors,
+idempotent processing and sensible per-run work limits. Authenticate and filter
+before scheduling or reading; an unsolicited or weakly thresholded subscription
+must not turn a supplied index into an unbounded scan. Coalesce multiple accepted
+pokes into the same worker, prevent overlap, and retain independent periodic
+reconciliation. A poke is not a receipt: independently verify authoritative
+Ledger records before consequential financial decisions. Direct reads can fail,
+be temporarily stale or need archives; retain pending work and bounded retries.
+An immediate query is not guaranteed sufficient.
+
+The following Index catch-up flow is a separate valid approach for applications
+whose reconciliation depends on an Index. Direct-Ledger readers need no
+Index-specific five-second wait. An Index-dependent application may optionally
+read the Ledger using these hints when its Index is behind; this hybrid policy
+belongs to the application and adds no Event Horizon configuration setting.
 
 ## Index catch-up
 

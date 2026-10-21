@@ -47,8 +47,11 @@ Historian route evidence is how subscriber declarations are funded and
 admitted.
 
 Qualifying activity is coalesced once per subscriber per poll. A specific callback
-reports sorted target/maximum-raw-amount pairs; an empty vector represents
-global-only activity. Specific matches take precedence when both match, so an
+reports sorted target/`first_block_index`/maximum-raw-amount entries; an empty vector represents
+global-only activity. The minimum index and maximum amount may come from different
+transactions. Direct-Ledger readers use their own cursors and bounded archive-aware
+reconciliation; see the [subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
+Specific matches take precedence when both match, so an
 intentionally global consumer treats either vector shape as a wake-up.
 
 Within each completed poll, the backend attempts all actually globally matched

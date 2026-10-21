@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets and per-target maximum qualifying raw transfer amounts; an empty poke signals global-only observed-ledger activity. Each subscriber retains authoritative reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets, per-target first qualifying Ledger block indices and maximum qualifying raw transfer amounts; an empty poke signals global-only observed-ledger activity. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -156,9 +156,9 @@ A fresh installation is prospective. On first successful Ledger observation it r
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon records the maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still update their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
+For each relevant transfer to an admitted watched account, Event Horizon records independently the minimum qualifying block index and maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still lower their first indices and increase their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
-Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
+Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/index/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
 
 Within a single completed poll, Event Horizon attempts all globally matched
 subscriber pokes before attempting specific-only subscriber pokes. Each phase
@@ -217,6 +217,7 @@ type PokeTarget = variant {
 
 type PokeMatch = record {
   target : PokeTarget;
+  first_block_index : nat64;
   max_amount : nat;
 };
 
@@ -239,15 +240,64 @@ bounded; convenience alone is not a reason for a scoped subscriber to discard
 target/amount filtering. Zero arguments neither confer global-subscription
 status nor prevent unsolicited specific subscriptions.
 
-`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still lower its first index and increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
-Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.
+`first_block_index : nat64` is required (Rust `u64`). For each receiving
+subscriber and retained semantic target in one successfully completed poll, it
+is the smallest observed Ledger block index of a transfer that matched the
+admitted target and satisfied the effective Event Horizon threshold when
+processed. It excludes unrelated and below-threshold transfers, activity before
+the relevant admission, and archive-only skipped blocks that were not inspected.
+It is not merely the poll or page start. Canonical ICP uses the validated live
+response index plus checked offset; ICRC-3 uses each validated explicit block ID,
+already normalized to `u64`. No additional reads or conversions are needed.
+
+The two fields aggregate independently across transactions and pages:
+`first_block_index = min(qualifying indices)` and
+`max_amount = max(individual qualifying amounts)`. For subaccount 7, qualifying
+transfers at blocks 12,450 (4 ICP), 12,453 (15 ICP), and 12,461 (8 ICP) yield
+`first_block_index = 12450` and `max_amount = 1_500_000_000` atomic units.
+These values may refer to different transactions; neither is a receipt or a
+claim that the earliest transfer had the maximum amount. Page merge order does
+not change these two values for retained targets. Aggregates are transient and
+never extend across separate polls; stable state and cursors are unchanged.
+
+Event Horizon's effective threshold may be weaker than the receiver's local
+policy. With an Event Horizon threshold of 1 ICP and a local minimum of 10 ICP,
+block 100 (2 ICP) followed by block 110 (15 ICP) correctly yields index 100 and
+maximum 15 ICP. The first hint need not meet the subscriber's local minimum;
+the subscriber must inspect authoritative records using its own policy.
+
+The index belongs to the authenticated caller's immutable observed Ledger. It
+is not an account's first-ever transaction, the subscriber's earliest unprocessed
+transaction, a cross-Ledger identifier, a durable Event Horizon cursor, proof of
+complete history, or evidence that earlier work is handled or no later work
+exists. The subscriber's durable cursor is authoritative: a hint at 150 must
+not skip unprocessed blocks 100–149, nor automatically rewind a cursor already
+beyond 150. Prospective initialization is an explicit application policy.
+
+Global-only activity remains `poke([])` with no index. Specific-only and mixed
+notifications carry an index on each specific entry; mixed matches still
+receive exactly one poke in the global-first phase. There is no global index,
+second argument, callback variant, negotiation, fallback, opt-in or legacy
+format. The required field is a clean pre-launch protocol change. Zero-argument
+receivers remain intentionally supported and discard all supplied hints.
+
+Direct-Ledger subscribers need no Index. They use bounded legacy ICP
+`query_blocks` or generic `icrc3_get_blocks` reads, follow the corresponding
+archive retrieval paths themselves when needed, and reconcile further history
+from their own persistent cursors. Event Horizon serves no historical records
+and never traverses archives. Direct reads can fail or be stale: retain bounded
+retry/backoff, idempotent processing and independent periodic reconciliation.
+No hint establishes Ledger freshness, Index visibility or transaction completion.
+
+Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget`, `first_block_index` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.
 
 The specific-target list is a wake-up hint only. It is not proof that a payment exists, contains no authoritative transaction data, and is not proof that no other Ledger activity occurred. The subscriber remains responsible for authoritative Ledger/Index reconciliation state and cursors for each observed ledger, plus independent periodic reconciliation.
 
 There is:
 
-- no block index, complete transaction record, sender, memo, or transaction list;
+- no complete transaction record, sender, memo, or transaction list;
 - no proof of payment or proof that no other Ledger activity occurred;
 - no acknowledgement processing;
 - no retry;
@@ -268,7 +318,7 @@ specific matches take precedence even when global activity also matched. A
 non-empty vector does not establish the absence of global activity. Without
 intentional local global interest, `poke([])` is cheaply ignored.
 
-The target identity and per-target maximum are aggregate prefilter hints, not
+The target identity, first block index and per-target maximum are aggregate hints, not
 authoritative transaction data, payment receipts, finality proofs or Index-
 visibility guarantees. Relevant wakes are coalesced into bounded authoritative
 reconciliation; the independent periodic timer uses the same path. Cursors/state

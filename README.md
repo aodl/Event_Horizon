@@ -9,7 +9,7 @@ operating balance. Recurring maturity-derived Faucet payouts are sent to Event
 Horizon as raw ICP, pooled, and converted into cycles. The canonical ICP
 instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances
 read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each
-matching numeric subaccount or neuron nonce and the largest qualifying raw
+matching numeric subaccount or neuron nonce with its first qualifying Ledger block index and largest qualifying raw
 transfer amount. Scoped subscribers should normally use `poke(vec PokeMatch)`
 to filter locally approved targets and amount thresholds before expensive work:
 any patron can fund a subscription without the receiving canister's consent.
