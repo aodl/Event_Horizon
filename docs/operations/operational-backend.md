@@ -16,7 +16,7 @@ and delivery or execution order between different canisters is not guaranteed.
 It provides no cross-instance ordering or Index catch-up guarantee. Event
 Horizon has no Index dependency, retry or durable notification queue. See the
 [subscriber guide](../subscriber-guide.md#index-catch-up) for the recommended
-coalesced Index follow-up approximately five seconds after initial reconciliation.
+coalesced Index follow-up approximately five seconds after initial reconciliation. Direct-Ledger subscribers can instead use the [first-block hint and their own durable cursor](../subscriber-guide.md#direct-ledger-reconciliation); the minimum index and maximum amount may come from different transactions.
 
 Public logs are intentionally episode-based. A repeated reader failure may be
 suppressed until a successful scan clears that failure episode. A daily
