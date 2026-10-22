@@ -288,7 +288,7 @@ mod tests {
         target: WatchTarget,
         minimum_units: candid::Nat,
     }
-    #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(CandidType, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     enum WatchTarget {
         #[serde(rename = "subaccount")]
         Subaccount(u64),
