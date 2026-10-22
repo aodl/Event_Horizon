@@ -2133,7 +2133,7 @@ mod tests {
             first_block_index: 0,
             max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(1u8),
         }];
-        let foreign: Vec<_> = (0..256)
+        let foreign: Vec<_> = (0..255)
             .map(|n| SubjectPokeMatch {
                 subject: env.cmc,
                 target: WatchTarget::Subaccount(n),

@@ -5,6 +5,29 @@ subscribers watching another canister's accounts. It authorizes no mainnet
 operation. The normative contract is [SPEC.md](../../SPEC.md); integration and
 security advice remains centralized in the [subscriber guide](../subscriber-guide.md).
 
+## Release status: blocked on decoder compatibility
+
+The requested unconditional one-vector receiver compatibility cannot currently
+be established for large mixed callbacks. The pinned CDK configures Candid's
+skipping quota to 10,000. A native probe using that exact budget accepts one
+self plus 64 external hints, but rejects one self plus 100 or 255 external
+hints even with one-unit amounts. Both the current one-vector shape and the
+older two-field record fail. The receiving-canister regression also rejects
+the large optional vector with `Skipping cost exceeds the limit`.
+
+The regression retains the required success assertion and uses a valid combined
+256-hint payload; no receiver budget or protocol limit was weakened. The full
+managed suite continues independent checks, but release completion is blocked.
+A requirement decision is needed: explicitly accept documented decoder-budget
+failures as a best-effort limitation, require bounded receiver decoder updates,
+or amend the callback/retention policy. No sender-side acknowledgement,
+capability probing or fallback has been added to conceal this limitation.
+
+Final two-build reproducibility was intentionally stopped after this failure.
+The hashes below are independently verified intermediate candidate artifacts,
+not a completed deployable release. All final gates must be rerun after the
+compatibility decision and any resulting changes. No mainnet action occurred.
+
 ## Reviewed sources and artifact identity
 
 Event Horizon upstream was checked against
