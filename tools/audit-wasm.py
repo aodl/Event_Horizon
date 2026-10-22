@@ -71,6 +71,8 @@ def main() -> None:
         and n != internal_timer
     ]
     if args.backend:
+        if b"eo6ei-gaaaa-aaaar-qchra-cai" in data:
+            raise SystemExit("generic backend must not embed the canonical instance identity")
         expected = ["canister_query get_instance", "canister_query get_pricing", "canister_query preview_subscription"]
         if app_methods != expected:
             raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")

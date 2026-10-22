@@ -1403,6 +1403,12 @@ mod tests {
         assert_eq!(encode_one(env.subscription(7)?)?, before7);
         assert_eq!(preview(&env, "A@B.7")?.unwrap().subject, Some(env.cmc));
         let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        env.append(
+            source.clone(),
+            account_id(env.cmc, numbered(7)),
+            50_000_000,
+            None,
+        )?;
         let first = env.append(source, account_id(env.cmc, numbered(7)), 200_000_000, None)?;
         env.poll()?;
         for _ in 0..10 {
@@ -1604,6 +1610,7 @@ mod tests {
             env.poll()?;
             fund_suffix(&env, "A@B.0-255:1")?;
             fund_suffix(&env, "A.7")?;
+            fund_suffix(&env, "A@B.7-8:0.01")?; // Overlapping external range lowers only these relations.
             if kind != 1 {
                 fund_suffix(&env, "A@B.n0-2:1")?;
             }
@@ -1621,10 +1628,11 @@ mod tests {
                 "debug_set_first_local_block",
                 skipped + 1,
             )?;
+            env.append_observed(source.clone(), account_id(env.cmc, numbered(7)), 1, None)?;
             let first = env.append_observed(
                 source.clone(),
                 account_id(env.cmc, numbered(7)),
-                200_000_000,
+                2_000_000,
                 None,
             )?;
             for _ in 0..260 {
