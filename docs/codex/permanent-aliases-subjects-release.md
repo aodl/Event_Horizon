@@ -4,6 +4,17 @@ This release retains the completed alias, admission, indexed subscription,
 matching, frontend and upgrade implementation. No mainnet operation is authorized
 or performed. The normative contract is [SPEC.md](../../SPEC.md).
 
+## Validation status
+
+Validated on 2026-10-22 UTC. The complete managed run passed 133 Rust tests,
+138 frontend tests and all 118 isolated PocketIC scenarios. Formatting, Clippy
+with warnings denied, static/source checks, dependency security scans and both
+production export audits passed. Two independent, uncached Docker builds from
+`e1177c946248a9e4c652849b100f82d75ff9bad5` produced byte-identical complete
+artifact sets. The final release-record/source-manifest update changes no runtime
+or build inputs; the canonical rebuild must retain the artifact hashes below.
+Deployment still requires the coordinated Jupiter receiver update described below.
+
 ## Architectural decision
 
 There are no users or admitted subscribers requiring callback compatibility.
@@ -90,6 +101,17 @@ service : (InitArgs) -> {
 }
 ```
 
+## Reviewed source context
+
+The retained upgrade baseline is Event Horizon source
+`44d83c04a190dba2b8420c0d812e1fd8ee07ff19`. The prior alias implementation review
+recorded Jupiter `1c86d9b32c774a470489b4e4a5cfe4ddfaae7341` for Historian's alias
+API and E-only publication. That earlier source review neither verifies live
+installation nor implements the new receiving ABI. This continuation modifies
+only Event Horizon. Its complete code/test validation and independent builds
+use `e1177c946248a9e4c652849b100f82d75ff9bad5`; the subsequent release record and
+source manifest contain evidence only.
+
 ## Identity, funding and storage
 
 Only E is currently published. X is retired; A/B below are hypothetical future
@@ -166,18 +188,123 @@ threshold. This is a genuine old-to-new upgrade, separate from new-to-new cases.
 
 ## Validation and artifact evidence
 
-Canonical Docker artifacts currently have these identities; final gate results
-and resource measurements follow when validation completes. The earlier
-intermediate callback candidates are superseded.
+The earlier intermediate callback candidates are superseded.
 
-| Uncompressed artifact | SHA-256 |
+| Uncompressed canonical artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Backend | 1,428,428 | `2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528` |
+| Frontend | 3,757,773 | `338565e50d946d09201be87131d9c7f5319923320bf68926a17a4f6d19582067` |
+
+The frontend registry, rebuilt bundle and canonical frontend Wasm contain the
+reviewed backend hash above. Python SHA-256 recomputation independently agrees
+with the canonical artifact manifest. Both production export audits pass; the
+backend has 11 total Wasm exports and only its approved read-only application
+queries. The production-query PocketIC scenario also passes. Canonical build
+metadata records Rust/Cargo 1.94.1, ic-wasm 0.9.7, Node 18.20.4, npm 9.2.0 and
+fixed `SOURCE_DATE_EPOCH=1700000000`.
+
+| Gate | Result |
 | --- | --- |
-| Backend | `2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528` |
-| Frontend | `338565e50d946d09201be87131d9c7f5319923320bf68926a17a4f6d19582067` |
+| `cargo run -p xtask -- test_all` | Passed: 133 Rust, 138 frontend, 118 PocketIC; zero failures |
+| Static validation, source manifest, canonical-context fixture | Passed in the managed run |
+| `cargo fmt --all -- --check` | Passed |
+| `cargo clippy --locked --workspace --all-targets -- -D warnings` | Passed |
+| `./tools/scripts/security-scan` | Passed: cargo-audit, cargo-deny, npm audit, OSV |
+| `npm run verify:reproducible-artifacts` | Passed: two fresh BuildKit builders, no build cache; all artifact files identical |
+| Canonical Docker artifacts and production export audits | Passed; hashes above |
 
-The frontend registry and rebuilt bundle pin the backend hash above. Both
-production Wasms pass their export audits. Two independent clean Docker builds
-and the complete final test suite remain required release gates.
+Security retains exactly the four existing documented exceptions:
+RUSTSEC-2025-0012, RUSTSEC-2024-0384, RUSTSEC-2024-0436 and
+RUSTSEC-2021-0127. No dependency exception was added. npm audit reported zero
+vulnerabilities. Unit-test discovery's 118 ignored PocketIC tests were all
+executed separately by the managed integration runner; none was skipped from
+release validation. Raw local logs are retained under
+`observations/unified-notifications/`, outside canonical source artifacts.
+
+## Notification regression evidence
+
+All scenarios below pass in the complete PocketIC run. The receiving crate
+independently defines the Candid types and compiles its own Wasm.
+
+| Required behavior | Evidence |
+| --- | --- |
+| Global-only: true flag, no matches | `shared_icp_unified_notifications_cover_global_specific_and_coalescing` |
+| Self-only: false flag, explicit self subject | `generic_icrc3_specific_activity_executes_both_receivers` |
+| External-only and mixed self/external | `cross_subject_independent_thresholds_exact_routes_and_callbacks` |
+| Global plus specific matches in one call | Shared ICP unified scenario and cross-subject global/external phase |
+| Same target numbers under multiple subjects | Cross-subject scenario retains A.7, B.7 and C.7 separately |
+| Independent thresholds, first indices and maxima | Cross-subject scenario; `first_block_index_spans_pages_thresholds_namespaces_and_upgrade` |
+| 256 combined hints and deterministic first-retained order | `external_ranges_pages_archives_neurons_and_combined_payload_bound`, on ICP, ICRC-3 and SNS |
+| Large Nat and full-width nat64 fields | `generic_nat_amount_survives_end_to_end_poke`; maximum receiver scenario |
+| Actual CDK decoding in separate receiver | `unified_receiver_decodes_maximum_notifications_with_pinned_cdk_defaults` |
+| One attempted call despite mixed activity | Sender attempt counters and fresh receiver state in combined-payload scenario; unified dispatch unit checks |
+| Reserve protection and failure continuation | `global_fanout_reserve_skips_still_attempt_all_recipients`; missing/trapping external receivers; trapping global receiver followed by specific delivery |
+| No false/empty notification | Dispatch unit regression; no-work and admission-timing PocketIC cases |
+| Real old-to-new financial/operational upgrade | `pre_alias_layout_upgrades_without_rewriting_financial_or_subscription_state` |
+
+The old-to-new scenario passed using the checksum-verified historical Wasm
+listed above. Its source test compares original subscription/pricing encodings,
+cursors and pending CMC state, then checks additive aliases/external relations
+and a further upgrade. The other 117 scenarios retain the existing reader,
+pricing, funding, scheduler, frontend certification and upgrade coverage.
+
+## Resource measurements
+
+These are local PocketIC measurements, not mainnet cost forecasts. Shared-account
+work remains proportional to interested relations; no arbitrary watcher limit,
+new price, dynamic polling rule or subscriber-accounting mechanism was added.
+
+The real poll/one-way callback/receiving-canister path retained 256 combined
+self/external identities and attempted exactly one call in each ledger mode:
+
+| Mode | Payload bytes | Event Horizon cycles consumed |
+| --- | ---: | ---: |
+| ICP | 8,511 | 170,252,429 |
+| ICRC-3 | 156,921 | 1,249,570,151 |
+| Verified SNS | 156,921 | 1,250,190,823 |
+
+The ICRC-3/SNS cases use 4,097-bit amounts; ICP uses its actual bounded ledger
+amount type. Measurements include poll/aggregation/dispatch and ten settling
+ticks, with ordinary framework limits and no decoder override.
+
+Separately compiled receiver stress cases use 256 distinct 29-byte subjects,
+full-width targets and block indices, with both global flag values:
+
+| Nat bits | Payload bytes | Receiver cycles, false flag | Receiver cycles, true flag |
+| ---: | ---: | ---: | ---: |
+| 257 | 21,826 | 66,256,494 | 66,690,450 |
+| 4,097 | 162,370 | 439,442,204 | 439,749,828 |
+| 32,769 | 1,210,946 | 3,221,827,774 | 3,221,934,170 |
+
+Receiver cycle samples cover decoding and storage, excluding the subsequent
+test-only digest verification. The pinned CDK's generated entry point uses its
+unchanged 10,000 skipping quota. The digest covers the entire decoded/re-encoded
+notification under the ordinary update instruction budget; it avoids serializing
+the largest stored value under the lower query budget. Neither the decoder
+configuration nor the 256-match protocol limit was weakened. These bit sizes
+are stress fixtures, not newly imposed amount limits.
+
+For 1,024 independently stored watchers of one shared account, with thresholds
+0–15 and transfer amount 20, the settled measurements (30 post-poll ticks) were:
+
+| Transfers to the shared account | ICP cycles | ICRC-3 cycles |
+| ---: | ---: | ---: |
+| 1 | 5,958,018,362 | 5,962,511,174 |
+| 32 | 6,186,080,409 | 6,194,336,592 |
+| 256 | 7,834,486,405 | 7,866,189,640 |
+
+All 1,024 watchers received an attempted callback in each completed poll.
+These synthetic recipients measure sender work, not remote execution. Stable
+memory remained 100,728,832 bytes before/after seeding; records fit within the
+already allocated stable buckets. Existing regions 0–8 and their layouts are
+unchanged; the three additive regions retain their initial 24 MiB bucket cost.
+
+Global fan-out measured 1,451,228,234 cycles for 256 recipients and
+5,742,188,989 for 1,024. Both cases recorded exactly the intended attempted and
+accepted one-way sends, with stable memory unchanged at 100,728,832 bytes.
+Accepted sends do not establish receiver execution. No test claims remote
+cross-canister execution ordering. Exact instruction counts are not emitted by
+the capacity fixture; completion is checked under ordinary execution limits.
 
 ## Coordinated deployment dependencies
 
