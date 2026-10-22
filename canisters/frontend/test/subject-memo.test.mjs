@@ -8,7 +8,7 @@ test('aliases preserve spelling and subscriber/subject roles with bounded ranges
  assert.equal(build({subject:'A'}).memo,'E.A@A.7');assert.equal(build({subscriber:'B',subject:'A'}).memo,'E.B@A.7');
  assert.equal(build({mode:'global'}).memo,'E.A');assert.equal(build({subscriber:'E'}).needsPreview,true);
  assert.equal(build({mode:'neuron',subject:'B',start:'42',neuronGovernance:true}).memo,'E.A@B.n42');
- for(const x of [{subject:'B',mode:'global'},{mode:'range',start:'0',end:'256'},{mode:'range',start:'7',end:'7'},{mode:'neuron',subject:'B'},{start:'01'},{start:'18446744073709551616'},{amount:'0.000000001'},{subscriber:'lower'},{subscriber:'X'},{subject:'A@B'}])assert.throws(()=>build(x),JSON.stringify(x));
+ for(const x of [{subject:'B',mode:'global'},{mode:'range',start:'0',end:'256'},{mode:'range',start:'7',end:'7'},{mode:'neuron',subject:'B'},{start:'01'},{start:'18446744073709551616'},{amount:'0.000000001'},{subscriber:'lower'},{subscriber:'X'},{subject:'A@B'},{amount:' 0.01'},{routingAlias:'A.B'}])assert.throws(()=>build(x),JSON.stringify(x));
  assert.equal(build({start:'18446744073709551615'}).memo,'E.A.18446744073709551615');assert.throws(()=>validateReference(' A'));
 });
 test('direct principals work without aliases and total ASCII byte boundaries are enforced',()=>{

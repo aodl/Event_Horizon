@@ -105,6 +105,8 @@ export function validateReference(text) {
 }
 export function buildSubscriptionMemo({routingAlias,decimals,subscriber,subject='',mode='subaccount',start='0',end='',amount='',neuronGovernance=false}) {
   if (!['account','subaccount','range','neuron','neuron-range','global'].includes(mode)) throw new Error('Unknown subscription mode.');
+  if (!/^[A-Z][A-Z0-9]{0,7}$/.test(routingAlias)) throw new Error('Invalid reviewed routing alias.');
+  if (amount!==amount.trim()) throw new Error('Trigger amount must not contain surrounding whitespace.');
   if (routingAlias==='X') throw new Error('X is retired; use the reviewed routing alias.');
   const sub=validateReference(subscriber), other=subject?validateReference(subject):null;
   if (mode==='global' && other) throw new Error('Global subscriptions cannot select another subject.');
@@ -115,7 +117,7 @@ export function buildSubscriptionMemo({routingAlias,decimals,subscriber,subject=
   else {
     const first=numberedSubaccount(start);const range=mode==='range'||mode==='neuron-range';
     let targets=first.text;count=1;
-    if (range) {const last=numberedSubaccount(end);if(last.value<=first.value)throw new Error('A range needs two increasing endpoints.');const width=last.value-first.value+1n;if(width>256n)throw new Error('A range may contain at most 256 targets.');count=Number(width);targets+=`-${last.text}`;}
+    if (range) {const last=numberedSubaccount(end);if(last.value<=first.value)throw new Error('A range needs two increasing endpoints.');const width=last.value-first.value+1n;if(width>256n)throw new Error(`A range contains ${width} targets; at most 256 targets are allowed.`);count=Number(width);targets+=`-${last.text}`;}
     if (mode.startsWith('neuron')) targets=`n${targets}`;
     const threshold=validateAmount(amount,decimals);suffix=`${refs}.${targets}${threshold?`:${threshold}`:''}`;
   }

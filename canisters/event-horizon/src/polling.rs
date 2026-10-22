@@ -657,6 +657,12 @@ async fn legacy_page(
         if id != at {
             return Err(format!("non-contiguous block expected={at} got={id}"));
         }
+        // The admitting Faucet transfer is still earlier than the new relation:
+        // even watchers of this canister's default account start at later blocks.
+        if matches!(s, Stream::Shared) {
+            observe_icp(id, &b.transaction.operation, &mut pending, &mut local);
+            page_last_live = Some(id);
+        }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
             if let Some(admission) =
                 prepare_admission(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
@@ -673,10 +679,6 @@ async fn legacy_page(
                     return Err("debug abort after staged legacy admission".into());
                 }
             }
-        }
-        if matches!(s, Stream::Shared) {
-            observe_icp(id, &b.transaction.operation, &mut pending, &mut local);
-            page_last_live = Some(id);
         }
         live = true;
         at = at.checked_add(1).ok_or("legacy cursor overflow")?;

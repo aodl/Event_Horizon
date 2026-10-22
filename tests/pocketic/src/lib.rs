@@ -1423,48 +1423,54 @@ mod tests {
             start: u64,
             count: u64,
         }
-        let env = Env::new_two_ledgers_for_capacity()?;
-        env.poll()?;
-        let before = env
-            .pic
-            .canister_status(env.event_horizon, None)
-            .map_err(|e| anyhow!("{e:?}"))?;
-        for start in (0..1024).step_by(128) {
-            update::<_, ()>(
-                &env.pic,
-                env.event_horizon,
-                "debug_seed_external",
-                Seed {
-                    subject: env.subscriber,
-                    start,
-                    count: 128,
-                },
-            )?;
-        }
-        let seeded = env
-            .pic
-            .canister_status(env.event_horizon, None)
-            .map_err(|e| anyhow!("{e:?}"))?;
-        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
-        for blocks in [1, 32, 256] {
-            let start = env.state()?.observed_next_block;
-            for _ in 0..blocks {
-                env.append_observed(
-                    source.clone(),
-                    account_id(env.subscriber, numbered(7)),
-                    20,
-                    None,
+        for generic in [false, true] {
+            let env = if generic {
+                Env::new_two_ledgers_for_capacity()?
+            } else {
+                Env::new()?
+            };
+            env.poll()?;
+            let before = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|e| anyhow!("{e:?}"))?;
+            for start in (0..1024).step_by(128) {
+                update::<_, ()>(
+                    &env.pic,
+                    env.event_horizon,
+                    "debug_seed_external",
+                    Seed {
+                        subject: env.subscriber,
+                        start,
+                        count: 128,
+                    },
                 )?;
             }
-            let counts = env.poke_counts()?;
-            let cycles = env.pic.cycle_balance(env.event_horizon);
-            env.poll()?;
-            for _ in 0..30 {
-                env.pic.tick();
+            let seeded = env
+                .pic
+                .canister_status(env.event_horizon, None)
+                .map_err(|e| anyhow!("{e:?}"))?;
+            let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+            for blocks in [1, 32, 256] {
+                let start = env.state()?.observed_next_block;
+                for _ in 0..blocks {
+                    env.append_observed(
+                        source.clone(),
+                        account_id(env.subscriber, numbered(7)),
+                        20,
+                        None,
+                    )?;
+                }
+                let counts = env.poke_counts()?;
+                let cycles = env.pic.cycle_balance(env.event_horizon);
+                env.poll()?;
+                for _ in 0..30 {
+                    env.pic.tick();
+                }
+                assert_eq!(env.state()?.observed_next_block, start + blocks);
+                assert_eq!(env.poke_counts()?[0] - counts[0], 1024);
+                println!("external_shared_fanout generic={generic} watchers=1024 transfers={blocks} cycles={} stable_before={} stable_after_seed={}", cycles.saturating_sub(env.pic.cycle_balance(env.event_horizon)), before.memory_metrics.stable_memory_size, seeded.memory_metrics.stable_memory_size);
             }
-            assert_eq!(env.state()?.observed_next_block, start + blocks);
-            assert_eq!(env.poke_counts()?[0] - counts[0], 1024);
-            println!("external_shared_fanout watchers=1024 transfers={blocks} cycles={} stable_before={} stable_after_seed={}", cycles.saturating_sub(env.pic.cycle_balance(env.event_horizon)), before.memory_metrics.stable_memory_size, seeded.memory_metrics.stable_memory_size);
         }
         Ok(())
     }
@@ -1488,6 +1494,10 @@ mod tests {
                 CanisterAlias {
                     alias: "B".into(),
                     canister_id: env.cmc,
+                },
+                CanisterAlias {
+                    alias: "H".into(),
+                    canister_id: env.event_horizon,
                 },
             ],
             "",
@@ -1539,6 +1549,29 @@ mod tests {
             subjects(&env, env.subscriber)?[0].max_amount,
             candid::Nat::from(2_000_000u64)
         );
+        let before = subject_count(&env, env.subscriber)?;
+        fund_suffix(&env, "A@H.0")?;
+        env.poll()?;
+        for _ in 0..10 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            subject_count(&env, env.subscriber)?,
+            before,
+            "admitting Faucet payout cannot match its own declaration"
+        );
+        let next = env.append(
+            account_id(Principal::from_slice(&[91, 1]), [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            2,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..10 {
+            env.pic.tick();
+        }
+        assert_eq!(subject_count(&env, env.subscriber)?, before + 1);
+        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, next);
         Ok(())
     }
 
