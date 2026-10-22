@@ -9,6 +9,8 @@ members = [
   "tests/mocks/mock-historian",
   "tests/mocks/mock-cmc",
   "tests/mocks/mock-subscriber",
+  "tests/mocks/mock-subscriber-subjects",
+  "tests/mocks/mock-subscriber-legacy",
   "tests/mocks/mock-subscriber-no-args",
   "tests/mocks/mock-sns-root",
   "tests/pocketic",

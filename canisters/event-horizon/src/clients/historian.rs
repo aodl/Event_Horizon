@@ -83,3 +83,20 @@ pub async fn route_is_admitted(
     };
     Ok(summary.total_qualifying_committed_e8s >= required_e8s)
 }
+
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+pub struct CanisterAlias {
+    pub alias: String,
+    pub canister_id: Principal,
+}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct ListCanisterAliasesArgs {
+    pub start_after: Option<String>,
+    pub limit: Option<u32>,
+}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct ListCanisterAliasesResponse {
+    pub revision: Vec<u8>,
+    pub items: Vec<CanisterAlias>,
+    pub next_start_after: Option<String>,
+}

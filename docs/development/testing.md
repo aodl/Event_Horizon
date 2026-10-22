@@ -260,3 +260,22 @@ Ledger block index and largest individual amount across pages, thresholds,
 admissions and archive gaps. Both real receiver styles decode the new payload;
 full-width `nat64` indices and 256-entry Candid vectors are covered. Aggregates
 remain transient across ordinary upgrades and separate polls.
+
+## Alias and subject regression fixtures
+
+The pre-change `44d83c04a190dba2b8420c0d812e1fd8ee07ff19` debug Wasm
+fixture has independent source/build provenance in
+`tests/fixtures/event_horizon_44d83c0_debug.provenance.txt`. Its SHA-256 is
+verified before a genuine old-to-new in-place upgrade preserving existing
+subscriptions, financial state, pricing and cursors. This is separate from
+new-to-new upgrade tests for aliases and external relations.
+
+The updated receiver implements both two-argument `poke` and `poke_subjects`.
+Separate fixtures retain Jupiter-compatible one-vector, old two-field records,
+and zero-argument receivers. Tests use actual encoded Candid and production
+oneway dispatch, including external-only safety and failed-method isolation.
+External ranges exercise ICP, ICRC-3 and SNS governance, multi-page aggregation,
+archives, staged-admission failure recovery and the combined 256-hint cap.
+The shared-account capacity case measures 1,024 indexed external watchers with
+1, 32 and 256 transfers and reports settled local cycle costs. No assertion
+claims cross-canister execution ordering.

@@ -181,8 +181,14 @@
           <p>Specific targets may be a single value or an inclusive contiguous range. Event Horizon’s displayed backend requirement is authoritative when permanent admission is evaluated.</p>
         </div>
         <form id="memo-form">
-          <label class="field field--wide">Subscriber canister
-            <input id="principal" autocomplete="off" spellcheck="false" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai">
+          <label class="field field--wide">Subscriber canister (receives notifications)
+            <input id="principal" aria-label="Subscriber canister principal or registered alias" autocomplete="off" spellcheck="false" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai">
+          </label>
+          <label class="field field--wide">Watch accounts belonging to
+            <select id="subject-mode"><option value="self">Same canister</option><option value="external">Another subject canister</option></select>
+          </label>
+          <label id="subject-field" class="field field--wide" hidden>Subject canister principal or registered alias
+            <input id="subject" autocomplete="off" spellcheck="false" placeholder="E or a canister principal">
           </label>
           <label class="field field--wide">Subscription mode
             <select id="scope">

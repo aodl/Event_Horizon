@@ -467,3 +467,20 @@ for authoritative prices. It does not discover principals from cookies,
 canister environment values, URL parameters, local storage, HTTP configuration,
 init arguments, or mutable canister state. The frontend's own principal is
 deployment identity only and is not compiled into executable code.
+
+## Alias and cross-subject release coordination
+
+This source change authorizes no mainnet action. First deploy and independently
+verify Jupiter Historian's reviewed `list_canister_aliases` contract and E-only
+publication/routing. Source completion is not evidence that live prerequisites
+are installed. X was retired before alias adoption and must not be offered.
+
+Upgrade the backend in place with argument-free `post_upgrade()` to preserve
+financial state, pricing and both Ledger cursors; do not reinstall or reset
+unrelated state. Verify old subscriptions and funding before and after upgrade,
+the new additive stable stores, E-table revision and ordinary notification flow.
+Then deploy the reviewed frontend whose backend hash pin matches the installed
+reviewed backend. Verify the coordinated final module hashes. Deployment,
+controller changes, funding transfers and domain actions require separate
+express approval. Existing receivers consume external-only hints only after
+they implement `poke_subjects`; do not assume Jupiter subscribers already do.

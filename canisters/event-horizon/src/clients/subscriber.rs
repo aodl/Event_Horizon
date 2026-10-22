@@ -22,21 +22,48 @@ thread_local! {
     static DEBUG_POKE_ACCEPTED: Cell<u64> = const { Cell::new(0) };
 }
 
-pub fn poke(subscriber: Principal, matches: Vec<PokeMatch>) -> bool {
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+pub struct SubjectPokeMatch {
+    pub subject: Principal,
+    pub target: WatchTarget,
+    pub first_block_index: u64,
+    pub max_amount: Nat,
+}
+#[derive(Default, Debug)]
+pub struct Notification {
+    pub global: bool,
+    pub self_matches: Vec<PokeMatch>,
+    pub subject_matches: Vec<SubjectPokeMatch>,
+}
+impl Notification {
+    pub fn method(&self) -> &'static str {
+        if !self.global && self.self_matches.is_empty() && !self.subject_matches.is_empty() {
+            "poke_subjects"
+        } else {
+            "poke"
+        }
+    }
+}
+pub fn poke(subscriber: Principal, notification: Notification) -> bool {
     #[cfg(feature = "debug_api")]
-    DEBUG_POKE_ATTEMPTS.with(|value| value.set(value.get().saturating_add(1)));
-    // This remains one payload-bearing wire format. Candid receivers that declare
-    // `poke : () -> ()` ignore this extra argument through argument subtyping.
-    let call = Call::bounded_wait(subscriber, "poke").with_arg(&matches);
-    let required = call.get_cost();
-    let balance = ic_cdk::api::canister_liquid_cycle_balance();
-    if balance < RESERVE_PROTECTION_CYCLES.saturating_add(required) {
+    DEBUG_POKE_ATTEMPTS.with(|v| v.set(v.get().saturating_add(1)));
+    let call = Call::bounded_wait(subscriber, notification.method());
+    let call = if notification.method() == "poke_subjects" {
+        call.with_arg(&notification.subject_matches)
+    } else {
+        let external =
+            (!notification.subject_matches.is_empty()).then_some(notification.subject_matches);
+        call.with_args(&(notification.self_matches, external))
+    };
+    if ic_cdk::api::canister_liquid_cycle_balance()
+        < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
+    {
         return false;
     }
     let accepted = call.oneway().is_ok();
     #[cfg(feature = "debug_api")]
     if accepted {
-        DEBUG_POKE_ACCEPTED.with(|value| value.set(value.get().saturating_add(1)));
+        DEBUG_POKE_ACCEPTED.with(|v| v.set(v.get().saturating_add(1)));
     }
     accepted
 }
@@ -67,6 +94,65 @@ mod tests {
 
     fn assert_zero_argument_receiver_accepts(bytes: &[u8]) {
         decode_args::<()>(bytes).expect("zero-argument receiver accepts extra arguments");
+    }
+
+    #[test]
+    fn two_argument_sequence_preserves_subjects_and_legacy_receivers() {
+        use super::{Notification, SubjectPokeMatch};
+        use candid::{CandidType, Deserialize, Principal};
+        #[derive(CandidType, Deserialize)]
+        struct OldMatch {
+            target: WatchTarget,
+            max_amount: Nat,
+        }
+        let own = representative_matches();
+        let external: Vec<_> = (0..256)
+            .map(|n| SubjectPokeMatch {
+                subject: Principal::from_slice(&[n as u8, 1]),
+                target: WatchTarget::Subaccount(n),
+                first_block_index: u64::MAX - n,
+                max_amount: Nat::from_str("340282366920938463463374607431768211456").unwrap(),
+            })
+            .collect();
+        let bytes = encode_args((&own, Some(&external))).unwrap();
+        let (a, b): (Vec<PokeMatch>, Option<Vec<SubjectPokeMatch>>) = decode_args(&bytes).unwrap();
+        assert_eq!(a, own);
+        assert_eq!(b, Some(external.clone()));
+        let (old,): (Vec<OldMatch>,) = decode_args(&bytes).unwrap();
+        assert_eq!(old.len(), own.len());
+        assert_eq!(old[0].target, own[0].target);
+        assert_eq!(old[0].max_amount, own[0].max_amount);
+        decode_args::<()>(&bytes).unwrap();
+        let normal = encode_args((&own, Option::<Vec<SubjectPokeMatch>>::None)).unwrap();
+        println!(
+            "callback_shape_bytes self_old={} self_two_args={} global_old={} global_two_args={}",
+            encode_one(&own).unwrap().len(),
+            normal.len(),
+            encode_one(Vec::<PokeMatch>::new()).unwrap().len(),
+            encode_args((
+                Vec::<PokeMatch>::new(),
+                Option::<Vec<SubjectPokeMatch>>::None
+            ))
+            .unwrap()
+            .len()
+        );
+        assert_eq!(decode_args::<(Vec<PokeMatch>,)>(&normal).unwrap().0, own);
+        let mut notification = Notification {
+            subject_matches: external,
+            ..Default::default()
+        };
+        assert_eq!(notification.method(), "poke_subjects");
+        notification.global = true;
+        assert_eq!(notification.method(), "poke");
+        notification.global = false;
+        notification.self_matches = own;
+        assert_eq!(notification.method(), "poke");
+        println!(
+            "callback_bytes self_only={} full_external_256={} mixed_encoding_fixture={}",
+            normal.len(),
+            encode_one(&notification.subject_matches).unwrap().len(),
+            bytes.len()
+        );
     }
 
     #[test]

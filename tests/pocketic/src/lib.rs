@@ -1233,6 +1233,925 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    struct CanisterAlias {
+        alias: String,
+        canister_id: Principal,
+    }
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    struct AliasFixture {
+        items: Vec<CanisterAlias>,
+        mode: String,
+        page_size: Option<u32>,
+    }
+    #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+    struct SubjectPokeMatch {
+        subject: Principal,
+        target: WatchTarget,
+        first_block_index: u64,
+        max_amount: candid::Nat,
+    }
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    struct AliasMetadata {
+        revision: Option<Vec<u8>>,
+        last_success: Option<u64>,
+        last_attempt: Option<u64>,
+    }
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    struct SubscriptionPreview {
+        subscriber: Principal,
+        subject: Option<Principal>,
+        scope: PreviewScope,
+        start: Option<u64>,
+        end: Option<u64>,
+        target_count: u32,
+        minimum_units: Option<candid::Nat>,
+        alias_revision: Option<Vec<u8>>,
+        aliases_refreshed_at: Option<u64>,
+    }
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    enum PreviewScope {
+        #[serde(rename = "global")]
+        Global,
+        #[serde(rename = "subaccount")]
+        Subaccount,
+        #[serde(rename = "neuron_nonce")]
+        NeuronNonce,
+    }
+    static SUBJECT_SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    static LEGACY_SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    fn subject_receiver(env: &Env, id: Principal) -> Result<()> {
+        env.pic
+            .reinstall_canister(
+                id,
+                wasm(&SUBJECT_SUBSCRIBER_WASM, "mock-subscriber-subjects", None)?,
+                vec![],
+                None,
+            )
+            .map_err(|e| anyhow!("{e:?}"))?;
+        Ok(())
+    }
+    fn set_aliases(
+        env: &Env,
+        items: Vec<CanisterAlias>,
+        mode: &str,
+        page_size: Option<u32>,
+    ) -> Result<()> {
+        update::<_, ()>(
+            &env.pic,
+            env.historian,
+            "debug_alias_fixture",
+            AliasFixture {
+                items,
+                mode: mode.into(),
+                page_size,
+            },
+        )
+    }
+    fn refresh_aliases(env: &Env) -> Result<()> {
+        update::<_, ()>(&env.pic, env.event_horizon, "debug_refresh_aliases", ())?;
+        for _ in 0..12 {
+            env.pic.tick();
+        }
+        Ok(())
+    }
+    fn preview(env: &Env, s: &str) -> Result<Result<SubscriptionPreview, String>> {
+        query(
+            &env.pic,
+            env.event_horizon,
+            "preview_subscription",
+            s.to_string(),
+        )
+    }
+    fn fund_suffix(env: &Env, s: &str) -> Result<u64> {
+        let memo = s.as_bytes().to_vec();
+        env.set_route(memo.clone(), 100_000_000_000_000)?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(env.event_horizon, [0; 32]),
+            1,
+            Some(memo),
+        )
+    }
+    fn subjects(env: &Env, id: Principal) -> Result<Vec<SubjectPokeMatch>> {
+        query(&env.pic, id, "debug_last_subjects", ())
+    }
+    fn subject_count(env: &Env, id: Principal) -> Result<u64> {
+        query(&env.pic, id, "debug_subject_pokes", ())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn pre_alias_layout_upgrades_without_rewriting_financial_or_subscription_state() -> Result<()> {
+        let baseline = std::fs::read(
+            workspace_root()?.join("tests/fixtures/event_horizon_44d83c0_debug.wasm"),
+        )?;
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&baseline)),
+            "093a43a8cb52d560829654819b5c4bad42cc955b7c34bafa3f734c416f4643b0"
+        );
+        let env = Env::with_event_horizon_wasm(baseline, 200_000_000_000_000)?;
+        env.price_once()?;
+        env.poll()?;
+        env.admit(7, Some("0.01"), 1_000_000_000)?;
+        env.admit(8, Some("0.02"), 1_000_000_000)?;
+        env.admit_global(100_000 * ICP_E8S)?;
+        assert!(env.global_subscription()?);
+        env.set_balance(100_000_000)?;
+        update::<_, ()>(
+            &env.pic,
+            env.cmc,
+            "debug_set_behavior",
+            CmcBehavior::Processing,
+        )?;
+        env.fund()?;
+        let old = env.state()?;
+        assert!(old.cmc_state.contains("NotifyPending"));
+        let pricing = encode_one(env.pricing()?)?;
+        let before7 = encode_one(env.subscription(7)?)?;
+        let before8 = encode_one(env.subscription(8)?)?;
+        env.upgrade_same_debug_wasm()?;
+        let upgraded = env.state()?;
+        assert_eq!(upgraded.admission_next_block, old.admission_next_block);
+        assert_eq!(upgraded.observed_next_block, old.observed_next_block);
+        assert_eq!(upgraded.cmc_state, old.cmc_state);
+        assert_eq!(upgraded.surplus_policy, old.surplus_policy);
+        assert_eq!(encode_one(env.pricing()?)?, pricing);
+        assert_eq!(encode_one(env.subscription(7)?)?, before7);
+        assert_eq!(encode_one(env.subscription(8)?)?, before8);
+        assert!(env.global_subscription()?);
+        subject_receiver(&env, env.subscriber)?;
+        set_aliases(
+            &env,
+            vec![
+                CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: env.subscriber,
+                },
+                CanisterAlias {
+                    alias: "B".into(),
+                    canister_id: env.cmc,
+                },
+            ],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        fund_suffix(&env, "A@B.7:1")?;
+        env.poll()?;
+        env.upgrade_same_debug_wasm()?;
+        assert_eq!(encode_one(env.subscription(7)?)?, before7);
+        assert_eq!(preview(&env, "A@B.7")?.unwrap().subject, Some(env.cmc));
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        let first = env.append(source, account_id(env.cmc, numbered(7)), 200_000_000, None)?;
+        env.poll()?;
+        for _ in 0..10 {
+            env.pic.tick();
+        }
+        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, first);
+        assert!(env.global_subscription()?);
+        assert_eq!(env.state()?.cmc_state, old.cmc_state);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn external_shared_account_fanout_1024_and_many_transfers() -> Result<()> {
+        #[derive(CandidType)]
+        struct Seed {
+            subject: Principal,
+            start: u64,
+            count: u64,
+        }
+        let env = Env::new_two_ledgers_for_capacity()?;
+        env.poll()?;
+        let before = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|e| anyhow!("{e:?}"))?;
+        for start in (0..1024).step_by(128) {
+            update::<_, ()>(
+                &env.pic,
+                env.event_horizon,
+                "debug_seed_external",
+                Seed {
+                    subject: env.subscriber,
+                    start,
+                    count: 128,
+                },
+            )?;
+        }
+        let seeded = env
+            .pic
+            .canister_status(env.event_horizon, None)
+            .map_err(|e| anyhow!("{e:?}"))?;
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        for blocks in [1, 32, 256] {
+            let start = env.state()?.observed_next_block;
+            for _ in 0..blocks {
+                env.append_observed(
+                    source.clone(),
+                    account_id(env.subscriber, numbered(7)),
+                    20,
+                    None,
+                )?;
+            }
+            let counts = env.poke_counts()?;
+            let cycles = env.pic.cycle_balance(env.event_horizon);
+            env.poll()?;
+            for _ in 0..30 {
+                env.pic.tick();
+            }
+            assert_eq!(env.state()?.observed_next_block, start + blocks);
+            assert_eq!(env.poke_counts()?[0] - counts[0], 1024);
+            println!("external_shared_fanout watchers=1024 transfers={blocks} cycles={} stable_before={} stable_after_seed={}", cycles.saturating_sub(env.pic.cycle_balance(env.event_horizon)), before.memory_metrics.stable_memory_size, seeded.memory_metrics.stable_memory_size);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn external_staged_admission_cache_ordering_failure_and_unknown_alias_no_replay() -> Result<()>
+    {
+        let env = Env::new()?;
+        subject_receiver(&env, env.subscriber)?;
+        env.poll()?;
+        fund_suffix(&env, "A@B.7:1")?;
+        env.poll()?; // Unknown aliases consume the payout without admission.
+        set_aliases(
+            &env,
+            vec![
+                CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: env.subscriber,
+                },
+                CanisterAlias {
+                    alias: "B".into(),
+                    canister_id: env.cmc,
+                },
+            ],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        let destination = account_id(env.cmc, numbered(7));
+        env.append(source.clone(), destination.clone(), 900_000_000, None)?;
+        env.poll()?;
+        assert_eq!(
+            subject_count(&env, env.subscriber)?,
+            0,
+            "no replay after alias discovery"
+        );
+        let before = env.state()?.observed_next_block;
+        env.append(source.clone(), destination.clone(), 800_000_000, None)?; // Populate empty cache before admission.
+        fund_suffix(&env, "A@B.7:1")?;
+        env.append(source.clone(), destination.clone(), 10, None)?;
+        let first = env.append(source.clone(), destination.clone(), 200_000_000, None)?;
+        env.set_abort_after_staged_admission(true)?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, before);
+        assert_eq!(subject_count(&env, env.subscriber)?, 0);
+        env.set_abort_after_staged_admission(false)?;
+        env.poll()?;
+        for _ in 0..10 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            subjects(&env, env.subscriber)?,
+            vec![SubjectPokeMatch {
+                subject: env.cmc,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first,
+                max_amount: 200_000_000u64.into()
+            }]
+        );
+        // A reduction staged after an existing below-threshold transfer changes only later activity.
+        env.append(source.clone(), destination.clone(), 5_000_000, None)?;
+        fund_suffix(&env, "A@B.7:0.01")?;
+        let lower = env.append(source, destination, 2_000_000, None)?;
+        env.poll()?;
+        for _ in 0..10 {
+            env.pic.tick();
+        }
+        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, lower);
+        assert_eq!(
+            subjects(&env, env.subscriber)?[0].max_amount,
+            candid::Nat::from(2_000_000u64)
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn external_ranges_pages_archives_neurons_and_combined_payload_bound() -> Result<()> {
+        for kind in 0..3 {
+            let env = match kind {
+                0 => Env::new()?,
+                1 => Env::new_two_ledgers()?,
+                _ => Env::new_sns()?,
+            };
+            subject_receiver(&env, env.subscriber)?;
+            set_aliases(
+                &env,
+                vec![
+                    CanisterAlias {
+                        alias: "A".into(),
+                        canister_id: env.subscriber,
+                    },
+                    CanisterAlias {
+                        alias: "B".into(),
+                        canister_id: env.cmc,
+                    },
+                ],
+                "",
+                None,
+            )?;
+            refresh_aliases(&env)?;
+            env.poll()?;
+            fund_suffix(&env, "A@B.0-255:1")?;
+            fund_suffix(&env, "A.7")?;
+            if kind != 1 {
+                fund_suffix(&env, "A@B.n0-2:1")?;
+            }
+            env.poll()?;
+            let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+            let skipped = env.append_observed(
+                source.clone(),
+                account_id(env.cmc, numbered(7)),
+                900_000_000,
+                None,
+            )?;
+            update::<_, ()>(
+                &env.pic,
+                env.observed_ledger,
+                "debug_set_first_local_block",
+                skipped + 1,
+            )?;
+            let first = env.append_observed(
+                source.clone(),
+                account_id(env.cmc, numbered(7)),
+                200_000_000,
+                None,
+            )?;
+            for _ in 0..260 {
+                env.append_observed(
+                    source.clone(),
+                    account_id(Principal::from_slice(&[92, 1]), numbered(0)),
+                    1,
+                    None,
+                )?;
+            }
+            env.append_observed(
+                source.clone(),
+                account_id(env.cmc, numbered(7)),
+                1_500_000_000,
+                None,
+            )?;
+            let second = env.append_observed(
+                source.clone(),
+                account_id(env.cmc, numbered(8)),
+                300_000_000,
+                None,
+            )?;
+            if kind != 1 {
+                let owner = if kind == 0 {
+                    Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?
+                } else {
+                    env.cmc
+                };
+                env.append_observed(
+                    source.clone(),
+                    account_id(owner, neuron_staking(env.cmc, 1)),
+                    1,
+                    None,
+                )?;
+                env.append_observed(
+                    source.clone(),
+                    account_id(owner, neuron_staking(env.cmc, 1)),
+                    400_000_000,
+                    None,
+                )?;
+            }
+            env.poll()?;
+            for _ in 0..10 {
+                env.pic.tick();
+            }
+            let matches = subjects(&env, env.subscriber)?;
+            assert!(matches.contains(&SubjectPokeMatch {
+                subject: env.cmc,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first,
+                max_amount: 1_500_000_000u64.into()
+            }));
+            assert!(matches.contains(&SubjectPokeMatch {
+                subject: env.cmc,
+                target: WatchTarget::Subaccount(8),
+                first_block_index: second,
+                max_amount: 300_000_000u64.into()
+            }));
+            assert_eq!(matches.len(), if kind == 1 { 2 } else { 3 });
+            // Across self and external classes, only the first 256 distinct identities survive.
+            env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                1,
+                None,
+            )?;
+            for n in 0..256 {
+                env.append_observed(
+                    source.clone(),
+                    account_id(env.cmc, numbered(n)),
+                    200_000_000,
+                    None,
+                )?;
+            }
+            env.poll()?;
+            for _ in 0..10 {
+                env.pic.tick();
+            }
+            let own: Vec<PokeMatch> = query(&env.pic, env.subscriber, "debug_last_matches", ())?;
+            let external = subjects(&env, env.subscriber)?;
+            assert_eq!(own.len(), 1);
+            assert_eq!(external.len(), 255);
+            let encoded = encode_args((&own, Some(&external)))?;
+            println!(
+                "subject_callback_max kind={kind} entries=256 bytes={}",
+                encoded.len()
+            );
+            env.upgrade_same_debug_wasm()?;
+            assert_eq!(preview(&env, "A@B.0-255")?.unwrap().target_count, 256);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn external_missing_and_trapping_methods_do_not_block_other_recipients() -> Result<()> {
+        let env = Env::new()?;
+        let trap = env.pic.create_canister();
+        env.pic.add_cycles(trap, 200_000_000_000_000);
+        env.pic.install_canister(
+            trap,
+            wasm(&SUBJECT_SUBSCRIBER_WASM, "mock-subscriber-subjects", None)?,
+            vec![],
+            None,
+        );
+        update::<_, ()>(&env.pic, trap, "debug_set_trap", true)?;
+        subject_receiver(&env, env.subscriber_no_args)?;
+        set_aliases(
+            &env,
+            vec![
+                CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: env.subscriber,
+                },
+                CanisterAlias {
+                    alias: "B".into(),
+                    canister_id: env.cmc,
+                },
+                CanisterAlias {
+                    alias: "C".into(),
+                    canister_id: env.subscriber_no_args,
+                },
+                CanisterAlias {
+                    alias: "D".into(),
+                    canister_id: trap,
+                },
+            ],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        env.poll()?;
+        for suffix in ["A@B.7", "C@B.7", "D@B.7"] {
+            fund_suffix(&env, suffix)?;
+        }
+        env.poll()?;
+        let before = env.poke_counts()?[0];
+        let index = env.append(
+            account_id(Principal::from_slice(&[91, 1]), [0; 32]),
+            account_id(env.cmc, numbered(7)),
+            10,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..12 {
+            env.pic.tick();
+        }
+        assert_eq!(env.poke_counts()?[0] - before, 3);
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+            0,
+            "missing subject method never falls back to legacy poke"
+        );
+        assert_eq!(subject_count(&env, trap)?, 0);
+        assert_eq!(subject_count(&env, env.subscriber_no_args)?, 1);
+        assert_eq!(
+            subjects(&env, env.subscriber_no_args)?[0].first_block_index,
+            index
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn alias_refresh_reserve_skip_consumes_day_without_historian_call() -> Result<()> {
+        let env = Env::with_event_horizon_wasm(
+            wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+            900_000_000_000,
+        )?;
+        refresh_aliases(&env)?;
+        let meta: AliasMetadata = query(&env.pic, env.event_horizon, "debug_alias_metadata", ())?;
+        assert!(meta.last_attempt.is_some());
+        assert!(meta.last_success.is_none());
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.historian, "debug_alias_calls", ())?,
+            0
+        );
+        env.pic.add_cycles(env.event_horizon, 200_000_000_000_000);
+        refresh_aliases(&env)?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.historian, "debug_alias_calls", ())?,
+            0,
+            "no same-day reserve retry loop"
+        );
+        env.pic.advance_time(std::time::Duration::from_secs(86400));
+        refresh_aliases(&env)?;
+        assert!(preview(&env, "E.7")?.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn aliases_paging_failures_daily_cache_and_upgrade() -> Result<()> {
+        let env = Env::new()?;
+        refresh_aliases(&env)?;
+        env.poll()?;
+        let golden: AliasMetadata = query(&env.pic, env.event_horizon, "debug_alias_metadata", ())?;
+        assert_eq!(
+            golden
+                .revision
+                .clone()
+                .unwrap()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+            "89d9f25601962fb394ad9ebf34aaceccf46b833b9cfd3ed2dc7eb942e9d63625"
+        );
+        assert_eq!(
+            preview(&env, "E.7")?.unwrap().subscriber,
+            Principal::from_text("eo6ei-gaaaa-aaaar-qchra-cai")?
+        );
+        let before: u64 = query(&env.pic, env.historian, "debug_alias_calls", ())?;
+        refresh_aliases(&env)?;
+        assert_eq!(
+            query::<_, u64>(&env.pic, env.historian, "debug_alias_calls", ())?,
+            before
+        );
+        let mut table: Vec<_> = (0..260)
+            .map(|n| CanisterAlias {
+                alias: format!("A{n:04}"),
+                canister_id: env.subscriber,
+            })
+            .collect();
+        table.push(CanisterAlias {
+            alias: "E".into(),
+            canister_id: Principal::from_text("eo6ei-gaaaa-aaaar-qchra-cai")?,
+        });
+        set_aliases(&env, table.clone(), "", Some(128))?;
+        env.pic.advance_time(std::time::Duration::from_secs(86400));
+        refresh_aliases(&env)?;
+        assert_eq!(
+            preview(&env, "A0259@A0000.0-255:0.01")?
+                .unwrap()
+                .target_count,
+            256
+        );
+        let accepted: AliasMetadata =
+            query(&env.pic, env.event_horizon, "debug_alias_metadata", ())?;
+        for mode in [
+            "trap",
+            "decode",
+            "mixed",
+            "cursor",
+            "empty",
+            "unsorted",
+            "duplicate",
+            "revision",
+            "oversize",
+            "invalid",
+            "principal",
+        ] {
+            set_aliases(&env, table.clone(), mode, Some(128))?;
+            env.pic.advance_time(std::time::Duration::from_secs(86400));
+            refresh_aliases(&env)?;
+            let after: AliasMetadata =
+                query(&env.pic, env.event_horizon, "debug_alias_metadata", ())?;
+            assert_eq!(after.revision, accepted.revision, "{mode}");
+            assert_eq!(after.last_success, accepted.last_success, "{mode}");
+            assert!(preview(&env, "A0259.7")?.is_ok());
+            let start = env.state()?.observed_next_block;
+            env.append_ledger_batch(DebugBatchKind::Irrelevant, 1)?;
+            env.poll()?;
+            assert_eq!(
+                env.state()?.observed_next_block,
+                start + 1,
+                "alias failure must not block ordinary polling"
+            );
+        }
+        let mut changed = table.clone();
+        changed[0].canister_id = env.cmc;
+        for invalid in [changed, table[1..].to_vec()] {
+            set_aliases(&env, invalid, "", None)?;
+            env.pic.advance_time(std::time::Duration::from_secs(86400));
+            refresh_aliases(&env)?;
+            assert_eq!(
+                query::<_, AliasMetadata>(&env.pic, env.event_horizon, "debug_alias_metadata", ())?
+                    .revision,
+                accepted.revision
+            );
+        }
+        let cursors = env.state()?;
+        env.upgrade_same_debug_wasm()?;
+        assert_eq!(
+            env.state()?.admission_next_block,
+            cursors.admission_next_block
+        );
+        assert_eq!(
+            preview(&env, "A0259.7")?.unwrap().subscriber,
+            env.subscriber
+        );
+        table.insert(
+            260,
+            CanisterAlias {
+                alias: "D".into(),
+                canister_id: env.cmc,
+            },
+        );
+        set_aliases(&env, table, "", None)?;
+        env.pic.advance_time(std::time::Duration::from_secs(86400));
+        refresh_aliases(&env)?;
+        assert_eq!(preview(&env, "D.7")?.unwrap().subscriber, env.cmc);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn cross_subject_independent_thresholds_exact_routes_and_callbacks() -> Result<()> {
+        for generic in [false, true] {
+            let env = if generic {
+                Env::new_two_ledgers()?
+            } else {
+                Env::new()?
+            };
+            subject_receiver(&env, env.subscriber)?;
+            subject_receiver(&env, env.subscriber_no_args)?;
+            subject_receiver(&env, env.cmc)?;
+            let a = env.subscriber;
+            let b = env.cmc;
+            let c = env.subscriber_no_args;
+            set_aliases(
+                &env,
+                vec![
+                    CanisterAlias {
+                        alias: "A".into(),
+                        canister_id: a,
+                    },
+                    CanisterAlias {
+                        alias: "AA".into(),
+                        canister_id: a,
+                    },
+                    CanisterAlias {
+                        alias: "B".into(),
+                        canister_id: b,
+                    },
+                    CanisterAlias {
+                        alias: "C".into(),
+                        canister_id: c,
+                    },
+                ],
+                "",
+                None,
+            )?;
+            refresh_aliases(&env)?;
+            env.poll()?;
+            // An alias route and principal-equivalent route are independent endowment evidence.
+            let unfunded = format!("{}@B.7", a.to_text().replace('-', ""));
+            env.set_route(unfunded.as_bytes().to_vec(), 100_000_000_000_000)?;
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(env.event_horizon, [0; 32]),
+                1,
+                Some(b"A@B.7:1".to_vec()),
+            )?;
+            env.poll()?;
+            let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+            env.append_observed(
+                source.clone(),
+                account_id(b, numbered(7)),
+                200_000_000,
+                None,
+            )?;
+            env.poll()?;
+            assert_eq!(subject_count(&env, a)?, 0);
+            for declaration in ["A@B.7:1", "C@B.7:10", "B.7", "B@A.7", "A@C.7", "A.7"] {
+                fund_suffix(&env, declaration)?;
+            }
+            env.poll()?;
+            let first_b = env.append_observed(
+                source.clone(),
+                account_id(b, numbered(7)),
+                200_000_000,
+                None,
+            )?;
+            let large_b = env.append_observed(
+                source.clone(),
+                account_id(b, numbered(7)),
+                1_500_000_000,
+                None,
+            )?;
+            let first_c =
+                env.append_observed(source.clone(), account_id(c, numbered(7)), 1, None)?;
+            let first_self =
+                env.append_observed(source.clone(), account_id(a, numbered(7)), 9, None)?;
+            env.poll()?;
+            for _ in 0..10 {
+                env.pic.tick();
+            }
+            assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, 1);
+            assert_eq!(subject_count(&env, a)?, 0);
+            assert_eq!(
+                query::<_, Vec<PokeMatch>>(&env.pic, a, "debug_last_matches", ())?,
+                vec![PokeMatch {
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: first_self,
+                    max_amount: 9u8.into()
+                }]
+            );
+            assert_eq!(query::<_, u64>(&env.pic, b, "debug_pokes", ())?, 1);
+            assert_eq!(
+                query::<_, Vec<PokeMatch>>(&env.pic, b, "debug_last_matches", ())?,
+                vec![PokeMatch {
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: first_b,
+                    max_amount: 1_500_000_000u64.into()
+                }]
+            );
+            assert_eq!(
+                subjects(&env, b)?,
+                vec![SubjectPokeMatch {
+                    subject: a,
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: first_self,
+                    max_amount: 9u8.into()
+                }]
+            );
+            let actual = subjects(&env, a)?;
+            assert_eq!(actual.len(), 2);
+            assert!(actual.contains(&SubjectPokeMatch {
+                subject: b,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first_b,
+                max_amount: 1_500_000_000u64.into()
+            }));
+            assert!(actual.contains(&SubjectPokeMatch {
+                subject: c,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first_c,
+                max_amount: 1u8.into()
+            }));
+            assert_eq!(subject_count(&env, c)?, 1);
+            assert_eq!(
+                subjects(&env, c)?,
+                vec![SubjectPokeMatch {
+                    subject: b,
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: large_b,
+                    max_amount: 1_500_000_000u64.into()
+                }]
+            );
+            assert_eq!(
+                query::<_, Option<Principal>>(&env.pic, a, "debug_last_caller", ())?,
+                Some(env.event_horizon)
+            );
+            // External only must not invoke legacy poke; alias spelling merges only the relation threshold.
+            fund_suffix(&env, "AA@B.7:0.01")?;
+            env.poll()?;
+            let next =
+                env.append_observed(source.clone(), account_id(b, numbered(7)), 1_000_000, None)?;
+            env.poll()?;
+            for _ in 0..10 {
+                env.pic.tick();
+            }
+            assert_eq!(subject_count(&env, a)?, 1);
+            assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, 1);
+            assert_eq!(subjects(&env, a)?[0].first_block_index, next);
+            assert_eq!(subject_count(&env, c)?, 1);
+            // A@A normalizes to the old self store. Later global+external uses one normal two-arg poke.
+            fund_suffix(&env, "A@AA.8")?;
+            fund_suffix(&env, "A")?;
+            env.poll()?;
+            let count = query::<_, u64>(&env.pic, a, "debug_pokes", ())?;
+            env.append_observed(source.clone(), account_id(b, numbered(7)), 2_000_000, None)?;
+            env.poll()?;
+            for _ in 0..10 {
+                env.pic.tick();
+            }
+            assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, count + 1);
+            assert!(query::<_, Vec<PokeMatch>>(&env.pic, a, "debug_last_matches", ())?.is_empty());
+            assert_eq!(subjects(&env, a)?.len(), 1);
+            let before = env.state()?;
+            env.upgrade_same_debug_wasm()?;
+            assert_eq!(env.state()?.observed_next_block, before.observed_next_block);
+            assert_eq!(preview(&env, "A@B.n0")?.is_ok(), !generic);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn legacy_and_subject_receiver_sequences_are_safe() -> Result<()> {
+        let env = Env::new()?;
+        subject_receiver(&env, env.subscriber)?;
+        let legacy = env.pic.create_canister();
+        env.pic.add_cycles(legacy, 200_000_000_000_000);
+        env.pic.install_canister(
+            legacy,
+            wasm(&LEGACY_SUBSCRIBER_WASM, "mock-subscriber-legacy", None)?,
+            vec![],
+            None,
+        );
+        #[derive(CandidType, Deserialize)]
+        struct OldMatch {
+            target: WatchTarget,
+            max_amount: candid::Nat,
+        }
+        let own = vec![PokeMatch {
+            target: WatchTarget::Subaccount(0),
+            first_block_index: 0,
+            max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(1u8),
+        }];
+        let foreign: Vec<_> = (0..256)
+            .map(|n| SubjectPokeMatch {
+                subject: env.cmc,
+                target: WatchTarget::Subaccount(n),
+                first_block_index: u64::MAX - n,
+                max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(n),
+            })
+            .collect();
+        let bytes = encode_args((&own, Some(&foreign)))?;
+        for receiver in [legacy, env.subscriber, env.subscriber_no_args] {
+            decode_args::<()>(&update_raw(&env.pic, receiver, "poke", bytes.clone())?)?;
+        }
+        let old: Vec<OldMatch> = query(&env.pic, legacy, "debug_last_matches", ())?;
+        assert_eq!(old.len(), 1);
+        assert_eq!(old[0].max_amount, own[0].max_amount);
+        assert_eq!(subjects(&env, env.subscriber)?, foreign);
+        decode_args::<()>(&update_raw(
+            &env.pic,
+            env.subscriber,
+            "poke_subjects",
+            encode_one(&foreign)?,
+        )?)?;
+        assert_eq!(subject_count(&env, env.subscriber)?, 1);
+        assert!(update_raw(&env.pic, legacy, "poke_subjects", encode_one(&foreign)?).is_err());
+        assert_eq!(query::<_, u64>(&env.pic, legacy, "debug_pokes", ())?, 1);
+        set_aliases(
+            &env,
+            vec![CanisterAlias {
+                alias: "L".into(),
+                canister_id: legacy,
+            }],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        env.poll()?;
+        fund_suffix(&env, "L.7")?;
+        env.poll()?;
+        env.append(
+            account_id(Principal::from_slice(&[91, 1]), [0; 32]),
+            account_id(legacy, numbered(7)),
+            123,
+            None,
+        )?;
+        env.poll()?;
+        for _ in 0..12 {
+            env.pic.tick();
+        }
+        assert_eq!(
+            query::<_, u64>(&env.pic, legacy, "debug_pokes", ())?,
+            2,
+            "old two-field record decodes production two-argument one-way call"
+        );
+        assert_eq!(
+            query::<_, Option<Principal>>(&env.pic, legacy, "debug_last_caller", ())?,
+            Some(env.event_horizon)
+        );
+        Ok(())
+    }
+
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn generated_subscriber_entrypoints_obey_candid_argument_compatibility() -> Result<()> {
@@ -6223,7 +7142,7 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn production_wasm_exposes_only_instance_and_pricing_queries() -> Result<()> {
+    fn production_wasm_exposes_only_approved_read_only_queries() -> Result<()> {
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
@@ -6241,6 +7160,9 @@ mod tests {
         assert!(!pricing.initialized);
         pic.query_call(id, Principal::anonymous(), "get_instance", encode_one(())?)
             .map_err(|e| anyhow!("get_instance: {e:?}"))?;
+        let preview: Result<SubscriptionPreview, String> =
+            query(&pic, id, "preview_subscription", id.to_text())?;
+        assert!(preview.is_ok());
         let result = pic.query_call(id, Principal::anonymous(), "debug_state", encode_one(())?);
         assert!(
             result.is_err(),

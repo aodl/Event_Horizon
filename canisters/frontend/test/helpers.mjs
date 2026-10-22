@@ -18,15 +18,16 @@ export function fakeDocument({ counter = false } = {}) {
     classList: { values: new Set(), add(value) { this.values.add(value); }, remove(value) { this.values.delete(value); } },
     append(option) { this.options ??= []; this.options.push(option); if (!this.value) this.value = option.value; },
   });
-  const ids = ['instance', 'instance-info', 'pricing', 'scope', 'single-label', 'range-start-label', 'range-end-label', 'account-fields', 'single-field', 'range-fields', 'memo-output', 'memo-help', 'principal', 'subaccount', 'range-start', 'range-end', 'amount'];
+  const ids = ['instance', 'instance-info', 'pricing', 'scope', 'single-label', 'range-start-label', 'range-end-label', 'account-fields', 'single-field', 'range-fields', 'memo-output', 'memo-help', 'subject-mode', 'subject-field', 'subject', 'principal', 'subaccount', 'range-start', 'range-end', 'amount'];
   if (counter) ids.push('ledger-rate', 'ledger-rate-description', 'ledger-count', 'ledger-label', 'ledger-sample', 'ledger-status', 'ledger-checked');
   const nodes = Object.fromEntries(ids.map(id => [id, makeNode()]));
   nodes.scope.value = 'account';
+  nodes['subject-mode'].value='self';
   const scopeOptions = { neuron: makeNode(), 'neuron-range': makeNode() };
   nodes.scope.querySelector = selector => scopeOptions[selector.match(/value="([^"]+)"/)[1]];
   nodes['amount-label'] = makeNode(); nodes['amount-label'].firstChild = { textContent: '' };
   nodes['memo-form'] = makeNode();
-  nodes['memo-form'].elements = [nodes.scope, nodes.principal, nodes.subaccount, nodes['range-start'], nodes['range-end'], nodes.amount];
+  nodes['memo-form'].elements = [nodes.scope, nodes['subject-mode'], nodes.subject, nodes.principal, nodes.subaccount, nodes['range-start'], nodes['range-end'], nodes.amount];
   const events = eventTarget();
   return { ...events, nodes, hidden: false, getElementById: id => nodes[id], createElement: () => makeNode(),
     dispatch(type, event) { if (type === 'input') nodes['memo-form'].dispatch(type, event); else if (type === 'change') nodes.instance.dispatch(type, event); else events.dispatch(type, event); },

@@ -10,7 +10,7 @@ Horizon as raw ICP, pooled, and converted into cycles. The canonical ICP
 instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances
 read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each
 matching numeric subaccount or neuron nonce with its first qualifying Ledger block index and largest qualifying raw
-transfer amount. Scoped subscribers should normally use `poke(vec PokeMatch)`
+transfer amount. Scoped subscribers should normally use target-aware `poke`
 to filter locally approved targets and amount thresholds before expensive work:
 any patron can fund a subscription without the receiving canister's consent.
 A trusted caller is not proof of wanted activity. Zero-argument `poke()` remains
@@ -19,23 +19,23 @@ work; it discards those filtering hints. See the [subscriber guide](docs/subscri
 Subscribers keep authoritative ledger cursors and independent reconciliation;
 an Index is optional.
 
-Canonical instances are ICP (alias `X`, live) and IO (intended alias `I`, planned). No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. Trigger thresholds use the observed token's decimals, while prices, cycles funding, and any surplus remain ICP.
+The canonical ICP backend is live; this release prepares `E` routing, whose Jupiter deployment operators must verify before offering alias-dependent funding. IO (intended alias `I`) remains planned. No IO backend or Ledger principal is claimed yet. Every compatible instance uses the same backend Wasm; immutable installation settings are `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. Trigger thresholds use the observed token's decimals, while prices, cycles funding, and any surplus remain ICP.
 
 The five declaration classes use these Jupiter Faucet memo forms. Canonical ICP
-uses alias `X` only as an example; every instance uses its reviewed alias:
+uses alias `E` only as an example; every instance uses its reviewed alias:
 
 ```text
 <alias>.<subscriber>
-<alias>.<subscriber>.<number>[:<amount>]
-<alias>.<subscriber>.<start>-<end>[:<amount>]
-<alias>.<subscriber>.n<nonce>[:<amount>]
-<alias>.<subscriber>.n<start>-<end>[:<amount>]
+<alias>.<subscriber>[@<subject>].<number>[:<amount>]
+<alias>.<subscriber>[@<subject>].<start>-<end>[:<amount>]
+<alias>.<subscriber>[@<subject>].n<nonce>[:<amount>]
+<alias>.<subscriber>[@<subject>].n<start>-<end>[:<amount>]
 ```
 
 The planned IO alias `I` is intended, not published. The full memo—including
 alias, dot, subscriber, scope or range, and optional threshold—must fit
 Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
-Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand at admission into the existing watched-account map. `n<nonce>` selects a subscriber-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. `poke([])` signals global-only activity; a non-empty vector of target/max-amount matches takes precedence and is capped at 256 targets.
+Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand once at admission into indexed watched-account relations. `n<nonce>` selects a subject-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. Self/global `poke` remains compatible with older receivers; external-only activity uses `poke_subjects`. A non-empty vector of target/max-amount matches takes precedence and shares a cap of 256 subject-qualified hints.
 
 A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 
@@ -64,7 +64,7 @@ range price   = ceil(20 × F / C) ICP
 global price  = ceil(1000 × F / C) ICP
 ```
 
-Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes exactly the read-only `get_instance` and `get_pricing` queries; the certified frontend verifies the first against its reviewed static registry.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes the read-only `get_instance`, `get_pricing`, and local declaration `preview_subscription` queries; the certified frontend verifies the first against its reviewed static registry.
 
 The initial reference requirements are therefore 10 ICP for an account, 20 ICP
 for a range, and 1,000 ICP for a global subscription. These are reference bases,

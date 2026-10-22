@@ -46,7 +46,7 @@ test('ledger failure leaves verified pricing and memo construction available', a
   const f = fixture(async () => { throw Error('<img onerror=bad>'); }); await f.app.load(); await flush();
   assert.match(f.doc.nodes.pricing.innerHTML, /Account subscription: 10 ICP/);
   f.doc.nodes.principal.value = 'uuc56-gyb'; f.doc.nodes.subaccount.value = '7'; f.doc.dispatch('input');
-  assert.equal(f.doc.nodes['memo-output'].textContent, 'X.uuc56gyb.7');
+  assert.equal(f.doc.nodes['memo-output'].textContent, 'E.uuc56gyb.7');
   assert.match(f.doc.nodes['ledger-status'].textContent, /unavailable/); assert.doesNotMatch(f.doc.nodes['ledger-status'].textContent, /img/); f.app.dispose();
 });
 

@@ -1,3 +1,5 @@
+type SubscriptionPreview = record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 };
+type AliasMetadata = record { revision : opt blob; last_success : opt nat64; last_attempt : opt nat64 };
 type PollingMode = variant { ReserveProtection; Economy; Standard; Fast; VeryFast; Continuous };
 type Price = record { account_icp : nat64; range_icp : nat64; global_icp : nat64 };
 type Pricing = record {
@@ -23,6 +25,10 @@ type DebugState = record {
 type WatchTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
 type Subscription = record { subscriber : principal; target : WatchTarget; minimum_units : nat };
 service : (DebugInitArgs) -> {
+  preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
+  debug_refresh_aliases : () -> ();
+  debug_alias_metadata : () -> (AliasMetadata) query;
+  debug_seed_external : (record { subject : principal; start : nat64; count : nat64 }) -> ();
   get_instance : () -> (record {
     observed_ledger : principal;
     observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool; neuron_governance : opt principal };

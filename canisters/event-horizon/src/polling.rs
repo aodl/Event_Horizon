@@ -2,9 +2,9 @@ use crate::{
     account::account_identifier_bytes,
     clients::{historian, icp_ledger, icrc3, subscriber},
     config, logging,
-    memo::{parse_subscription_memo, SubscriptionDeclaration},
+    memo::{resolve_subscription_memo, SubscriptionDeclaration},
     pricing, state,
-    subscription::{merge_subscription, Subscription, WatchTarget},
+    subscription::{SubjectSubscription, Subscription, WatchTarget},
 };
 use candid::{Nat, Principal};
 use icrc_ledger_types::{
@@ -18,38 +18,47 @@ use std::{
 
 const MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct TargetMatch {
     first_block_index: u64,
     max_amount: Nat,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct MatchState {
     global: bool,
-    subs: BTreeMap<WatchTarget, TargetMatch>,
+    subs: BTreeMap<(Principal, WatchTarget), TargetMatch>,
 }
 
 fn dispatch_matches(
     matches: BTreeMap<Principal, MatchState>,
-    mut poke: impl FnMut(Principal, Vec<subscriber::PokeMatch>) -> bool,
+    mut poke: impl FnMut(Principal, subscriber::Notification) -> bool,
 ) {
-    // Partition already-coalesced entries once, preserving principal order in
-    // each phase. Payload shape does not identify actual global eligibility.
-    let (globals, specifics): (Vec<_>, Vec<_>) =
-        matches.into_iter().partition(|(_, state)| state.global);
+    let (globals, specifics): (Vec<_>, Vec<_>) = matches.into_iter().partition(|(_, s)| s.global);
     for (principal, state) in globals.into_iter().chain(specifics) {
-        let hint = state
-            .subs
-            .into_iter()
-            .map(|(target, matched)| subscriber::PokeMatch {
-                target,
-                first_block_index: matched.first_block_index,
-                max_amount: matched.max_amount,
-            })
-            .collect();
-        // A failed or reserve-protected attempt must not stop later attempts.
-        let _ = poke(principal, hint);
+        let mut notification = subscriber::Notification {
+            global: state.global,
+            ..Default::default()
+        };
+        for ((subject, target), m) in state.subs {
+            if subject == principal {
+                notification.self_matches.push(subscriber::PokeMatch {
+                    target,
+                    first_block_index: m.first_block_index,
+                    max_amount: m.max_amount,
+                })
+            } else {
+                notification
+                    .subject_matches
+                    .push(subscriber::SubjectPokeMatch {
+                        subject,
+                        target,
+                        first_block_index: m.first_block_index,
+                        max_amount: m.max_amount,
+                    })
+            }
+        }
+        let _ = poke(principal, notification);
     }
 }
 struct SharedGlobalOrder {
@@ -59,40 +68,55 @@ struct SharedGlobalOrder {
 }
 enum PreparedAdmission {
     Global(Principal),
-    Accounts(Vec<Subscription>),
+    Accounts(Vec<SubjectSubscription>),
 }
 
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
-    subscriptions: BTreeMap<(Principal, WatchTarget), Subscription>,
-    shared_overlay: BTreeMap<[u8; 32], Subscription>,
+    subscriptions: BTreeMap<(Principal, Principal, WatchTarget), SubjectSubscription>,
+    shared_overlay: BTreeMap<([u8; 32], Principal, Principal, WatchTarget), SubjectSubscription>,
+    shared_cache: BTreeMap<[u8; 32], Vec<SubjectSubscription>>,
 }
-
 impl PendingAdmissions {
     fn stage(&mut self, admission: PreparedAdmission, shared: bool) {
         match admission {
-            PreparedAdmission::Global(subscriber) => {
-                self.globals.insert(subscriber);
+            PreparedAdmission::Global(p) => {
+                self.globals.insert(p);
             }
             PreparedAdmission::Accounts(subscriptions) => {
                 for candidate in subscriptions {
-                    let key = (candidate.subscriber, candidate.target);
-                    let existing = self.subscriptions.get(&key).cloned().or_else(|| {
-                        state::get_target_subscription(candidate.subscriber, candidate.target)
-                    });
-                    let effective = merge_subscription(existing, candidate);
+                    let key = candidate.identity();
+                    let existing = self
+                        .subscriptions
+                        .get(&key)
+                        .cloned()
+                        .or_else(|| state::get_relation(key.0, key.1, key.2));
+                    let effective = match existing {
+                        Some(old) => old.merge(candidate),
+                        None => candidate,
+                    };
                     if shared {
-                        let governance = state::read_instance_config()
-                            .observed_profile
-                            .and_then(|p| p.neuron_governance);
                         let account = effective
-                            .account(governance)
-                            .expect("verified neuron governance");
+                            .account(
+                                state::read_instance_config()
+                                    .observed_profile
+                                    .and_then(|p| p.neuron_governance),
+                            )
+                            .expect("verified governance");
+                        self.shared_cache.remove(&account_identifier_bytes(
+                            account.owner,
+                            *account.effective_subaccount(),
+                        ));
                         self.shared_overlay.insert(
-                            account_identifier_bytes(
-                                account.owner,
-                                *account.effective_subaccount(),
+                            (
+                                account_identifier_bytes(
+                                    account.owner,
+                                    *account.effective_subaccount(),
+                                ),
+                                key.0,
+                                key.1,
+                                key.2,
                             ),
                             effective.clone(),
                         );
@@ -102,20 +126,34 @@ impl PendingAdmissions {
             }
         }
     }
-
-    fn shared_subscription(&self, account: [u8; 32]) -> Option<Subscription> {
-        self.shared_overlay
-            .get(&account)
-            .cloned()
-            .or_else(|| state::get_icp_subscription(account))
+    fn shared_subscriptions(&mut self, account: [u8; 32]) -> &[SubjectSubscription] {
+        self.shared_cache.entry(account).or_insert_with(|| {
+            let mut interested: BTreeMap<_, _> = state::interested_icp(account)
+                .into_iter()
+                .map(|s| (s.identity(), s))
+                .collect();
+            let lo = (
+                account,
+                Principal::management_canister(),
+                Principal::management_canister(),
+                WatchTarget::Subaccount(0),
+            );
+            for (_, s) in self
+                .shared_overlay
+                .range(lo..)
+                .take_while(|(k, _)| k.0 == account)
+            {
+                interested.insert(s.identity(), s.clone());
+            }
+            interested.into_values().collect()
+        })
     }
-
     fn publish(self) {
-        for subscription in self.subscriptions.into_values() {
-            state::put_subscription(subscription);
+        for s in self.subscriptions.into_values() {
+            state::put_relation(s)
         }
-        for subscriber in self.globals {
-            state::put_global_subscriber(subscriber);
+        for p in self.globals {
+            state::put_global_subscriber(p)
         }
     }
 }
@@ -200,7 +238,12 @@ fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principa
     }
 }
 
-fn record_match(state: &mut MatchState, target: WatchTarget, first_block_index: u64, amount: Nat) {
+fn record_match(
+    state: &mut MatchState,
+    target: (Principal, WatchTarget),
+    first_block_index: u64,
+    amount: Nat,
+) {
     if let Some(existing) = state.subs.get_mut(&target) {
         existing.first_block_index = existing.first_block_index.min(first_block_index);
         if amount > existing.max_amount {
@@ -234,9 +277,11 @@ async fn prepare_admission(
         return None;
     }
     let memo = memo?;
-    let Ok(d) = parse_subscription_memo(memo) else {
+    let Ok(resolved) = resolve_subscription_memo(memo, state::alias) else {
         return None;
     };
+    let subject = resolved.subject;
+    let d = resolved.declaration;
     let neuron_requested = matches!(
         &d,
         SubscriptionDeclaration::Account {
@@ -275,7 +320,12 @@ async fn prepare_admission(
                 x @ SubscriptionDeclaration::Account { .. } => {
                     Subscription::from_declaration(x, decimals)
                         .ok()
-                        .map(|subscription| PreparedAdmission::Accounts(vec![subscription]))
+                        .map(|subscription| {
+                            PreparedAdmission::Accounts(vec![SubjectSubscription {
+                                subject,
+                                subscription,
+                            }])
+                        })
                 }
                 SubscriptionDeclaration::Range {
                     subscriber,
@@ -291,14 +341,17 @@ async fn prepare_admission(
                         let minimum_units = minimum.unwrap_or_else(|| Nat::from(0u8));
                         PreparedAdmission::Accounts(
                             (start..=end)
-                                .map(|n| Subscription {
-                                    subscriber,
-                                    target: if neuron {
-                                        WatchTarget::NeuronNonce(n)
-                                    } else {
-                                        WatchTarget::Subaccount(n)
+                                .map(|n| SubjectSubscription {
+                                    subject,
+                                    subscription: Subscription {
+                                        subscriber,
+                                        target: if neuron {
+                                            WatchTarget::NeuronNonce(n)
+                                        } else {
+                                            WatchTarget::Subaccount(n)
+                                        },
+                                        minimum_units: minimum_units.clone(),
                                     },
-                                    minimum_units: minimum_units.clone(),
                                 })
                                 .collect(),
                         )
@@ -313,42 +366,51 @@ async fn prepare_admission(
     }
     None
 }
+fn observe_matches(
+    index: u64,
+    amount: &Nat,
+    interests: impl IntoIterator<Item = impl std::borrow::Borrow<SubjectSubscription>>,
+    out: &mut BTreeMap<Principal, MatchState>,
+) {
+    for s in interests {
+        let s = std::borrow::Borrow::<SubjectSubscription>::borrow(&s);
+        if s.subscription.matches(amount) {
+            record_match(
+                out.entry(s.subscription.subscriber).or_default(),
+                (s.subject, s.subscription.target),
+                index,
+                amount.clone(),
+            )
+        }
+    }
+}
 fn observe_icrc3(
     first_block_index: u64,
     e: &icrc3::LedgerEvent,
+    cache: &mut BTreeMap<(Principal, [u8; 32]), Vec<SubjectSubscription>>,
     out: &mut BTreeMap<Principal, MatchState>,
 ) {
     if let icrc3::LedgerEvent::Transfer { to, amount, .. } = e {
-        if let Some(s) = state::get_subscription(*to) {
-            if s.matches(amount) {
-                record_match(
-                    out.entry(s.subscriber).or_default(),
-                    s.target,
-                    first_block_index,
-                    amount.clone(),
-                );
-            }
-        }
+        let interests = cache
+            .entry((to.owner, *to.effective_subaccount()))
+            .or_insert_with(|| state::interested_icrc(*to));
+        observe_matches(first_block_index, amount, interests.iter(), out)
     }
 }
 fn observe_icp(
     first_block_index: u64,
     op: &Option<icp_ledger::Operation>,
-    pending: &PendingAdmissions,
+    pending: &mut PendingAdmissions,
     out: &mut BTreeMap<Principal, MatchState>,
 ) {
     if let Some(icp_ledger::Operation::Transfer { to, amount, .. }) = op {
         if let Some(id) = account_id(to) {
-            if let Some(s) = pending.shared_subscription(id) {
-                if s.matches(&Nat::from(amount.e8s)) {
-                    record_match(
-                        out.entry(s.subscriber).or_default(),
-                        s.target,
-                        first_block_index,
-                        Nat::from(amount.e8s),
-                    );
-                }
-            }
+            observe_matches(
+                first_block_index,
+                &Nat::from(amount.e8s),
+                pending.shared_subscriptions(id),
+                out,
+            )
         }
     }
 }
@@ -472,14 +534,17 @@ async fn icrc_page(
         commit(Stream::Observed, true, at)
     }
     let blocks = icrc_live_blocks(r.blocks, at, requested_end)?;
-    let mut local = BTreeMap::new();
+    // Retained poll identities must survive page-local overflow, including updates
+    // arriving after 256 new identities on a later page. Failed pages publish nothing.
+    let mut local = out.clone();
     let mut live = false;
+    let mut cache = BTreeMap::new();
     for (id, block) in blocks {
         if id != at {
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
         let e = icrc3::decode_block(&block)?;
-        observe_icrc3(id, &e, &mut local);
+        observe_icrc3(id, &e, &mut cache, &mut local);
         live = true;
         at = at.checked_add(1).ok_or("observed cursor overflow")?;
     }
@@ -571,7 +636,9 @@ async fn legacy_page(
             r.first_block_index
         ));
     }
-    let mut local = BTreeMap::new();
+    // Retained poll identities must survive page-local overflow, including updates
+    // arriving after 256 new identities on a later page. Failed pages publish nothing.
+    let mut local = out.clone();
     let mut pending = PendingAdmissions::default();
     let mut page_global_admissions = BTreeMap::new();
     let mut page_last_live = None;
@@ -608,7 +675,7 @@ async fn legacy_page(
             }
         }
         if matches!(s, Stream::Shared) {
-            observe_icp(id, &b.transaction.operation, &pending, &mut local);
+            observe_icp(id, &b.transaction.operation, &mut pending, &mut local);
             page_last_live = Some(id);
         }
         live = true;
@@ -793,278 +860,259 @@ mod target_match_tests {
     };
     use std::str::FromStr;
 
+    fn p(n: u8) -> Principal {
+        Principal::from_slice(&[n, 1])
+    }
     #[test]
     fn independent_first_index_and_maximum_include_zero_and_full_width() {
-        for (activity, first, maximum) in [
+        for (events, first, maximum) in [
             (vec![(0, 7)], 0, 7),
             (vec![(100, 4), (105, 15), (109, 8)], 100, 15),
             (vec![(200, 50), (205, 10)], 200, 50),
-            (
-                vec![(u64::MAX, 50), ((1u64 << 53) + 1, 10)],
-                (1u64 << 53) + 1,
-                50,
-            ),
+            (vec![(u64::MAX, 50), ((1 << 53) + 1, 10)], (1 << 53) + 1, 50),
         ] {
-            let mut state = MatchState::default();
-            for (index, amount) in activity {
-                record_match(
-                    &mut state,
-                    WatchTarget::Subaccount(7),
-                    index,
-                    Nat::from(amount as u64),
-                );
+            let mut s = MatchState::default();
+            let key = (p(1), WatchTarget::Subaccount(7));
+            for (i, a) in events {
+                record_match(&mut s, key, i, Nat::from(a as u64))
             }
             assert_eq!(
-                state.subs[&WatchTarget::Subaccount(7)],
+                s.subs[&key],
                 TargetMatch {
                     first_block_index: first,
-                    max_amount: Nat::from(maximum as u64),
+                    max_amount: Nat::from(maximum as u64)
                 }
             );
         }
     }
-
     #[test]
     fn page_merging_independently_combines_minimum_and_maximum_in_either_order() {
-        let subscriber = Principal::from_slice(&[97]);
         for reverse in [false, true] {
+            let key = (p(2), WatchTarget::Subaccount(7));
             let mut early = MatchState::default();
-            record_match(&mut early, WatchTarget::Subaccount(7), 100, Nat::from(4u8));
-            record_match(&mut early, WatchTarget::Subaccount(8), 101, Nat::from(90u8));
+            record_match(&mut early, key, 100, 4u8.into());
             let mut late = MatchState {
                 global: true,
-                ..MatchState::default()
+                ..Default::default()
             };
-            record_match(&mut late, WatchTarget::Subaccount(7), 300, Nat::from(15u8));
-            record_match(&mut late, WatchTarget::Subaccount(8), 301, Nat::from(2u8));
-            let (first, second) = if reverse {
+            record_match(&mut late, key, 300, 15u8.into());
+            let (a, b) = if reverse {
                 (late, early)
             } else {
                 (early, late)
             };
-            let mut out = BTreeMap::from([(subscriber, first)]);
-            merge(&mut out, BTreeMap::from([(subscriber, second)]));
-            assert!(out[&subscriber].global);
+            let mut out = BTreeMap::from([(p(1), a)]);
+            merge(&mut out, BTreeMap::from([(p(1), b)]));
+            assert!(out[&p(1)].global);
             assert_eq!(
-                out[&subscriber].subs[&WatchTarget::Subaccount(7)],
+                out[&p(1)].subs[&key],
                 TargetMatch {
                     first_block_index: 100,
-                    max_amount: Nat::from(15u8),
-                }
-            );
-            assert_eq!(
-                out[&subscriber].subs[&WatchTarget::Subaccount(8)],
-                TargetMatch {
-                    first_block_index: 101,
-                    max_amount: Nat::from(90u8),
+                    max_amount: 15u8.into()
                 }
             );
         }
+    }
+    #[test]
+    fn later_page_overflow_still_updates_previously_retained_identity() {
+        let mut first = MatchState::default();
+        for n in 0..256 {
+            record_match(
+                &mut first,
+                (p(2), WatchTarget::Subaccount(n)),
+                100,
+                1u8.into(),
+            );
+        }
+        let mut out = BTreeMap::from([(p(1), first)]);
+        let mut local = out.clone();
+        for n in 256..512 {
+            record_match(
+                local.get_mut(&p(1)).unwrap(),
+                (p(2), WatchTarget::Subaccount(n)),
+                200,
+                2u8.into(),
+            );
+        }
+        record_match(
+            local.get_mut(&p(1)).unwrap(),
+            (p(2), WatchTarget::Subaccount(7)),
+            300,
+            99u8.into(),
+        );
+        merge(&mut out, local);
+        assert_eq!(out[&p(1)].subs.len(), 256);
+        let retained = &out[&p(1)].subs[&(p(2), WatchTarget::Subaccount(7))];
+        assert_eq!(retained.first_block_index, 100);
+        assert_eq!(retained.max_amount, Nat::from(99u8));
     }
 
     #[test]
     fn below_threshold_observation_cannot_supply_first_index() {
-        let subscriber = Principal::from_slice(&[96]);
-        let account = account_identifier_bytes(subscriber, crate::account::numbered_subaccount(7));
-        let mut pending = PendingAdmissions::default();
-        pending.shared_overlay.insert(
-            account,
-            Subscription {
+        let relation = |subscriber, threshold| SubjectSubscription {
+            subject: p(2),
+            subscription: Subscription {
                 subscriber,
                 target: WatchTarget::Subaccount(7),
-                minimum_units: Nat::from(10u8),
+                minimum_units: Nat::from(threshold),
             },
-        );
+        };
         let mut out = BTreeMap::new();
-        for (index, amount) in [(100, 2), (110, 15), (120, 20)] {
-            let op = Some(icp_ledger::Operation::Transfer {
-                from: vec![0; 32],
-                to: account.to_vec(),
-                amount: icp_ledger::Tokens { e8s: amount },
-                fee: icp_ledger::Tokens { e8s: 0 },
-                spender: None,
-            });
-            observe_icp(index, &op, &pending, &mut out);
+        for (i, a) in [(100, 2u64), (110, 15)] {
+            observe_matches(
+                i,
+                &Nat::from(a),
+                [relation(p(1), 1u64), relation(p(3), 10)],
+                &mut out,
+            )
         }
-        assert_eq!(
-            out[&subscriber].subs[&WatchTarget::Subaccount(7)],
-            TargetMatch {
-                first_block_index: 110,
-                max_amount: Nat::from(20u8),
-            }
-        );
+        let key = (p(2), WatchTarget::Subaccount(7));
+        assert_eq!(out[&p(1)].subs[&key].first_block_index, 100);
+        assert_eq!(out[&p(3)].subs[&key].first_block_index, 110);
+        for s in out.values() {
+            assert_eq!(s.subs[&key].max_amount, Nat::from(15u8))
+        }
     }
-
     #[test]
     fn dispatches_global_matches_first_in_principal_order_with_specific_payload_precedence() {
-        let principals: Vec<_> = (1..=5).map(|n| Principal::from_slice(&[n])).collect();
-        assert!(principals.windows(2).all(|pair| pair[0] < pair[1]));
         let mut matches = BTreeMap::new();
-        // Deliberately insert out of principal order; mixed matches must remain
-        // in the global phase despite their nonempty payload.
-        for index in [4, 2, 0, 3, 1] {
-            let mut state = MatchState {
-                global: index >= 2,
-                ..MatchState::default()
+        for n in [5, 3, 1, 4, 2] {
+            let mut s = MatchState {
+                global: n >= 3,
+                ..Default::default()
             };
-            if index != 3 {
-                record_match(&mut state, WatchTarget::Subaccount(7), 0, Nat::from(100u8));
+            if n != 4 {
+                record_match(&mut s, (p(n), WatchTarget::Subaccount(7)), 0, 100u8.into());
+                record_match(&mut s, (p(9), WatchTarget::Subaccount(7)), 1, 101u8.into());
             }
-            matches.insert(principals[index], state);
+            matches.insert(p(n), s);
         }
-        let mut attempts = Vec::new();
-        dispatch_matches(matches, |principal, hint| {
-            attempts.push((principal, hint));
+        let mut seen = vec![];
+        dispatch_matches(matches, |recipient, n| {
+            seen.push(recipient);
+            assert_eq!(n.method(), "poke");
+            if recipient == p(4) {
+                assert!(n.self_matches.is_empty() && n.subject_matches.is_empty())
+            } else {
+                assert_eq!(n.self_matches[0].max_amount, Nat::from(100u8));
+                assert_eq!(n.subject_matches[0].subject, p(9));
+            }
             true
         });
-        assert_eq!(
-            attempts.iter().map(|(p, _)| *p).collect::<Vec<_>>(),
-            [2, 3, 4, 0, 1].map(|i| principals[i])
-        );
-        for (principal, hint) in attempts {
-            if principal == principals[3] {
-                assert!(hint.is_empty());
-            } else {
-                assert_eq!(
-                    hint,
-                    vec![subscriber::PokeMatch {
-                        target: WatchTarget::Subaccount(7),
-                        first_block_index: 0,
-                        max_amount: Nat::from(100u8),
-                    }]
-                );
-            }
-        }
+        assert_eq!(seen, vec![p(3), p(4), p(5), p(1), p(2)]);
     }
-
     #[test]
     fn failed_global_attempts_do_not_block_specific_attempts() {
-        let specific = Principal::from_slice(&[1]);
-        let global = Principal::from_slice(&[2]);
-        let mut specific_state = MatchState::default();
+        let mut external = MatchState::default();
         record_match(
-            &mut specific_state,
-            WatchTarget::Subaccount(7),
+            &mut external,
+            (p(3), WatchTarget::Subaccount(7)),
             0,
-            Nat::from(1u8),
+            1u8.into(),
         );
-        let matches = BTreeMap::from([
-            (specific, specific_state),
-            (
-                global,
-                MatchState {
-                    global: true,
-                    ..MatchState::default()
-                },
-            ),
-        ]);
-        let mut attempts = Vec::new();
-        dispatch_matches(matches, |principal, _| {
-            attempts.push(principal);
-            false // Includes a synchronous send failure or an unaffordable call.
-        });
-        assert_eq!(attempts, vec![global, specific]);
+        let mut seen = vec![];
+        dispatch_matches(
+            BTreeMap::from([
+                (p(1), external),
+                (
+                    p(2),
+                    MatchState {
+                        global: true,
+                        ..Default::default()
+                    },
+                ),
+            ]),
+            |p, n| {
+                seen.push((p, n.method()));
+                false
+            },
+        );
+        assert_eq!(seen, vec![(p(2), "poke"), (p(1), "poke_subjects")]);
     }
-
     #[test]
     fn dispatch_preserves_bounded_sorted_maxima_in_both_phases() {
-        let huge = Nat::from_str("18446744073709551616000000000000000000").unwrap();
         for global in [false, true] {
-            let mut state = MatchState {
+            let mut s = MatchState {
                 global,
-                ..MatchState::default()
+                ..Default::default()
             };
-            record_match(
-                &mut state,
-                WatchTarget::NeuronNonce(1),
-                u64::MAX,
-                Nat::from(9u8),
-            );
-            for n in (0..255u64).rev() {
+            let huge = Nat::from_str("18446744073709551616000000000000000000").unwrap();
+            for n in (0..256).rev() {
                 record_match(
-                    &mut state,
-                    WatchTarget::Subaccount(n),
+                    &mut s,
+                    (
+                        if n % 2 == 0 { p(1) } else { p(2) },
+                        WatchTarget::Subaccount(n),
+                    ),
                     1000 - n,
                     Nat::from(n),
-                );
+                )
             }
-            record_match(&mut state, WatchTarget::Subaccount(300), 0, Nat::from(1u8));
-            record_match(&mut state, WatchTarget::Subaccount(7), 3, huge.clone());
-            record_match(&mut state, WatchTarget::Subaccount(7), 1, Nat::from(1u8));
-            let principal = Principal::from_slice(&[1]);
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 3, huge.clone());
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 1, 1u8.into());
+            record_match(&mut s, (p(3), WatchTarget::NeuronNonce(0)), 0, 1u8.into());
             let mut attempts = 0;
-            dispatch_matches(BTreeMap::from([(principal, state)]), |recipient, hint| {
+            dispatch_matches(BTreeMap::from([(p(1), s)]), |_, n| {
                 attempts += 1;
-                assert_eq!(recipient, principal);
-                assert_eq!(hint.len(), MAX_SPECIFIC_TARGETS_PER_POKE);
-                for (n, matched) in hint[..255].iter().enumerate() {
-                    assert_eq!(matched.target, WatchTarget::Subaccount(n as u64));
-                    assert_eq!(
-                        matched.first_block_index,
-                        if n == 7 { 1 } else { 1000 - n as u64 }
-                    );
-                    assert_eq!(
-                        matched.max_amount,
-                        if n == 7 { huge.clone() } else { Nat::from(n) }
-                    );
-                }
-                assert_eq!(
-                    hint[255],
-                    subscriber::PokeMatch {
-                        target: WatchTarget::NeuronNonce(1),
-                        first_block_index: u64::MAX,
-                        max_amount: Nat::from(9u8),
-                    }
-                );
+                assert_eq!(n.method(), "poke");
+                assert_eq!(n.self_matches.len() + n.subject_matches.len(), 256);
+                assert!(n.self_matches.windows(2).all(|w| w[0].target < w[1].target));
+                assert!(n
+                    .subject_matches
+                    .windows(2)
+                    .all(|w| (w[0].subject, w[0].target) < (w[1].subject, w[1].target)));
+                let m = n
+                    .subject_matches
+                    .iter()
+                    .find(|m| m.target == WatchTarget::Subaccount(7))
+                    .unwrap();
+                assert_eq!(m.first_block_index, 1);
+                assert_eq!(m.max_amount, huge);
                 true
             });
             assert_eq!(attempts, 1);
         }
     }
-
     #[test]
     fn maxima_order_and_arbitrary_precision_are_preserved() {
-        let mut state = MatchState::default();
-        record_match(&mut state, WatchTarget::NeuronNonce(1), 0, Nat::from(9u8));
-        record_match(&mut state, WatchTarget::Subaccount(7), 0, Nat::from(100u16));
-        record_match(&mut state, WatchTarget::Subaccount(7), 0, Nat::from(500u16));
-        record_match(&mut state, WatchTarget::Subaccount(7), 0, Nat::from(300u16));
-        let huge = Nat::from_str("18446744073709551616000000000000000000").unwrap();
-        record_match(&mut state, WatchTarget::Subaccount(8), 0, huge.clone());
+        let mut s = MatchState::default();
+        let huge = Nat::from(u128::MAX) + Nat::from(1u8);
+        for subject in [p(3), p(2)] {
+            record_match(
+                &mut s,
+                (subject, WatchTarget::NeuronNonce(1)),
+                u64::MAX,
+                huge.clone(),
+            );
+            record_match(&mut s, (subject, WatchTarget::Subaccount(7)), 0, 1u8.into())
+        }
+        assert_eq!(s.subs.len(), 4);
         assert_eq!(
-            state.subs[&WatchTarget::Subaccount(7)].max_amount,
-            Nat::from(500u16)
+            s.subs[&(p(2), WatchTarget::NeuronNonce(1))].max_amount,
+            huge
         );
-        assert_eq!(state.subs[&WatchTarget::Subaccount(8)].max_amount, huge);
         assert_eq!(
-            state.subs.keys().copied().collect::<Vec<_>>(),
-            vec![
-                WatchTarget::Subaccount(7),
-                WatchTarget::Subaccount(8),
-                WatchTarget::NeuronNonce(1)
-            ]
+            s.subs.keys().next(),
+            Some(&(p(2), WatchTarget::Subaccount(7)))
         );
     }
-
     #[test]
     fn specific_target_bound_keeps_updates_for_retained_targets() {
-        let mut state = MatchState::default();
+        let mut s = MatchState::default();
         for n in 0..300 {
             record_match(
-                &mut state,
-                WatchTarget::Subaccount(n),
+                &mut s,
+                (p(1), WatchTarget::Subaccount(n)),
                 n + 100,
                 Nat::from(n),
-            );
+            )
         }
-        assert_eq!(state.subs.len(), MAX_SPECIFIC_TARGETS_PER_POKE);
-        record_match(&mut state, WatchTarget::Subaccount(7), 0, Nat::from(999u16));
-        assert_eq!(state.subs[&WatchTarget::Subaccount(7)].first_block_index, 0);
-        assert!(!state.subs.contains_key(&WatchTarget::Subaccount(256)));
-        assert_eq!(
-            state.subs[&WatchTarget::Subaccount(7)].max_amount,
-            Nat::from(999u16)
-        );
+        let key = (p(1), WatchTarget::Subaccount(7));
+        record_match(&mut s, key, 0, 999u16.into());
+        assert_eq!(s.subs.len(), 256);
+        assert_eq!(s.subs[&key].first_block_index, 0);
+        assert_eq!(s.subs[&key].max_amount, Nat::from(999u16));
+        assert!(!s.subs.contains_key(&(p(1), WatchTarget::Subaccount(256))));
     }
 
     #[test]

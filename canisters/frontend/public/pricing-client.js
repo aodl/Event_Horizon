@@ -19,7 +19,8 @@ export const backendIdlFactory = ({ IDL }) => {
   });
   const Profile=IDL.Record({symbol:IDL.Text,decimals:IDL.Nat8,supports_icrc2_transfer_from:IDL.Bool,neuron_governance:IDL.Opt(IDL.Principal)});
   const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),sns_root:IDL.Opt(IDL.Principal),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal)});
-  return IDL.Service({ get_instance:IDL.Func([], [Instance], ['query']), get_pricing: IDL.Func([], [Pricing], ['query']) });
+  const Preview=IDL.Record({subscriber:IDL.Principal,subject:IDL.Opt(IDL.Principal),scope:IDL.Variant({global:IDL.Null,subaccount:IDL.Null,neuron_nonce:IDL.Null}),start:IDL.Opt(IDL.Nat64),end:IDL.Opt(IDL.Nat64),target_count:IDL.Nat32,minimum_units:IDL.Opt(IDL.Nat),alias_revision:IDL.Opt(IDL.Vec(IDL.Nat8)),aliases_refreshed_at:IDL.Opt(IDL.Nat64)});
+  return IDL.Service({ preview_subscription:IDL.Func([IDL.Text],[IDL.Variant({Ok:Preview,Err:IDL.Text})],['query']), get_instance:IDL.Func([], [Instance], ['query']), get_pricing: IDL.Func([], [Pricing], ['query']) });
 };
 
 const safeNumber = value => {
@@ -56,4 +57,12 @@ export async function queryBackendPricing({
   const actor = createActor(backendIdlFactory, { agent, canisterId });
   const [instance, pricing] = await Promise.all([actor.get_instance(), actor.get_pricing()]);
   return { instance, pricing: normalizePricing(pricing) };
+}
+
+export async function querySubscriptionPreview({canisterId,suffix,host=ICP_API_HOST,createAgent=options=>HttpAgent.create(options),createActor=(factory,options)=>Actor.createActor(factory,options)}) {
+  const agent=await createAgent({host});const actor=createActor(backendIdlFactory,{agent,canisterId});
+  const result=await actor.preview_subscription(suffix);
+  if ('Err' in result) throw new Error(result.Err);
+  if (!result.Ok) throw new Error('Invalid subscription preview response.');
+  return result.Ok;
 }

@@ -21,7 +21,7 @@ A patron can also finance a less restrictive threshold for an already-watched
 target, or a global subscription the application never requested.
 
 **Subscribers interested in particular accounts, ranges or neuron targets should
-normally implement `poke(vec PokeMatch)` and inspect targets and amount hints
+normally implement the target-aware `poke` handler below and inspect targets and amount hints
 before initiating Ledger reads, Index queries or other consequential work.**
 This cheap filtering is a central reason for the argument-bearing callback.
 Maintain locally approved interests independently of Event Horizon's admitted
@@ -33,7 +33,7 @@ activity is an intentional local policy.
 
 1. Identify the Event Horizon instance or instances for the ledgers the application needs.
 2. Record each trusted Event Horizon canister principal and its immutable observed ledger.
-3. For scoped interests, implement the recommended target-aware `poke(vec PokeMatch)` handler below. Use zero-argument `poke()` only under the [wake-up-only conditions](#wake-up-only-subscribers).
+3. For scoped interests, implement the recommended target-aware `poke` handler below. Use zero-argument `poke()` only under the [wake-up-only conditions](#wake-up-only-subscribers).
 4. Authenticate `caller` and filter against locally approved per-Ledger interests before scheduling work.
 5. Maintain authoritative reconciliation cursor/state independently per observed ledger.
 6. Create the required Jupiter declaration for each instance.
@@ -71,37 +71,104 @@ to match; Jupiter's raw-ICP payouts and Event Horizon's CMC conversion fund the
 common operating cycles pool. The observed token and its transfer thresholds
 remain independent of the ICP admission requirement.
 
+## Subscriber, subject and permanent aliases
+
+The subscriber receives notifications; the subject owns the watched numbered
+subaccount, or supplies the controller principal for neuron staking-account
+derivation. Omitting the subject selects the subscriber itself. Identity does
+not grant control or establish consent.
+
+The complete Jupiter memo uses payment routing prefix `E.` for the canonical
+ICP instance. `X` is retired. The suffix grammar is:
+
+```text
+<subscriber>
+<subscriber>.<target>[:<amount>]
+<subscriber>@<subject>.<target>[:<amount>]
+```
+
+Each reference accepts a canonical or compact canister principal, or a cached
+permanent alias matching `[A-Z][A-Z0-9]{0,7}`. Currently Historian publishes only
+`E` → `eo6ei-gaaaa-aaaar-qchra-cai`. Other letters below are hypothetical:
+`E.A@B.7` notifies A about B's subaccount 7; `E.B@A.7` reverses the relationship.
+`E.A.7` and `E.A@A.7` identify the same self interest. Alias/principal spellings
+resolve by principal bytes. `E.A@B` is invalid: global subscriptions have no subject.
+
+A target is a canonical unsigned decimal `u64`, including zero, or an inclusive
+range with 2–256 targets. Prefix `n` selects neuron nonces, for example
+`E.A@B.n0-2:0.01`. The subject is the derivation controller, **not** the Governance
+owner or a neuron ID. The owner remains NNS Governance for ICP or verified SNS
+Governance for an applicable token. All complete memos must fit 32 ASCII bytes.
+Threshold precision and units come from the observed token, not admission ICP.
+
+Historian publishes permanent additive identity mappings separately from Faucet
+payment routing: only E currently has special payout-routing meaning. Each
+instance attempts refresh after install and once per UTC day, persists its
+accepted cache across upgrades, and validates the whole snapshot before publishing.
+Limits are 128 entries/page, 32 pages, 4,096 entries, and 64 KiB/page. A malformed,
+incomplete, reassigned or deleted mapping rejects the refresh and keeps the old
+cache. Direct principals remain available during refresh failures.
+
+An unknown alias cannot be admitted. There is no historical replay after a later
+refresh; another qualifying Faucet payout supplies another admission opportunity.
+Use `preview_subscription(suffix)` on the configuration-verified instance to
+check syntax and cached resolution without network calls or state changes. Its
+revision and refresh time describe that local cache; preview proves neither
+funding nor admission. The browser disables alias-based funding output until the
+current preview succeeds.
+
+**Exact funding routes remain distinct.** `E.A.7`, `E.A@A.7`, and a principal
+spelling may identify the same effective interest but have different exact
+Historian memo routes. Endowment totals are never pooled across spellings. The
+original payout suffix, not a rewritten principal declaration, selects evidence.
+Only the same `(subscriber, subject, target)` merges thresholds, monotonically
+toward less restrictive values. Multiple subscribers watching B.7 keep independent
+thresholds, earliest qualifying block indices, and maximum individual amounts.
+Changing spelling deliberately changes the funding route.
+
 ## Callback and targets
 
 ```candid
-type PokeTarget = variant {
-  subaccount : nat64;
-  neuron_nonce : nat64;
-};
-
+type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
 type PokeMatch = record {
   target : PokeTarget;
   first_block_index : nat64;
   max_amount : nat;
 };
-
+type SubjectPokeMatch = record {
+  subject : principal;
+  target : PokeTarget;
+  first_block_index : nat64;
+  max_amount : nat;
+};
 service : {
-  poke : (vec PokeMatch) -> ();
+  poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> ();
+  poke_subjects : (vec SubjectPokeMatch) -> ();
 }
 ```
 
-Event Horizon has one outbound callback format and always sends the match
-vector above. Payload-aware handling is the recommended default for scoped
-subscribers; Event Horizon does not discover, negotiate, or retry another
-signature. Candid permits a receiver with fewer arguments to ignore extra
-arguments. See the [Candid argument and result sequence
-rules](https://github.com/dfinity/candid/blob/master/spec/Candid.md#upgrading-and-subtyping).
+An external-aware receiver implements both methods. The first vector always
+contains only self-subject matches; the optional second vector contains external
+subjects. Self-only or global-only calls use `null` as the second argument.
+Self plus external activity uses one `poke(self, opt external)`. Genuine global
+plus external activity also uses `poke(self_or_empty, opt external)`. An empty
+first vector with a nonempty second vector does not mean global-only activity.
 
-Jupiter suffixes accept `<subscriber>`, `<subscriber>.<number>[:<amount>]`, `<subscriber>.<start>-<end>[:<amount>]`, and corresponding neuron forms using `n<nonce>` or `n<start>-<end>`. Numbers are canonical decimal `u64`. An inclusive range contains 2 through 256 targets and may begin anywhere. The complete routed memo still must fit 32 bytes.
+**External-only activity with no self/global match uses `poke_subjects` only.**
+It never generates a false legacy global-only `poke([])`. Older one-vector
+receivers, including records omitting `first_block_index`, and zero-argument
+receivers can safely ignore extra arguments/record fields on `poke`. They cannot
+consume external-only hints without adopting `poke_subjects`. Missing/trapping
+methods are best-effort failures: no probing, negotiation, fallback, acknowledgement
+or retry is attempted. Candid encodes two argument values, not one tuple record;
+see [argument sequence subtyping](https://github.com/dfinity/candid/blob/master/spec/Candid.md#upgrading-and-subtyping).
 
-Numeric subaccount `N` means subscriber ownership with `24 zero bytes || N.to_be_bytes()`. Neuron nonce `N` derives the staking subaccount with controller equal to the subscriber principal. ICP uses NNS Governance as owner; an SNS-token instance uses its verified SNS Governance. This excludes hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts.
-
-`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. It is a prefilter hint, not proof of payment. Specific matches take precedence over simultaneous global activity. `poke([])` means global-only activity. Non-empty targets are ordered as numeric subaccounts ascending and then neuron nonces ascending, with at most 256 retained targets per subscriber per poll. Any omission affects wake-up latency only.
+At most one notification call is attempted per subscriber per completed poll.
+Specific matches share a combined cap of 256 distinct `(subject, target)` entries.
+The first retained identities remain; later activity updates their independent
+minimum index and maximum amount. Overflow can omit additional hints, so always
+reconcile authoritative history. Ordering uses subject principal bytes, then
+subaccount numbers, then neuron nonces; neither index nor amount is a sort key.
 
 Within each completed poll, Event Horizon attempts all globally matched
 subscribers before specific-only subscribers, in ascending principal order
@@ -162,12 +229,19 @@ Ledger, Index or other expensive inter-canister call. The checks are local;
 they require no Event Horizon subscription lookup or external approval call.
 
 ```text
-poke(matches):
+poke(self_matches, external_matches):
+    accept(self_matches with subject=self, external_matches or [])
+
+poke_subjects(external_matches):
+    accept([], external_matches)
+
+accept(self_matches, external_matches):
+    matches = self_matches + external_matches
     context = trusted_event_horizon_instances.get(caller)
     if context is absent:
         return
 
-    relevant_matches = filter_by_local_approved_targets_and_amounts(
+    relevant_matches = filter_by_local_approved_subjects_targets_and_amounts(
         context, matches
     )
     if not context.wants_global_activity and relevant_matches is empty:
@@ -202,7 +276,7 @@ cursor, accept a payment or perform accounting from a poke alone.
 Each specific match has a required `first_block_index : nat64`: the earliest
 qualifying transfer Event Horizon actually observed for that target during the
 completed poll, under its effective admission and threshold policy. It is
-relative to the authenticated caller's observed Ledger. Global-only `poke([])`
+relative to the authenticated caller's observed Ledger. Global-only `poke([], null)`
 has no index; mixed matches retain their specific entries in one global-phase
 poke. Zero-argument receivers intentionally discard these hints.
 
@@ -327,7 +401,7 @@ and [timers](https://docs.internetcomputer.org/guides/backends/timers/).
 
 ## Local thresholds and poke poisoning
 
-Another party can endow the same subscriber/target declaration with a less restrictive threshold. Event Horizon permanently keeps the least restrictive effective threshold for the watched account. For example:
+Another party can endow the same subscriber/subject/target declaration with a less restrictive threshold. Event Horizon permanently keeps the least restrictive effective threshold for that subscribing relation. Other watchers retain their own thresholds. For example:
 
 ```text
 subscriber policy:             >= 0.01 ICP
@@ -347,7 +421,7 @@ finality, or proof that an Index already exposes the transfer. Acceptance,
 accounting and payment processing require verified authoritative reconciliation.
 An Index may lag the Ledger; retry/backoff belongs to the subscriber.
 
-Similarly, `poke([])` contains no specific target match. A subscriber uninterested in global activity can immediately return. Event Horizon provides no retries or acknowledgements, so independent periodic reconciliation remains required.
+Similarly, `poke([], null)` contains no specific target match. An empty first vector with nonempty external hints still requires subject filtering. A subscriber uninterested in global activity can immediately return. Event Horizon provides no retries or acknowledgements, so independent periodic reconciliation remains required.
 
 
 ## Economics and bounded unwanted work
@@ -362,7 +436,7 @@ to the shared operating model. They are not per-poke fees, and admission is perm
 For a properly designed scoped receiver, an irrelevant authenticated callback
 costs only a local caller/context lookup, target-interest checks and optional
 amount comparisons, then a cheap return. Authentic Event Horizon callbacks
-retain at most 256 specific targets per subscriber per poll, so this local scan
+retain at most 256 subject-qualified specific targets per subscriber per poll, so this local scan
 is bounded. Rejected hints must not start Ledger/Index reads or other expensive
 work. Even relevant wakes should only schedule coalesced, bounded processing.
 
@@ -386,10 +460,10 @@ service : {
 }
 ```
 
-Event Horizon still sends its standard `vec PokeMatch` argument. Candid permits
-the zero-argument receiver to ignore that extra argument for both empty global
-and non-empty specific-match payloads; no negotiation or alternate callback is
-performed, and the receiver need not previously have exposed the longer signature.
+Event Horizon sends the standard two-argument `poke` sequence. Candid permits
+the zero-argument receiver to ignore those extra arguments for both empty global
+and non-empty specific-match payloads; no negotiation occurs. External-only hints instead require the explicitly
+supported `poke_subjects` method and are not delivered through zero-argument `poke`.
 
 This is appropriate only when the application deliberately treats **every
 authenticated** Event Horizon poke as a general reconciliation wake-up, needs

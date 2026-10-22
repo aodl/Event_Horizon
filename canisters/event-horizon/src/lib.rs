@@ -6,6 +6,7 @@
 //! in the canonical production Wasm.
 
 mod account;
+mod aliases;
 mod cadence;
 mod clients;
 mod config;
@@ -25,7 +26,8 @@ use candid::Principal;
 
 #[cfg(feature = "debug_api")]
 use debug::{
-    DebugCursorArgs, DebugInitArgs, DebugSeedSubscribers, DebugState, DebugSubscriptionArgs,
+    DebugCursorArgs, DebugExternalSeed, DebugInitArgs, DebugSeedSubscribers, DebugState,
+    DebugSubscriptionArgs,
 };
 
 pub use account::{account_identifier_bytes, neuron_staking_subaccount, numbered_subaccount};
@@ -54,6 +56,7 @@ fn init(args: InitArgs) {
     });
     instance::log_config();
     scheduler::start();
+    aliases::start();
 }
 
 #[cfg(not(feature = "debug_api"))]
@@ -61,6 +64,7 @@ fn init(args: InitArgs) {
 fn post_upgrade() {
     state::initialize_if_needed();
     scheduler::start();
+    aliases::start();
 }
 
 #[ic_cdk::query]
@@ -71,6 +75,11 @@ fn get_pricing() -> Pricing {
 #[ic_cdk::query]
 fn get_instance() -> InstanceInfo {
     instance::get_instance()
+}
+
+#[ic_cdk::query]
+fn preview_subscription(suffix: String) -> Result<memo::SubscriptionPreview, String> {
+    memo::preview(suffix)
 }
 
 #[cfg(feature = "debug_api")]
@@ -161,6 +170,14 @@ mod debug {
         }
     }
 
+    #[ic_cdk::update]
+    async fn debug_refresh_aliases() {
+        aliases::refresh().await;
+    }
+    #[ic_cdk::query]
+    fn debug_alias_metadata() -> aliases::AliasMetadata {
+        state::alias_metadata()
+    }
     #[ic_cdk::update]
     async fn debug_poll_once() {
         scheduler::debug_poll_once().await;
@@ -312,6 +329,30 @@ mod debug {
     #[ic_cdk::update]
     fn debug_seed_subscribers(args: DebugSeedSubscribers) {
         state::debug_seed_subscribers(&args.kind, args.start, args.count)
+    }
+
+    #[derive(CandidType, Deserialize)]
+    pub struct DebugExternalSeed {
+        subject: Principal,
+        start: u64,
+        count: u64,
+    }
+    #[ic_cdk::update]
+    fn debug_seed_external(args: DebugExternalSeed) {
+        assert!(args.count <= 128);
+        for index in args.start..args.start + args.count {
+            let mut bytes = vec![0x7f];
+            bytes.extend_from_slice(&index.to_be_bytes());
+            bytes.push(1);
+            state::put_relation(subscription::SubjectSubscription {
+                subject: args.subject,
+                subscription: subscription::Subscription {
+                    subscriber: Principal::from_slice(&bytes),
+                    target: WatchTarget::Subaccount(7),
+                    minimum_units: candid::Nat::from(index % 16),
+                },
+            });
+        }
     }
 
     #[ic_cdk::query]

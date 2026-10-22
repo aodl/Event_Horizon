@@ -182,7 +182,7 @@ backend_did=(root/'canisters/event-horizon/event_horizon.did').read_text()
 assert 'get_pricing : () -> (Pricing) query;' in backend_did
 assert 'get_instance : () -> (InstanceInfo) query;' in backend_did
 assert 'account_icp : nat64; range_icp : nat64; global_icp : nat64' in backend_did
-assert backend_did.count(' query;') == 2
+assert backend_did.count(' query;') == 3
 assert ' -> ();' not in backend_did
 subscriber_did=(root/'candid/subscriber.did').read_text()
 assert 'target : PokeTarget' in subscriber_did and 'max_amount : nat' in subscriber_did
@@ -194,8 +194,8 @@ assert 'observed_ledger = principal' in install_args
 assert 'sns_root = null' in install_args
 assert 'surplus_canister = null' in install_args
 assert 'surplus_canister : opt principal;' in backend_did
-thresholded='X.r5m5ydiaaaaaaaaqanaacai.7:0.01'
-unfiltered='X.r5m5ydiaaaaaaaaqanaacai.7'
+thresholded='E.r5m5ydiaaaaaaaaqanaacai.7:0.01'
+unfiltered='E.r5m5ydiaaaaaaaaqanaacai.7'
 assert len(thresholded.encode()) == 32
 assert len(unfiltered.encode()) == 27
 print('thresholded_example_bytes', len(thresholded.encode()))
@@ -239,7 +239,7 @@ assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert registry.count('surplusCanisterId:null') == 2
 assert "expectedBackendWasmSha256:'68db55e1224d5a4d92bddb7b1bd1701ec2efbd08080b3fde5b6080206aac28df'" in registry
-assert "alias:'X'" in registry and "alias:'I'" in registry
+assert "alias:'E'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
 frontend_instance_view=(root/'canisters/frontend/public/instance-view.js').read_text()
@@ -349,8 +349,8 @@ legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async
 assert 'state::global_subscribers()' not in legacy_page
 assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
-assert 'BTreeMap<WatchTarget, TargetMatch>' in polling
-for field in ['first_block_index: matched.first_block_index', 'max_amount: matched.max_amount']:
+assert 'BTreeMap<(Principal, WatchTarget), TargetMatch>' in polling
+for field in ['first_block_index: m.first_block_index', 'max_amount: m.max_amount']:
     assert field in polling
 assert 'PokeMatch { target, max_amount }' not in polling
 assert 'existing.first_block_index.min(first_block_index)' in polling
@@ -456,7 +456,8 @@ assert 'Canonical ICP is read through its legacy block log' in frontend_index
 assert 'compatible non-ICP ledgers are read through ICRC-3' in frontend_index
 
 backend_src='\n'.join(p.read_text(errors='ignore') for p in (root/'canisters/event-horizon/src').rglob('*.rs'))
-assert 'eo6ei-gaaaa-aaaar-qchra-cai' not in backend_src
+production_backend_src='\n'.join(p.read_text(errors='ignore').split('#[cfg(test)]')[0] for p in (root/'canisters/event-horizon/src').rglob('*.rs'))
+assert 'eo6ei-gaaaa-aaaar-qchra-cai' not in production_backend_src
 assert 'observed_ledger: Principal' in backend_src
 assert 'ryjl3-tyaaa-aaaaa-aaaba-cai' in backend_src, 'fixed protocol ICP ledger missing'
 assert 'rrkah-fqaaa-aaaaa-aaaaq-cai' in backend_src, 'fixed NNS Governance missing'
@@ -555,3 +556,15 @@ for path in ['canisters/event-horizon/src/clients/subscriber.rs', 'tests/mocks/m
     assert 'first_block_index: u64' in record
     assert 'Option<' not in record
 assert 'no block index, complete transaction record' not in spec
+
+assert 'preview_subscription : (text)' in backend_did
+assert 'poke : (vec PokeMatch, opt vec SubjectPokeMatch)' in subscriber_did
+assert 'poke_subjects : (vec SubjectPokeMatch)' in subscriber_did
+assert 'subject : principal' in subscriber_did
+sender=(root/'canisters/event-horizon/src/clients/subscriber.rs').read_text()
+assert 'call.with_args(&(notification.self_matches, external))' in sender
+assert 'notification.method()' in sender and 'call.get_cost()' in sender
+for region in ['ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9)', 'ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10)', 'EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11)']:
+    assert region in (root/'canisters/event-horizon/src/state.rs').read_text()
+assert 'resolve_subscription_memo(memo, state::alias)' in polling
+assert 'memo.to_vec()' in polling

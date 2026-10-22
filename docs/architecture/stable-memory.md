@@ -22,7 +22,7 @@ Every new split freezes one `PlannedSurplus { destination, memo, amount_e8s, fee
 
 ID 8 defaults to an uninitialized level-zero policy. This is live protocol state, not schema migration: destination-disabled operation accrues no entitlement, and enabling begins a fresh epoch. Levels above 19 or backwards-time state fail closed to a new level-zero epoch. Current-Wasm upgrades cover every pending funding phase and policy persistence.
 
-Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted range expands once into the ID 1 map. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
+Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted self range expands once into the ID 1 map; external ranges use ID 11. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
 
 ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from prior acceptance schemas; the earlier zero-state acceptance transition used reinstall. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
 
@@ -41,3 +41,19 @@ not the default for later releases. Ordinary post-reset releases remain
 state-preserving argument-free upgrades.
 
 Durable state includes the Ledger cursor, permanent admissions, cadence mode, deterministic retained/surplus identities, the once-classified financial plan, bounded pricing history, and epoch decisions. Poll match accumulators, timer IDs, single-flight leases, decoded pages, and logging suppression remain transient. Debug liquid-balance overrides are test-only and transient.
+
+## Additive alias and external-subject storage
+
+IDs 0–8 and ID 1's exact key/value encoding are unchanged. Existing ID 1
+subscriptions retain implicit subject=subscriber, with no migration or reindexing.
+New ID 9 stores alias→principal; ID 10 stores accepted revision, last successful
+refresh and last attempted refresh; ID 11 stores external relations.
+
+ID 11 uses a bounded binary key: destination-key length and protocol-qualified
+destination bytes, then length-prefixed subscriber and subject principal bytes,
+target-kind byte and big-endian u64 target. Account-prefix iteration reads only
+that account's watchers; no serialized watcher vector or whole-registry scan is
+needed. Values retain subject plus the unchanged subscription fields. Self and
+external stores coexist; threshold merges affect only an identical relation.
+Pending shared-reader admissions use the same relation identity, publish only
+after page success, and commit with the cursor without an intervening await.

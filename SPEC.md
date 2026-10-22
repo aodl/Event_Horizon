@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets, per-target first qualifying Ledger block indices and maximum qualifying raw transfer amounts; an empty poke signals global-only observed-ledger activity. Each subscriber retains authoritative reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets, per-target first qualifying Ledger block indices and maximum qualifying raw transfer amounts; an empty first vector with no external hints signals global-only observed-ledger activity; external-only hints use `poke_subjects`. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -21,7 +21,7 @@ operating costs. Neither yield nor uninterrupted service is guaranteed.
 
 The Event Horizon backend:
 
-- has exactly two production application queries, `get_instance` and `get_pricing`, containing no subscription or administrative data;
+- has exactly three production application queries, `get_instance`, `get_pricing`, and the bounded local-state-only `preview_subscription`, with no administrative interface;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -31,91 +31,41 @@ Disburser remain correct without Event Horizon, but their current
 implementations may consume authenticated Event Horizon pokes as optional
 reconciliation acceleration.
 
-## 3. Subscription declaration
+## 3. Subscription declaration and permanent identities
 
-A routed declaration is `<alias>.<suffix>`. The suffix has five declaration
-classes—global, ordinary single, ordinary range, neuron single, and neuron
-range—and every specific class may optionally include a threshold:
+The complete Jupiter payment memo is `E.<suffix>` for canonical ICP. `X` was retired before adoption and is not a current alias or route. The planned IO route is not published. Payment routing and identity resolution are separate: only `E` currently routes payouts to Event Horizon. The backend parses only the opaque suffix:
 
 ```text
 <subscriber>
-
-<subscriber>.<number>
-<subscriber>.<number>:<amount>
-
-<subscriber>.<start>-<end>
-<subscriber>.<start>-<end>:<amount>
-
-<subscriber>.n<nonce>
-<subscriber>.n<nonce>:<amount>
-
-<subscriber>.n<start>-<end>
-<subscriber>.n<start>-<end>:<amount>
+<subscriber>.<target>[:<amount>]
+<subscriber>@<subject>.<target>[:<amount>]
 ```
 
-Canonical ICP examples use alias `X`:
+Both references accept canonical/compact canister principals or cached permanent aliases `[A-Z][A-Z0-9]{0,7}`. Names are case-sensitive. The current Historian table contains only `E -> eo6ei-gaaaa-aaaar-qchra-cai`; A/B/C in examples are hypothetical registrations. `A@B.7` notifies A about B.7; `B@A.7` notifies B about A.7. Omitted subject means subscriber; explicit self and different aliases resolving to the same principal are semantically equivalent. Multiple aliases may name one principal. Alias publication grants no control or consent.
 
-```text
-X.r5m5ydiaaaaaaaaqanaacai
-X.r5m5ydiaaaaaaaaqanaacai.7
-X.r5m5ydiaaaaaaaaqanaacai.7:0.01
-X.r5m5ydiaaaaaaaaqanaacai.7-18
-X.r5m5ydiaaaaaaaaqanaacai.n42
-X.r5m5ydiaaaaaaaaqanaacai.n0-2
-```
+Cross-subject global declarations (`A@B`) are invalid, including explicit self without a target. Global, subaccount single/range, and neuron single/range remain the five classes. Targets use canonical unsigned decimal u64, including zero and u64::MAX. Neuron forms have exactly lowercase `n` (for example `A@B.n42` or `A@B.n0-2:0.01`). Ranges contain 2 through 256 targets inclusive, with checked endpoints; reject reversed, degenerate, overflowed and 257-target ranges. Reject whitespace, multiple/empty separators, malformed or unknown references, management/anonymous/non-canister principals, signs and leading-zero target integers.
 
-The planned canonical IO instance has intended alias `I`; that alias is not
-claimed to be published. Aliases are reviewed source-controlled Jupiter Faucet
-memo policy. Jupiter Historian reports endowment history and verification
-information; it does not own alias mappings. Future aliases are not assumed
-to be one byte or one character. Event Horizon itself receives only the
-outgoing suffix, for example:
+Optional thresholds retain existing observed-token decimal precision, arbitrary-precision raw Nat units and inclusive matching. An omitted threshold uses the zero sentinel; explicit amounts must exceed zero, require a leading digit, and reject signs/exponents or excess precision. The complete routing memo remains at most 32 ASCII bytes. Alias spelling is preserved deliberately: `E.A.7` and a principal-spelled equivalent are different exact funding routes. Never pool or rewrite their endowments.
 
-```text
-r5m5ydiaaaaaaaaqanaacai
-r5m5ydiaaaaaaaaqanaacai.7
-r5m5ydiaaaaaaaaqanaacai.7:0.01
-r5m5ydiaaaaaaaaqanaacai.7-18
-r5m5ydiaaaaaaaaqanaacai.7-18:0.01
-r5m5ydiaaaaaaaaqanaacai.n42
-r5m5ydiaaaaaaaaqanaacai.n42:0.01
-r5m5ydiaaaaaaaaqanaacai.n0-2
-r5m5ydiaaaaaaaaqanaacai.n0-2:0.01
-```
+Observed amounts and thresholds use arbitrary-precision integer raw token units, never floating point. Omission is the zero sentinel and matches every incoming transfer; an explicit threshold must be positive and matching is amount >= threshold. Decimal thresholds require a leading digit, at most the verified observed-token decimals, no signs, exponent or comparison operator, and no empty colon. Fractional `.1`, leading-zero whole integers and zero explicit amounts are rejected. The 32-byte limit includes the complete payment prefix, references, targets and threshold. The local parser/preview accepts at most 256 ASCII suffix bytes to bound input; this does not relax Jupiter’s complete-memo limit.
 
-Rules:
+### Historian alias synchronization
 
-- principals may be the canonical hyphenated representation or the compact representation with group separators removed;
-- a principal alone declares a global Ledger subscription: any transaction processed in a completed poll is relevant;
-- a global declaration is semantically distinct from any finite set of specific targets;
-- anonymous and management principals are invalid;
-- an ordinary numeric target and a neuron nonce are each a canonical decimal `u64`; the neuron discriminator is exactly lowercase `n`;
-- integer spelling is canonical decimal: `0` or a nonzero digit followed by decimal digits; signs and leading zeroes are invalid;
-- range endpoints are inclusive canonical `u64`, satisfy `start < end`, and satisfy `end - start + 1 <= 256` (equivalently, after proving order, `end - start <= 255`); endpoint values themselves are not capped at 255;
-- reverse, degenerate, out-of-range, or malformed ranges are rejected and never normalized;
-- omitting `:<amount>` means **every incoming transfer** to that watched account is relevant;
-- when present, amount is decimal observed-token value with at most its verified `icrc1_decimals`, or an integer;
-- fractional amounts require a leading zero (`0.1`, not `.1`);
-- no sign, exponent or comparison operator is accepted;
-- explicit threshold matching semantics are always `transfer amount >= declared amount`;
-- the smallest valid explicit amount is one raw observed-token unit;
-- a colon with no amount is invalid; omission means omitting the colon and amount together;
-- the complete Jupiter Faucet memo must fit the Ledger's 32-byte memo limit,
-  including the alias, dot, subscriber, scope or range, and optional threshold.
+Each instance obtains aliases by replicated calls to the fixed trusted Historian `list_canister_aliases(record { start_after : opt text; limit : opt nat32 })`. Responses are `{ revision : blob; items : vec record { alias : text; canister_id : principal }; next_start_after : opt text }`. Use exclusive cursors and page size 128, at most 32 pages/4,096 entries and 64 KiB per encoded response. Every page must have the identical 32-byte revision. Validate strict sorting, unique valid aliases, valid canister principals, advancing last-item cursors, nonempty intermediate pages and a complete terminal page. Recompute SHA256 over ASCII `JUPITER_CANISTER_ALIASES_V1`, NUL, big-endian u32 count, then each alias/principal with u8 byte lengths, in ascending alias order. E-only golden revision is `89d9f25601962fb394ad9ebf34aaceccf46b833b9cfd3ed2dc7eb942e9d63625`.
 
-Observed amounts are arbitrary-precision integer raw token units. Floating-point arithmetic is forbidden. Zero is the omitted-threshold sentinel; explicit thresholds must exceed zero.
+Publish only a complete validated additive snapshot: never delete/reassign an accepted alias. Failure preserves the old cache. Stable IDs 9 (alias map) and 10 (revision, last successful and last attempted seconds) survive upgrades. A separate guarded scheduler lane attempts promptly after install and approximately once per UTC day, checks liquid reserve plus actual call cost on every page, and restores its timer after traps/upgrades. Record an attempt before awaiting; failures wait until the next scheduled opportunity, with no busy retry or interference with polling/funding. No authoritative heap-only cache is allowed.
 
-## 4. Watched account
+Resolve identities at admission and store principals; matching never calls Historian. Unknown aliases reject admission, without replay after a later refresh: a subsequent qualifying Faucet payout supplies another opportunity. Direct principal declarations remain usable when refresh fails.
 
-For `Subaccount(N)`, the owner is the subscriber and the subaccount is `24 zero bytes || N.to_be_bytes()`. Values `0..255` therefore retain their former bytes. Subaccount `0` is the default all-zero subaccount.
+`preview_subscription(text)` shares admission's parser/resolver and returns `variant { Ok : record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 }; Err : text }`. It is a bounded, local-state-only query, with no awaits, writes, pricing mutations or external calls. Neuron previews require verified Governance. It proves syntax/resolution only, never funding, admission or delivery. The frontend debounces previews against its configuration-verified selected backend, discards stale replies and disables alias funding output until validated.
 
-For `NeuronNonce(N)`, the subscriber is the controller and the staking subaccount is `SHA256(0x0c || "neuron-stake" || subscriber principal bytes || N.to_be_bytes())`. The owner is fixed NNS Governance for the ICP instance or verified SNS Governance for a verified SNS instance. Neuron targets are unavailable without verified neuron Governance context. Hotkeys, permission holders that are not the derivation controller, arbitrary governance owners, and arbitrary accounts are not supported.
+## 4. Watched accounts and independent relations
 
-Canonical ICP converts the resolved owner and subaccount to a legacy AccountIdentifier. A non-ICP instance uses the resolved ICRC Account directly. Absent and explicit all-zero ICRC subaccounts normalize to the same effective account.
+The subscriber receives notifications; the subject owns ordinary subaccounts or is the derivation controller for neuron staking accounts. Ordinary bytes are `24 zero bytes || number.to_be_bytes()`. Neuron bytes are `SHA256(0x0c || "neuron-stake" || subject principal bytes || nonce.to_be_bytes())`, owned by fixed NNS Governance or verified SNS Governance. A nonce is not a Governance neuron ID. Existing ICP AccountIdentifier and normalized ICRC Account derivations are unchanged and protocol-tagged.
 
-At most one effective subscription is required for a watched account. If another admitted declaration for the same account has a less restrictive threshold, the stored threshold becomes the less restrictive value. An unfiltered declaration (no threshold) therefore subsumes every thresholded declaration for that same account.
+Preserve stable IDs 0–8, including ID 1's existing `Subscription { subscriber; target; minimum_units }` encoding and implicit self meaning, without migration/reindexing. External relations use fresh ID 11, a bounded binary composite key prefixed by actual destination protocol/account, followed by subscriber, subject and target kind/value. Each relation has a separate record; prefix iteration finds interested watchers without scanning unrelated accounts or rewriting a large watcher vector. Self admissions still use ID 1; external admissions never overwrite self or another subscriber's threshold.
 
-Ordinary and neuron ranges are inclusive, contain 2 through 256 targets, and may start anywhere in the `u64` domain. Each admitted range expands once into individual entries in the existing watched-account map. There is no runtime range scanner or persistent range registry. Overlapping single and range declarations merge by the same lowest-threshold rule. Since admission is permanent, an effective threshold can only remain unchanged or become less restrictive.
+Semantic merge identity is `(subscriber, subject, target kind, target number)`, determined by principal bytes. Only that identity's minimum threshold can decrease. A/B/C can independently watch B.7. A watching B.7 and C.7 retains separate hints. Ranges expand once at admission. Page-local staged overlays are multiwatcher-aware: they override only the same relation, preserve existing watchers, take effect only for later activity, and publish atomically with the cursor with no intervening await. Failed pages publish no partial admissions.
 
 ## 5. Admission
 
@@ -156,9 +106,9 @@ A fresh installation is prospective. On first successful Ledger observation it r
 
 Each poll captures a fixed exclusive ending boundary from the Ledger chain length. The poll processes only the interval from its durable cursor to that boundary. Blocks arriving while the poll is executing belong to a later poll.
 
-For each relevant transfer to an admitted watched account, Event Horizon records independently the minimum qualifying block index and maximum individual qualifying transfer amount for that semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still lower their first indices and increase their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
+For each relevant transfer to an admitted watched account, Event Horizon records independently the minimum qualifying block index and maximum individual qualifying transfer amount for that subject-qualified semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still lower their first indices and increase their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
-Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/index/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([])`. A poll that processes no transactions produces no global poke.
+Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/index/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([], null)`. A poll that processes no transactions produces no global poke.
 
 Within a single completed poll, Event Horizon attempts all globally matched
 subscriber pokes before attempting specific-only subscriber pokes. Each phase
@@ -207,40 +157,23 @@ This is acceptable because subscribers retain authoritative reconciliation.
 
 ## 8. Poke contract
 
-Subscriber contract:
-
 ```candid
-type PokeTarget = variant {
-  subaccount : nat64;
-  neuron_nonce : nat64;
-};
-
-type PokeMatch = record {
-  target : PokeTarget;
-  first_block_index : nat64;
-  max_amount : nat;
-};
-
+type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type PokeMatch = record { target : PokeTarget; first_block_index : nat64; max_amount : nat };
+type SubjectPokeMatch = record { subject : principal; target : PokeTarget; first_block_index : nat64; max_amount : nat };
 service : {
-  poke : (vec PokeMatch) -> ();
+  poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> ();
+  poke_subjects : (vec SubjectPokeMatch) -> ();
 }
 ```
 
-Event Horizon always sends this one `vec PokeMatch` argument. Scoped subscribers
-should normally implement the argument-bearing handler and filter locally
-approved targets and minimum amounts before any expensive asynchronous work.
-A wake-up-only subscriber may instead implement `poke : () -> ()`; Candid argument-sequence
-compatibility ignores the extra payload at that receiver. Empty and nonempty
-vectors use the same rule. These are alternative receiver implementations of
-one outbound protocol: there is no callback negotiation, discovery, fallback,
-or per-subscription callback setting. Zero-argument receivers discard the
-prefilter hints and should be used only when every authenticated wake is
-intentionally acceptable and redundant reconciliation is cheap, coalesced and
-bounded; convenience alone is not a reason for a scoped subscriber to discard
-target/amount filtering. Zero arguments neither confer global-subscription
-status nor prevent unsolicited specific subscriptions.
+Keep the old record unchanged: the first vector contains only self matches. Encode two actual Candid arguments, not one tuple-valued argument. Legacy one-vector receivers (including older records without first_block_index) safely discard extra fields/arguments; zero-argument receivers discard the entire sequence. External-aware receivers implement both methods and authenticate/filter subject as well as target/amount locally. Unsolicited funded subscriptions do not establish receiver consent.
 
-`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still lower its first index and increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([])` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
+Exactly one outbound method is attempted per subscriber/poll: self only uses `poke(self, null)`; genuine global only uses `poke([], null)`; self plus external or genuine global plus external uses `poke(self_or_empty, opt external)`; external only without self/global uses `poke_subjects(external)`. External-only activity must never become a false legacy global `poke([])`. Missing/trapping subject methods cause no fallback/probe/retry and must not stop later recipients. An empty first vector with a nonempty second argument is not global-only. Updated receivers need both methods to consume external hints; older receivers may miss external-only acceleration.
+
+Aggregate by `(subject, WatchTarget)` under each subscriber. Deterministic item order is ascending subject principal bytes, then ordinary numeric targets, then neuron nonces. Combined self/external retention is 256 distinct identities, using the first-retained policy; retain updates to minimum index and maximum Nat after overflow. Global-first principal phases remain unchanged and use actual global-match state. Outbound calls remain one-way and reserve-protected using actual encoded payload cost. Distinct canisters' delivery/execution order and Index completion remain unguaranteed. Shared-account fanout is inherent work proportional to interested relations; measure it without quotas, dropped accepted subscriptions or changed pricing.
+
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still lower its first index and increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([], null)` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
 `first_block_index : nat64` is required (Rust `u64`). For each receiving
 subscriber and retained semantic target in one successfully completed poll, it
@@ -276,11 +209,10 @@ exists. The subscriber's durable cursor is authoritative: a hint at 150 must
 not skip unprocessed blocks 100–149, nor automatically rewind a cursor already
 beyond 150. Prospective initialization is an explicit application policy.
 
-Global-only activity remains `poke([])` with no index. Specific-only and mixed
+Global-only activity remains `poke([], null)` with no index. Specific-only and mixed
 notifications carry an index on each specific entry; mixed matches still
 receive exactly one poke in the global-first phase. There is no global index,
-second argument, callback variant, negotiation, fallback, opt-in or legacy
-format. The required field is a clean pre-launch protocol change. Zero-argument
+global block-index argument, capability negotiation, fallback or per-subscription opt-in. The separate subject method prevents false legacy global callbacks. Zero-argument
 receivers remain intentionally supported and discard all supplied hints.
 
 Direct-Ledger subscribers need no Index. They use bounded legacy ICP
@@ -437,7 +369,7 @@ Admission and observed activity have separate prospective durable cursors. Fresh
 
 Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
 
-The production backend exposes only `get_instance` and `get_pricing`. The release audit rejects every other application query, composite query, or update.
+The production backend exposes exactly the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries. The release audit rejects every other application query, composite query, or update.
 
 Before controller removal:
 
@@ -649,3 +581,5 @@ the fail-closed memo builder. The component owns its transport cancellation,
 timers, animation frames and listeners; disposal prevents late work from changing
 any current selection. No backend method, stable state or production protocol
 change is involved.
+
+Page-local decoded watcher lists may be reused for repeated destination accounts to bound repeated stable decoding costs. The shared ICP reader invalidates the affected account cache immediately when staging an admission or threshold change; later transfers see the updated relation, earlier transfers are never revisited. These caches are transient, bounded by the page destinations, and discarded after each page. They store subscriptions, not transaction history.

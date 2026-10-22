@@ -175,3 +175,38 @@ mod tests {
         assert!(sub.matches(&Nat::from(u128::MAX)));
     }
 }
+
+/// New external records only. ID1's Subscription encoding stays unchanged.
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct SubjectSubscription {
+    pub subject: Principal,
+    pub subscription: Subscription,
+}
+impl SubjectSubscription {
+    pub fn self_subject(subscription: Subscription) -> Self {
+        Self {
+            subject: subscription.subscriber,
+            subscription,
+        }
+    }
+    pub fn identity(&self) -> (Principal, Principal, WatchTarget) {
+        (
+            self.subscription.subscriber,
+            self.subject,
+            self.subscription.target,
+        )
+    }
+    pub fn account(&self, governance: Option<Principal>) -> Option<Account> {
+        let mut derivation = self.subscription.clone();
+        derivation.subscriber = self.subject;
+        derivation.account(governance)
+    }
+    pub fn merge(self, other: Self) -> Self {
+        assert_eq!(self.identity(), other.identity());
+        if self.subscription.minimum_units <= other.subscription.minimum_units {
+            self
+        } else {
+            other
+        }
+    }
+}

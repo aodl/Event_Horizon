@@ -47,7 +47,9 @@ Historian route evidence is how subscriber declarations are funded and
 admitted.
 
 Qualifying activity is coalesced once per subscriber per poll. A specific callback
-reports sorted target/`first_block_index`/maximum-raw-amount entries; an empty vector represents
+reports sorted subject-qualified target/`first_block_index`/maximum-raw-amount entries.
+Self entries remain in the first vector; external entries use the optional second
+vector, or `poke_subjects` for external-only activity. `poke([], null)` represents
 global-only activity. The minimum index and maximum amount may come from different
 transactions. Direct-Ledger readers use their own cursors and bounded archive-aware
 reconciliation; see the [subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
@@ -113,7 +115,7 @@ recipient, but imposes no relationship to the observed Ledger, SNS, or Jupiter.
 
 ## Production surface and state
 
-The production application surface contains only the read-only `get_instance` and `get_pricing` queries. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
+The production application surface contains only the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
 
 Stable state holds immutable instance/profile data, reader cursors, subscriptions, pricing history, and funding recovery state. Schema evolution is additive and covered by upgrade scenarios. The canonical production Wasm deliberately remains separate from debug/test Wasms.
 
@@ -128,3 +130,11 @@ cargo test --locked -p event-horizon --lib
 The host build is for local inspection; only the Docker build produces canonical release evidence.
 
 The complete protocol is normative in [`SPEC.md`](../../SPEC.md). See the [subscriber guide](../../docs/subscriber-guide.md), [architecture](../../docs/architecture/overview.md), [production surface](../../docs/architecture/production-surface.md), and [deployment](../../docs/operations/deployment.md).
+
+Permanent Historian identity aliases and explicit `subscriber@subject` declarations
+are supported. Omitted subject means self. The canonical ICP payment prefix is
+`E.`; retired `X` is not offered. Identity aliases are not general payout routes.
+The builder shows resolved principals and validates alias declarations through
+the selected backend's local `preview_subscription` query. See the
+[subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
+local subject filtering, and authoritative reconciliation.

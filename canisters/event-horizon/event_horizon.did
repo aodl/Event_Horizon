@@ -1,3 +1,4 @@
+type SubscriptionPreview = record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 };
 type Price = record { account_icp : nat64; range_icp : nat64; global_icp : nat64 };
 type Pricing = record {
   initialized : bool; current : Price; current_effective_at : nat64;
@@ -24,4 +25,5 @@ type InitArgs = record {
 service : (InitArgs) -> {
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
+  preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
 }

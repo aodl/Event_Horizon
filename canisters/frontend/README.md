@@ -317,3 +317,11 @@ trust: static asset certification does not certify queried totals or rates.
 Tab suspension retains the last displayed sampled rate while resetting its receipt-sample history. On return, hold that estimate until at least 3 seconds of new accepted samples can replace it; identify the held estimate as last known in its accessible description. Hidden tabs still suspend polling and artwork. Failures, contradictory samples, freshness expiry during active sampling, and selection changes still clear the rate.
 
 The first rate may use the short three-second warm-up span and is correspondingly noisy; subsequent samples grow the averaging span toward the existing one-minute window. The three-second wait starts after the first accepted response; network latency can delay availability. Steady polling remains 15 seconds after attempt completion.
+
+Permanent Historian identity aliases and explicit `subscriber@subject` declarations
+are supported. Omitted subject means self. The canonical ICP payment prefix is
+`E.`; retired `X` is not offered. Identity aliases are not general payout routes.
+The builder shows resolved principals and validates alias declarations through
+the selected backend's local `preview_subscription` query. See the
+[subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
+local subject filtering, and authoritative reconciliation.

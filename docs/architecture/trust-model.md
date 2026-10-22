@@ -14,11 +14,11 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - Canonical ICP defines Faucet admission for every instance. It also defines observed activity and `chain_length` boundaries only for the ICP instance; non-ICP observed activity and `log_length` boundaries come from the configured ICRC-3 Ledger.
 - Jupiter Faucet origin plus a complete Jupiter Historian exact-route
   productive-endowment total define admission. Jupiter Faucet's source policy
-  owns alias mappings; Historian verifies history and route totals but does not
+  owns alias mappings; Historian publishes permanent identity aliases and verifies history and exact route totals; it does not
   define those mappings.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - Liquid cycles observed hourly are the only adaptive-surplus health signal.
-- `get_instance` and `get_pricing` are the backend's only production application methods; neither exposes subscription data.
+- `get_instance`, `get_pricing` and local-state-only `preview_subscription` are the backend's only production application queries. Preview resolves a proposed declaration, without admitting or exposing the subscription registry.
 - Range declarations are protocol-bounded to 256 admission-time watched-account merges; they add no per-transfer scan, per-range scheduler, or additional poke allowance.
 - NNS Governance is a fixed ICP trust anchor. SNS neuron support additionally trusts immutable `sns_root`, its bounded Root response, and the observed Ledger's Governance-default minting account; Root and Governance are not polling dependencies after profile verification.
 - Poke targets, `first_block_index` and `max_amount` are non-authoritative hints. The minimum qualifying index and maximum individual amount may refer to different transactions; neither authorizes skipping the subscriber’s durable cursor. Scoped receivers should normally authenticate the caller, resolve its immutable Ledger context, then reject unapproved targets and below-local-threshold amounts locally before expensive Ledger/Index calls. Their approved-interest registry is independent of admitted subscriptions.
@@ -40,3 +40,12 @@ deposit.
 Surplus epochs likewise use an observed hourly minimum, not continuous monitoring or a burn forecast. The current-balance gate and retained-first ordering protect service even when the stored level is high. The immutable receiver is trusted only as the destination account owner: Event Horizon calls no receiver endpoint, grants it no control, and makes no claim about how it governs or spends received ICP. Direct donations and Faucet funding share the same pool; funding source never changes subscriber priority.
 
 Controller removal remains an irreversible action after a controlled observation period. Before it, the installed surplus recipient must be deliberately disabled or equal the final reviewed receiver. The same module supports either choice; there is no recipient environment variable, build argument, feature, source substitution, or recipient-specific Docker build. The backend contains no administrative, destination, withdrawal, recovery, install-code, or self-upgrade method.
+
+Historian identity aliases identify public canisters; publication grants neither
+control nor consent. The backend trusts complete digest-verified additive
+snapshots from its fixed Historian principal, retains the previous cache on
+failure, and resolves aliases only at admission. Browser preview consults this
+cache on the verified backend. Exact funding-route bytes stay unchanged.
+External hints require locally approved `(subject, target)` policy; a legacy
+self vector never contains foreign subjects. `poke_subjects` prevents an
+external-only hint from masquerading as a global legacy wake-up.

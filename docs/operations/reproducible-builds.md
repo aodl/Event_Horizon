@@ -44,12 +44,13 @@ It is useful for local inspection but is not canonical reproducibility evidence.
 
 ## Production-surface audit
 
-`tools/audit-wasm.py` parses the Wasm export section directly. The build fails unless the backend application surface consists of exactly these two queries:
+`tools/audit-wasm.py` parses the Wasm export section directly. The build fails unless the backend application surface consists of exactly these three queries:
 
 ```candid
 service : {
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
+  preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
 }
 ```
 

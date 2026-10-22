@@ -160,3 +160,11 @@ can move. The optional receiver is immutable install-time configuration.
 `None` disables diversion. Subscriber priority never depends on funding source,
 and no subscriber accounting, forecast, alternate oracle, or burn-based dynamic
 pricing mechanism exists.
+
+Cross-subject declarations retain the existing account/range prices and ICP
+funding mechanism. Exact memo spellings are separate Historian routes even when
+aliases resolve to the same relation. Thresholds merge only for identical
+subscriber/subject/target identities. Shared-account fanout increases matching
+and outbound-call work without granting paid priority or subscriber balances.
+Historical `X.protocol-seed` evidence above records the retired route; new
+canonical funding uses `E.` after the prerequisite Jupiter deployment.

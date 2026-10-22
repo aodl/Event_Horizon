@@ -1,0 +1,11 @@
+Source: https://github.com/aodl/Event_Horizon
+Revision: 44d83c04a190dba2b8420c0d812e1fd8ee07ff19
+Fixture: event_horizon_44d83c0_debug.wasm
+SHA-256: 093a43a8cb52d560829654819b5c4bad42cc955b7c34bafa3f734c416f4643b0
+Toolchain: pinned rust-toolchain.toml, Rust 1.94.1, wasm32-unknown-unknown
+Build: git archive of the source revision, independent target directory;
+       cargo build --locked --release --target wasm32-unknown-unknown -p event-horizon --features debug_api
+Purpose: independent pre-alias stable-layout upgrade fixture. Not a production artifact.
+The PocketIC test verifies this digest before installation, admits self/global
+subscriptions, establishes real cursors/pricing/pending CMC state, then upgrades
+in place to the new debug Wasm with argument-free post_upgrade().

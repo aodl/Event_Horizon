@@ -1303,6 +1303,7 @@ dependencies = [
  "candid",
  "ic-cdk",
  "serde",
+ "sha2",
 ]
 
 [[package]]
@@ -1348,11 +1349,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-subscriber-legacy"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
+]
+
+[[package]]
 name = "mock-subscriber-no-args"
 version = "0.1.0"
 dependencies = [
  "candid",
  "ic-cdk",
+]
+
+[[package]]
+name = "mock-subscriber-subjects"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
 ]
 
 [[package]]

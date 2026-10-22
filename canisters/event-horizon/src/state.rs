@@ -302,6 +302,9 @@ fn with_surplus_policy<R>(
 }
 
 pub fn initialize_if_needed() {
+    with_aliases(|_| ());
+    with_alias_metadata(|_| ());
+    with_external(|_| ());
     with_meta(|_| ());
     with_subscriptions(|_| ());
     with_instance_config(|_| ());
@@ -585,5 +588,228 @@ mod account_key_tests {
                 subaccount: Some([0; 32])
             })
         );
+    }
+}
+
+// Additive regions only: IDs0–8 and their Storable encodings are untouched.
+const ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9);
+const ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10);
+const EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11);
+candid_value!(AliasMetadataValue, crate::aliases::AliasMetadata, 256);
+candid_value!(ExternalValue, crate::subscription::SubjectSubscription, 512);
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ExternalKey(Vec<u8>);
+impl Storable for ExternalKey {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.0)
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+    fn from_bytes(b: Cow<'_, [u8]>) -> Self {
+        Self(b.into_owned())
+    }
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 134,
+        is_fixed_size: false,
+    };
+}
+impl ExternalKey {
+    fn prefix(account: &AccountKey) -> Vec<u8> {
+        let mut b = vec![account.0.len() as u8];
+        b.extend_from_slice(&account.0);
+        b
+    }
+    fn new(account: &AccountKey, s: &crate::subscription::SubjectSubscription) -> Self {
+        let mut b = Self::prefix(account);
+        for p in [s.subscription.subscriber, s.subject] {
+            b.push(p.as_slice().len() as u8);
+            b.extend_from_slice(p.as_slice())
+        }
+        b.push(match s.subscription.target {
+            WatchTarget::Subaccount(_) => 0,
+            WatchTarget::NeuronNonce(_) => 1,
+        });
+        b.extend_from_slice(&s.subscription.target.value().to_be_bytes());
+        Self(b)
+    }
+}
+thread_local! {
+    static ALIASES:RefCell<Option<StableBTreeMap<String,candid::Principal,Memory>>>=const{RefCell::new(None)};
+    static ALIAS_METADATA:RefCell<Option<StableCell<AliasMetadataValue,Memory>>>=const{RefCell::new(None)};
+    static EXTERNAL_SUBSCRIPTIONS:RefCell<Option<StableBTreeMap<ExternalKey,ExternalValue,Memory>>>=const{RefCell::new(None)};
+}
+fn with_aliases<R>(
+    f: impl FnOnce(&mut StableBTreeMap<String, candid::Principal, Memory>) -> R,
+) -> R {
+    ALIASES.with_borrow_mut(|slot| {
+        f(slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| StableBTreeMap::init(m.get(ALIASES_MEMORY_ID)))
+        }))
+    })
+}
+fn with_alias_metadata<R>(f: impl FnOnce(&mut StableCell<AliasMetadataValue, Memory>) -> R) -> R {
+    ALIAS_METADATA.with_borrow_mut(|slot| {
+        f(slot.get_or_insert_with(|| {
+            MEMORY_MANAGER.with_borrow(|m| {
+                StableCell::init(
+                    m.get(ALIAS_METADATA_MEMORY_ID),
+                    AliasMetadataValue(Default::default()),
+                )
+            })
+        }))
+    })
+}
+fn with_external<R>(
+    f: impl FnOnce(&mut StableBTreeMap<ExternalKey, ExternalValue, Memory>) -> R,
+) -> R {
+    EXTERNAL_SUBSCRIPTIONS.with_borrow_mut(|slot| {
+        f(slot.get_or_insert_with(|| {
+            MEMORY_MANAGER
+                .with_borrow(|m| StableBTreeMap::init(m.get(EXTERNAL_SUBSCRIPTIONS_MEMORY_ID)))
+        }))
+    })
+}
+pub fn alias(name: &str) -> Option<candid::Principal> {
+    with_aliases(|m| m.get(&name.to_string()))
+}
+pub fn alias_table() -> std::collections::BTreeMap<String, candid::Principal> {
+    with_aliases(|m| m.iter().map(|e| (e.key().clone(), e.value())).collect())
+}
+pub fn alias_metadata() -> crate::aliases::AliasMetadata {
+    with_alias_metadata(|m| m.get().0.clone())
+}
+pub fn write_alias_metadata(meta: crate::aliases::AliasMetadata) {
+    with_alias_metadata(|m| {
+        m.set(AliasMetadataValue(meta));
+    });
+}
+pub fn publish_aliases(
+    items: Vec<crate::clients::historian::CanisterAlias>,
+    revision: Vec<u8>,
+    now: u64,
+) {
+    with_aliases(|m| {
+        for i in items {
+            m.insert(i.alias, i.canister_id);
+        }
+    });
+    let mut meta = alias_metadata();
+    meta.revision = Some(revision);
+    meta.last_success = Some(now);
+    write_alias_metadata(meta);
+}
+fn relation_account(s: &crate::subscription::SubjectSubscription) -> AccountKey {
+    let account = s
+        .account(
+            read_instance_config()
+                .observed_profile
+                .and_then(|p| p.neuron_governance),
+        )
+        .expect("verified governance");
+    let r = crate::config::runtime();
+    if r.observed_ledger == r.icp_ledger {
+        AccountKey::icp(account_identifier_bytes(
+            account.owner,
+            *account.effective_subaccount(),
+        ))
+    } else {
+        AccountKey::from(account)
+    }
+}
+pub fn put_relation(s: crate::subscription::SubjectSubscription) {
+    if s.subject == s.subscription.subscriber {
+        put_subscription(s.subscription);
+        return;
+    }
+    let key = ExternalKey::new(&relation_account(&s), &s);
+    with_external(|m| {
+        let v = match m.get(&key) {
+            Some(old) => old.0.merge(s),
+            None => s,
+        };
+        m.insert(key, ExternalValue(v));
+    });
+}
+pub fn get_relation(
+    subscriber: candid::Principal,
+    subject: candid::Principal,
+    target: WatchTarget,
+) -> Option<crate::subscription::SubjectSubscription> {
+    use crate::subscription::SubjectSubscription;
+    if subscriber == subject {
+        return get_target_subscription(subscriber, target).map(SubjectSubscription::self_subject);
+    }
+    let s = SubjectSubscription {
+        subject,
+        subscription: Subscription {
+            subscriber,
+            target,
+            minimum_units: 0u8.into(),
+        },
+    };
+    with_external(|m| {
+        m.get(&ExternalKey::new(&relation_account(&s), &s))
+            .map(|v| v.0)
+    })
+}
+fn interested(
+    account: AccountKey,
+    own: Option<Subscription>,
+) -> Vec<crate::subscription::SubjectSubscription> {
+    let prefix = ExternalKey::prefix(&account);
+    let mut out: Vec<_> = own
+        .into_iter()
+        .map(crate::subscription::SubjectSubscription::self_subject)
+        .collect();
+    with_external(|m| {
+        out.extend(
+            m.range(ExternalKey(prefix.clone())..)
+                .take_while(|e| e.key().0.starts_with(&prefix))
+                .map(|e| e.value().0),
+        );
+    });
+    out
+}
+pub fn interested_icrc(account: Account) -> Vec<crate::subscription::SubjectSubscription> {
+    interested(AccountKey::from(account), get_subscription(account))
+}
+pub fn interested_icp(account: [u8; 32]) -> Vec<crate::subscription::SubjectSubscription> {
+    interested(AccountKey::icp(account), get_icp_subscription(account))
+}
+
+#[cfg(test)]
+mod external_key_tests {
+    use super::*;
+    use crate::subscription::SubjectSubscription;
+    #[test]
+    fn composite_keys_isolate_protocol_account_and_relation() {
+        let subject = candid::Principal::from_slice(&[2, 1]);
+        let relation = SubjectSubscription {
+            subject,
+            subscription: Subscription {
+                subscriber: candid::Principal::from_slice(&[3, 1]),
+                target: WatchTarget::Subaccount(7),
+                minimum_units: 0u8.into(),
+            },
+        };
+        let icp = AccountKey::icp([0; 32]);
+        let icrc = AccountKey::from(Account {
+            owner: subject,
+            subaccount: None,
+        });
+        let key = ExternalKey::new(&icp, &relation);
+        assert!(key.0.starts_with(&ExternalKey::prefix(&icp)));
+        assert!(!key.0.starts_with(&ExternalKey::prefix(&icrc)));
+        let mut other = relation.clone();
+        other.subscription.subscriber = candid::Principal::from_slice(&[4, 1]);
+        assert_ne!(key, ExternalKey::new(&icp, &other));
+        other = relation.clone();
+        other.subject = candid::Principal::from_slice(&[5, 1]);
+        assert_ne!(key, ExternalKey::new(&icp, &other));
+        other = relation.clone();
+        other.subscription.target = WatchTarget::NeuronNonce(7);
+        assert_ne!(key, ExternalKey::new(&icp, &other));
+        assert!(key.0.len() <= 134);
     }
 }

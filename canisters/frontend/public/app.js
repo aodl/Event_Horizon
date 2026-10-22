@@ -1,10 +1,6 @@
-import {
-  buildGlobalMemo,
-  buildMemo,
-  buildRangeMemo,
-  buildNeuronMemo,
-  buildNeuronRangeMemo,
-} from './memo.js';
+import { buildSubscriptionMemo } from './memo.js';
+import { createSubscriptionPreview } from './subscription-preview.js';
+import { querySubscriptionPreview } from './pricing-client.js';
 import { queryBackendPricing } from './pricing-client.js';
 import { pricingMarkup, utc } from './pricing-view.js';
 import { INSTANCES } from './instances.js';
@@ -144,6 +140,7 @@ export function createApp({
   documentRef,
   instances = INSTANCES,
   queryBackend = queryBackendPricing,
+  queryPreview = querySubscriptionPreview,
   autoLoad = true,
   counter = null,
   operating = null,
@@ -155,6 +152,7 @@ export function createApp({
   let profile = null;
   let verified = false;
   let loadGeneration = 0;
+  const preview=createSubscriptionPreview({query:queryPreview});
 
   function setDisabled() {
     const disabled = !verified;
@@ -168,6 +166,10 @@ export function createApp({
   }
 
   function render() {
+    preview.invalidate();
+    const subjectEnabled=$('subject-mode')?.value==='external' && $('scope').value!=='global';
+    if ($('subject-field')) $('subject-field').hidden=!subjectEnabled;
+    if ($('subject-mode')) $('subject-mode').disabled=!verified || $('scope').value==='global';
     const mode = $('scope').value;
     const global = mode === 'global';
     const range = mode === 'range' || mode === 'neuron-range';
@@ -197,17 +199,7 @@ export function createApp({
       return;
     }
     try {
-      const args = [selected.alias, profile.decimals, $('principal').value];
-      const amount = $('amount').value;
-      const built = global
-        ? buildGlobalMemo(selected.alias, $('principal').value)
-        : mode === 'range'
-          ? buildRangeMemo(...args, $('range-start').value, $('range-end').value, amount)
-          : mode === 'neuron-range'
-            ? buildNeuronRangeMemo(...args, $('range-start').value, $('range-end').value, amount)
-            : mode === 'neuron'
-              ? buildNeuronMemo(...args, $('subaccount').value, amount)
-              : buildMemo(...args, $('subaccount').value, amount);
+      const built=buildSubscriptionMemo({routingAlias:selected.alias,decimals:profile.decimals,subscriber:$('principal').value,subject:subjectEnabled?$('subject').value:'',mode, start:range?$('range-start').value:$('subaccount').value,end:$('range-end').value,amount:$('amount').value,neuronGovernance:Boolean(profile.neuron_governance.length)});
       out.textContent = built.memo;
       const tier = global ? 'global_icp' : range ? 'range_icp' : 'account_icp';
       const current = pricing?.initialized ? pricing.current[tier] : null;
@@ -219,6 +211,18 @@ export function createApp({
         ? ` Scheduled requirement rises at ${utc(pricing.next_effective_at)}.`
         : ''}`;
       help.classList.remove('error');
+      const description=`${built.targetCount} ${neuron?'neuron staking accounts (subject is derivation controller)':'targets'} · Notify ${built.subscriberPrincipal??built.subscriber} about accounts belonging to ${built.subjectPrincipal??built.subject}. Changing declaration spelling changes the exact funding route.`;
+      help.textContent+=` ${description}`;
+      const pricingHelp=help.textContent;
+      if (built.needsPreview) {
+        out.textContent='—';help.textContent='Resolving registered identities with the verified backend…';
+        preview.request(selected.backendCanisterId,built.suffix,result=>{
+          out.textContent=built.memo;
+          help.textContent=`${pricingHelp} ${result.target_count} targets · Subscriber ${result.subscriber.toText()} · Subject ${result.subject[0]?.toText()??'all Ledger activity'}. Preview validates syntax and cached identities, not funding or admission. Changing spelling changes the exact Jupiter funding route.`;
+          help.classList.remove('error');
+        },error=>{out.textContent='—';help.textContent=error.message;help.classList.add('error');});
+      }
+
     } catch (error) {
       out.textContent = '—';
       help.textContent = `Update the inputs in 02 / Compose: ${error.message}`;
@@ -276,7 +280,7 @@ export function createApp({
   $('memo-form').addEventListener('input', render);
   $('instance').addEventListener('change', load);
   if (autoLoad) load();
-  return { load, dispose() { ++loadGeneration; counter?.dispose(); operating?.dispose(); $('memo-form').removeEventListener?.('input', render); $('instance').removeEventListener?.('change', load); } };
+  return { load, dispose() { ++loadGeneration; preview.dispose(); counter?.dispose(); operating?.dispose(); $('memo-form').removeEventListener?.('input', render); $('instance').removeEventListener?.('change', load); } };
 }
 
 if (typeof document !== 'undefined') {

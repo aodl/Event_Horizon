@@ -1,3 +1,6 @@
+type CanisterAlias = record { alias : text; canister_id : principal };
+type ListCanisterAliasesArgs = record { start_after : opt text; limit : opt nat32 };
+type ListCanisterAliasesResponse = record { revision : blob; items : vec CanisterAlias; next_start_after : opt text };
 type CommitmentIndexFault = record {
   observed_at_ts : nat64;
   last_cursor_tx_id : opt nat64;
@@ -22,5 +25,6 @@ type GetCommitmentRouteSummariesResponse = record {
   commitment_index_fault : opt CommitmentIndexFault;
 };
 service : {
+  list_canister_aliases : (ListCanisterAliasesArgs) -> (ListCanisterAliasesResponse) query;
   get_commitment_route_summaries : (GetCommitmentRouteSummariesArgs) -> (GetCommitmentRouteSummariesResponse) query;
 }

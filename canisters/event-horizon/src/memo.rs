@@ -465,3 +465,209 @@ mod tests {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedDeclaration {
+    pub declaration: SubscriptionDeclaration,
+    pub subject: Principal,
+}
+/// One resolver shared by admissions and the local preview. Funding bytes are never rewritten.
+pub fn resolve_subscription_memo(
+    memo: &[u8],
+    lookup: impl Fn(&str) -> Option<Principal>,
+) -> Result<ResolvedDeclaration, String> {
+    if memo.is_empty()
+        || memo.len() > 256
+        || !memo.is_ascii()
+        || memo.iter().any(|b| b.is_ascii_whitespace())
+    {
+        return Err("suffix must be 1–256 ASCII bytes without whitespace".into());
+    }
+    let text = std::str::from_utf8(memo).map_err(|e| e.to_string())?;
+    let (references, tail) = text
+        .split_once('.')
+        .map_or((text, None), |(a, b)| (a, Some(b)));
+    let mut refs = references.split('@');
+    let subscriber_text = refs.next().unwrap_or_default();
+    let subject_text = refs.next();
+    if refs.next().is_some() || (subject_text.is_some() && tail.is_none()) {
+        return Err("subject requires exactly one @ and a specific target".into());
+    }
+    let resolve = |s: &str| -> Result<Principal, String> {
+        let p = if crate::aliases::valid_alias(s) {
+            lookup(s).ok_or_else(|| format!("unknown alias {s}"))?
+        } else {
+            parse_principal(s).map_err(|e| e.to_string())?
+        };
+        if !crate::aliases::valid_canister(p) {
+            return Err("reference must identify a canister".into());
+        }
+        Ok(p)
+    };
+    let subscriber = resolve(subscriber_text)?;
+    let subject = subject_text.map(resolve).transpose()?.unwrap_or(subscriber);
+    let expanded = match tail {
+        Some(t) => format!("{}.{t}", subscriber.to_text()),
+        None => subscriber.to_text(),
+    };
+    let declaration = parse_subscription_memo(expanded.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(ResolvedDeclaration {
+        declaration,
+        subject,
+    })
+}
+#[derive(candid::CandidType, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum PreviewScope {
+    #[serde(rename = "global")]
+    Global,
+    #[serde(rename = "subaccount")]
+    Subaccount,
+    #[serde(rename = "neuron_nonce")]
+    NeuronNonce,
+}
+#[derive(candid::CandidType, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SubscriptionPreview {
+    pub subscriber: Principal,
+    pub subject: Option<Principal>,
+    pub scope: PreviewScope,
+    pub start: Option<u64>,
+    pub end: Option<u64>,
+    pub target_count: u32,
+    pub minimum_units: Option<Nat>,
+    pub alias_revision: Option<Vec<u8>>,
+    pub aliases_refreshed_at: Option<u64>,
+}
+pub fn preview(suffix: String) -> Result<SubscriptionPreview, String> {
+    let r = resolve_subscription_memo(suffix.as_bytes(), crate::state::alias)?;
+    let profile = crate::state::read_instance_config().observed_profile;
+    let mut result = SubscriptionPreview {
+        subscriber: r.declaration.subscriber(),
+        subject: Some(r.subject),
+        scope: PreviewScope::Global,
+        start: None,
+        end: None,
+        target_count: 0,
+        minimum_units: None,
+        alias_revision: None,
+        aliases_refreshed_at: None,
+    };
+    let (neuron, start, end, minimum) = match r.declaration {
+        SubscriptionDeclaration::Global { .. } => {
+            result.subject = None;
+            let m = crate::state::alias_metadata();
+            result.alias_revision = m.revision;
+            result.aliases_refreshed_at = m.last_success;
+            return Ok(result);
+        }
+        SubscriptionDeclaration::Account {
+            target, minimum, ..
+        } => (
+            matches!(target, crate::subscription::WatchTarget::NeuronNonce(_)),
+            target.value(),
+            target.value(),
+            minimum,
+        ),
+        SubscriptionDeclaration::Range {
+            neuron,
+            start,
+            end,
+            minimum,
+            ..
+        } => (neuron, start, end, minimum),
+    };
+    if neuron && profile.as_ref().and_then(|p| p.neuron_governance).is_none() {
+        return Err("verified neuron governance is unavailable".into());
+    }
+    result.scope = if neuron {
+        PreviewScope::NeuronNonce
+    } else {
+        PreviewScope::Subaccount
+    };
+    result.start = Some(start);
+    result.end = Some(end);
+    result.target_count = (end - start + 1) as u32;
+    result.minimum_units = minimum
+        .map(|m| {
+            m.to_units(
+                profile
+                    .as_ref()
+                    .ok_or("observed ledger metadata is not initialized")?
+                    .decimals,
+            )
+            .map_err(|e| e.to_string())
+        })
+        .transpose()?;
+    let meta = crate::state::alias_metadata();
+    result.alias_revision = meta.revision;
+    result.aliases_refreshed_at = meta.last_success;
+    Ok(result)
+}
+
+#[cfg(test)]
+mod resolution_tests {
+    use super::*;
+    fn p() -> Principal {
+        Principal::from_text("eo6ei-gaaaa-aaaar-qchra-cai").unwrap()
+    }
+    fn lookup(s: &str) -> Option<Principal> {
+        matches!(s, "A" | "B" | "E").then(p)
+    }
+    #[test]
+    fn aliases_principals_and_subject_equivalence() {
+        for suffix in [
+            "",
+            ".0",
+            ".7:0.01",
+            ".1000-1255",
+            ".n18446744073709551615",
+            ".n18446744073709551360-18446744073709551615:1",
+        ] {
+            let a = resolve_subscription_memo(format!("A{suffix}").as_bytes(), lookup).unwrap();
+            let b =
+                resolve_subscription_memo(format!("{}{suffix}", p().to_text()).as_bytes(), lookup)
+                    .unwrap();
+            assert_eq!(a, b);
+            if !suffix.is_empty() {
+                assert_eq!(
+                    a,
+                    resolve_subscription_memo(format!("A@B{suffix}").as_bytes(), lookup).unwrap()
+                );
+            }
+        }
+    }
+    #[test]
+    fn invalid_references_shapes_and_ranges() {
+        for text in [
+            "A@B",
+            "A@A",
+            "A@@B.7",
+            "@B.7",
+            "A@.7",
+            "a.7",
+            "UNKNOWN.7",
+            "A12345678.7",
+            "X.7",
+            "A .7",
+            "A@B.01",
+            "A@B.0-256",
+            "A@B.n7-7",
+            "A@B.n9-8",
+            "A@B.n18446744073709551616",
+        ] {
+            assert!(
+                resolve_subscription_memo(text.as_bytes(), lookup).is_err(),
+                "{text}"
+            )
+        }
+    }
+    #[test]
+    fn amount_precision_still_uses_observed_units() {
+        for decimals in [0, 2, 8, 18] {
+            let r = resolve_subscription_memo(b"A@B.7:0.01", lookup).unwrap();
+            let SubscriptionDeclaration::Account { minimum, .. } = r.declaration else {
+                panic!()
+            };
+            assert_eq!(minimum.unwrap().to_units(decimals).is_ok(), decimals >= 2);
+        }
+    }
+}
