@@ -1754,8 +1754,7 @@ mod tests {
             assert!(received
                 .matches
                 .windows(2)
-                .all(|w| (w[0].subject.as_slice(), w[0].target)
-                    < (w[1].subject.as_slice(), w[1].target)));
+                .all(|w| (w[0].subject, w[0].target) < (w[1].subject, w[1].target)));
             assert!(!received
                 .matches
                 .iter()

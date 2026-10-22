@@ -163,7 +163,7 @@ At most one notification call is attempted per subscriber per completed poll.
 Specific matches share a combined cap of 256 distinct `(subject, target)` entries.
 The first retained identities remain; later activity updates their independent
 minimum index and maximum amount. Overflow can omit additional hints, so always
-reconcile authoritative history. Ordering uses subject principal bytes, then
+reconcile authoritative history. Ordering preserves subject principal order (byte length, then bytes), then
 subaccount numbers, then neuron nonces; neither index nor amount is a sort key.
 
 Within each completed poll, Event Horizon attempts all globally matched
@@ -215,7 +215,7 @@ The lightweight sequence is:
 4. Accept the global flag only when local policy intentionally wants global activity.
 5. Discard matches outside the locally approved subject and target set (for self-only consumers, require `subject == self`).
 6. Compare `max_amount` with each target's local minimum in that Ledger's atomic units.
-7. If nothing relevant remains, return without expensive work.
+7. If no locally allowed global wake or relevant matches remain, return without expensive work.
 8. Otherwise coalesce the wake-up and schedule bounded authoritative reconciliation.
 9. Make consequential decisions only from verified Ledger/Index data.
 10. Keep independent periodic reconciliation through the same per-Ledger path.
