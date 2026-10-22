@@ -12,15 +12,22 @@ enum PokeTarget {
 }
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 struct PokeMatch {
+    subject: Principal,
     target: PokeTarget,
     first_block_index: u64,
     max_amount: Nat,
 }
 
+#[derive(Clone, Debug, Default, CandidType, Deserialize, PartialEq, Eq)]
+struct PokeNotification {
+    global_activity: bool,
+    matches: Vec<PokeMatch>,
+}
+
 #[derive(Default)]
 struct State {
     pokes: u64,
-    last_matches: Vec<PokeMatch>,
+    last_notification: PokeNotification,
     last_caller: Option<Principal>,
     trap: bool,
 }
@@ -33,11 +40,11 @@ fn init() {
 }
 
 #[ic_cdk::update]
-fn poke(matches: Vec<PokeMatch>) {
+fn poke(notification: PokeNotification) {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.pokes += 1;
-        s.last_matches = matches;
+        s.last_notification = notification;
         s.last_caller = Some(ic_cdk::api::msg_caller());
         if s.trap {
             ic_cdk::trap("forced subscriber trap")
@@ -52,7 +59,12 @@ fn debug_pokes() -> u64 {
 
 #[ic_cdk::query]
 fn debug_last_matches() -> Vec<PokeMatch> {
-    STATE.with(|s| s.borrow().last_matches.clone())
+    STATE.with(|s| s.borrow().last_notification.matches.clone())
+}
+
+#[ic_cdk::query]
+fn debug_last_notification() -> PokeNotification {
+    STATE.with(|s| s.borrow().last_notification.clone())
 }
 
 #[ic_cdk::query]
@@ -75,8 +87,8 @@ mod tests {
     fn generated_poke_record_matches_normative_candid() {
         let generated = super::__export_service();
         let normative = include_str!("../../../../candid/subscriber.did");
-        fn fields(did: &str) -> BTreeSet<String> {
-            did.split("type PokeMatch = record {")
+        fn fields(did: &str, record: &str) -> BTreeSet<String> {
+            did.split(&format!("type {record} = record {{"))
                 .nth(1)
                 .unwrap()
                 .split('}')
@@ -87,8 +99,10 @@ mod tests {
                 .filter(|s| !s.is_empty())
                 .collect()
         }
-        assert_eq!(fields(&generated), fields(normative));
-        assert_eq!(fields(&generated).len(), 3);
-        assert!(generated.contains("poke : (vec PokeMatch) -> ()"));
+        for record in ["PokeMatch", "PokeNotification"] {
+            assert_eq!(fields(&generated, record), fields(normative, record));
+        }
+        assert_eq!(fields(&generated, "PokeMatch").len(), 4);
+        assert!(generated.contains("poke : (PokeNotification) -> ()"));
     }
 }

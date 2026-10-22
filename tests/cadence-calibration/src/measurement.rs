@@ -25,7 +25,6 @@ static ICRC3_LEDGER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
 static HISTORIAN_WASM: OnceLock<Vec<u8>> = OnceLock::new();
 static CMC_WASM: OnceLock<Vec<u8>> = OnceLock::new();
 static SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
-static SUBSCRIBER_NO_ARGS_WASM: OnceLock<Vec<u8>> = OnceLock::new();
 
 const ICP_E8S: u64 = 100_000_000;
 
@@ -141,8 +140,16 @@ enum CallbackTarget {
 
 #[derive(CandidType, serde::Serialize)]
 struct CallbackMatch {
+    subject: Principal,
+    first_block_index: u64,
     target: CallbackTarget,
     max_amount: Nat,
+}
+
+#[derive(CandidType)]
+struct CallbackNotification {
+    global_activity: bool,
+    matches: Vec<CallbackMatch>,
 }
 
 impl From<WireMode> for Mode {
@@ -203,7 +210,7 @@ struct Fixture {
     historian: Principal,
     cmc: Principal,
     subscriber: Principal,
-    subscriber_no_args: Principal,
+    subscriber_second: Principal,
     backend: Principal,
     faucet: Principal,
     initial_backend_cycles: u128,
@@ -221,7 +228,7 @@ impl Fixture {
         let historian = pic.create_canister();
         let cmc = pic.create_canister();
         let subscriber = pic.create_canister();
-        let subscriber_no_args = pic.create_canister();
+        let subscriber_second = pic.create_canister();
         let backend = pic
             .create_canister_with_params(
                 None,
@@ -239,7 +246,7 @@ impl Fixture {
             historian,
             cmc,
             subscriber,
-            subscriber_no_args,
+            subscriber_second,
         ] {
             pic.add_cycles(id, 200 * TRILLION);
         }
@@ -285,8 +292,8 @@ impl Fixture {
             None,
         );
         pic.install_canister(
-            subscriber_no_args,
-            wasm(&SUBSCRIBER_NO_ARGS_WASM, "mock-subscriber-no-args", None)?,
+            subscriber_second,
+            wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
             vec![],
             None,
         );
@@ -314,7 +321,7 @@ impl Fixture {
             historian,
             cmc,
             subscriber,
-            subscriber_no_args,
+            subscriber_second,
             backend,
             faucet,
             initial_backend_cycles,
@@ -570,11 +577,11 @@ impl Fixture {
         self.append_admission(subscriber, &format!(".{start}-{end}"), 20 * ICP_E8S)
     }
 
-    fn subscriber_pokes(&self, no_args: bool) -> Result<u64> {
+    fn subscriber_pokes(&self, second: bool) -> Result<u64> {
         query(
             &self.pic,
-            if no_args {
-                self.subscriber_no_args
+            if second {
+                self.subscriber_second
             } else {
                 self.subscriber
             },
@@ -585,12 +592,12 @@ impl Fixture {
 
     fn wait_for_subscriber_pokes(
         &self,
-        no_args: bool,
+        second: bool,
         expected: u64,
         max_ticks: u64,
     ) -> Result<u64> {
         for ticks in 0..=max_ticks {
-            if self.subscriber_pokes(no_args)? >= expected {
+            if self.subscriber_pokes(second)? >= expected {
                 return Ok(ticks);
             }
             if ticks < max_ticks {
@@ -599,7 +606,7 @@ impl Fixture {
         }
         bail!(
             "subscriber callback did not reach {expected} within {max_ticks} ticks; observed={}",
-            self.subscriber_pokes(no_args)?
+            self.subscriber_pokes(second)?
         )
     }
 
@@ -1169,14 +1176,24 @@ fn measure_fanout(kind: &str, count: u64, config: &RunConfig) -> Result<Measurem
     result.accepted_oneway_calls = pokes_after.1.saturating_sub(pokes_before.1);
     result.callback_payload_bytes = if count == 0 {
         None
-    } else if kind == "global" {
-        Some(encode_one(Vec::<CallbackMatch>::new())?.len() as u64)
     } else {
+        let mut bytes = [0u8; 9];
+        bytes[0] = 0x7f;
+        bytes[1..].copy_from_slice(&(count - 1).to_be_bytes());
         Some(
-            encode_one(vec![CallbackMatch {
-                target: CallbackTarget::Subaccount(0),
-                max_amount: Nat::from(count),
-            }])?
+            encode_one(CallbackNotification {
+                global_activity: kind == "global",
+                matches: if kind == "global" {
+                    vec![]
+                } else {
+                    vec![CallbackMatch {
+                        subject: Principal::from_slice(&bytes),
+                        target: CallbackTarget::Subaccount(0),
+                        first_block_index: cursor_before + count - 1,
+                        max_amount: Nat::from(count),
+                    }]
+                },
+            })?
             .len() as u64,
         )
     };
@@ -1272,42 +1289,6 @@ fn measure_real_subscriber_shapes(config: &RunConfig) -> Result<Vec<Measurement>
         .push("Ten qualifying transfers were coalesced into one receiver-observed poke.".into());
     out.push(coalesced);
 
-    let zero = Fixture::new(Architecture::GenericIcrc3, 200 * TRILLION)?;
-    zero.price_once()?;
-    zero.poll()?;
-    zero.admit_global(zero.subscriber_no_args)?;
-    zero.append_mixed_irrelevant(1)?;
-    let cursor_before = zero.state()?.observed_next_block;
-    let before = zero.pic.cycle_balance(zero.backend);
-    let poke_counts = zero.poke_counts()?;
-    zero.poll()?;
-    zero.wait_for_subscriber_pokes(true, 1, config.limits.maximum_ticks_per_wait)?;
-    let after = zero.pic.cycle_balance(zero.backend);
-    let after_counts = zero.poke_counts()?;
-    let mut no_args = base_measurement(
-        "zero_argument_poke_compatibility".into(),
-        "C_notification_fanout",
-        zero.architecture,
-        Some(Mode::Continuous),
-        "one_relevant_transaction",
-        zero.initial_backend_cycles,
-    );
-    no_args.subscriber_kind = "global_zero_argument_receiver".into();
-    no_args.subscriber_count = 1;
-    no_args.backend_cycles_before = before;
-    no_args.backend_cycles_after = after;
-    no_args.net_cycles_consumed = before.saturating_sub(after);
-    no_args.per_poll_cycles = vec![no_args.net_cycles_consumed];
-    fill_cycle_summary(&mut no_args);
-    no_args.injected_blocks = 1;
-    no_args.processed_blocks = zero.state()?.observed_next_block - cursor_before;
-    no_args.completed_polls = 1;
-    no_args.poke_attempts = after_counts.0 - poke_counts.0;
-    no_args.accepted_oneway_calls = after_counts.1 - poke_counts.1;
-    no_args.observed_subscriber_callbacks = Some(1);
-    no_args.notes.push("The zero-argument receiver executed successfully despite the payload-bearing sender format.".into());
-    out.push(no_args);
-
     let range = Fixture::new(Architecture::GenericIcrc3, 200 * TRILLION)?;
     range.price_once()?;
     range.poll()?;
@@ -1348,8 +1329,8 @@ fn measure_real_subscriber_shapes(config: &RunConfig) -> Result<Vec<Measurement>
     mixed.price_once()?;
     mixed.poll()?;
     mixed.admit_global(mixed.subscriber)?;
-    mixed.admit_account(mixed.subscriber_no_args, 7)?;
-    mixed.append_transfer_to(mixed.observed_ledger, mixed.subscriber_no_args, 7)?;
+    mixed.admit_account(mixed.subscriber_second, 7)?;
+    mixed.append_transfer_to(mixed.observed_ledger, mixed.subscriber_second, 7)?;
     let cursor_before = mixed.state()?.observed_next_block;
     let before = mixed.pic.cycle_balance(mixed.backend);
     let counts = mixed.poke_counts()?;

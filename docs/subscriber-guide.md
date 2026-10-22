@@ -15,7 +15,7 @@ For example, an application only cares about incoming ICP transfers to its
 numeric subaccount `7`. An unrelated patron endows a subscription naming that
 canister's subaccount `999` and arranges transfers into it. Event Horizon
 correctly sends a poke identifying `subaccount 999`. A receiver checking its
-local interest registry returns cheaply. A naïve zero-argument receiver has
+local interest registry returns cheaply. A receiver that discards the payload has
 discarded that hint and may unnecessarily start Ledger or Index reconciliation.
 A patron can also finance a less restrictive threshold for an already-watched
 target, or a global subscription the application never requested.
@@ -33,7 +33,7 @@ activity is an intentional local policy.
 
 1. Identify the Event Horizon instance or instances for the ledgers the application needs.
 2. Record each trusted Event Horizon canister principal and its immutable observed ledger.
-3. For scoped interests, implement the recommended target-aware `poke` handler below. Use zero-argument `poke()` only under the [wake-up-only conditions](#wake-up-only-subscribers).
+3. Implement the unified `poke(PokeNotification)` handler below, retaining subject and amount hints even for self subscriptions.
 4. Authenticate `caller` and filter against locally approved per-Ledger interests before scheduling work.
 5. Maintain authoritative reconciliation cursor/state independently per observed ledger.
 6. Create the required Jupiter declaration for each instance.
@@ -129,39 +129,35 @@ Changing spelling deliberately changes the funding route.
 ## Callback and targets
 
 ```candid
-type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
-type PokeMatch = record {
-  target : PokeTarget;
-  first_block_index : nat64;
-  max_amount : nat;
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
 };
-type SubjectPokeMatch = record {
+type PokeMatch = record {
   subject : principal;
   target : PokeTarget;
   first_block_index : nat64;
   max_amount : nat;
 };
+type PokeNotification = record {
+  global_activity : bool;
+  matches : vec PokeMatch;
+};
 service : {
-  poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> ();
-  poke_subjects : (vec SubjectPokeMatch) -> ();
+  poke : (PokeNotification) -> ();
 }
 ```
 
-An external-aware receiver implements both methods. The first vector always
-contains only self-subject matches; the optional second vector contains external
-subjects. Self-only or global-only calls use `null` as the second argument.
-Self plus external activity uses one `poke(self, opt external)`. Genuine global
-plus external activity also uses `poke(self_or_empty, opt external)`. An empty
-first vector with a nonempty second vector does not mean global-only activity.
+Every receiver implements this single method and required record argument.
+`subject` is always explicit, including self matches. The flag is true only
+when this subscriber has qualifying global activity in the completed poll;
+`matches` independently contains threshold-filtered specific matches, with
+either flag value. Global-only calls have a true flag and no matches. Empty
+matches alone do not establish global activity. False plus empty is never sent.
 
-**External-only activity with no self/global match uses `poke_subjects` only.**
-It never generates a false legacy global-only `poke([])`. Older one-vector
-receivers, including records omitting `first_block_index`, and zero-argument
-receivers can safely ignore extra arguments/record fields on `poke`. They cannot
-consume external-only hints without adopting `poke_subjects`. Missing/trapping
-methods are best-effort failures: no probing, negotiation, fallback, acknowledgement
-or retry is attempted. Candid encodes two argument values, not one tuple record;
-see [argument sequence subtyping](https://github.com/dfinity/candid/blob/master/spec/Candid.md#upgrading-and-subtyping).
+This intentionally breaks the previous callback ABI. There are no compatibility
+branches, extra arguments, receiver negotiation or fallback methods. Missing
+or trapping methods are best-effort failures and do not stop later recipients.
 
 At most one notification call is attempted per subscriber per completed poll.
 Specific matches share a combined cap of 256 distinct `(subject, target)` entries.
@@ -173,7 +169,7 @@ subaccount numbers, then neuron nonces; neither index nor amount is a sort key.
 Within each completed poll, Event Horizon attempts all globally matched
 subscribers before specific-only subscribers, in ascending principal order
 within each phase. A mixed match receives one poke in the global phase with
-the specific payload. This fixed rule is independent of endowment amounts,
+both the global flag and the specific matches. This fixed rule is independent of endowment amounts,
 subscriber balances and polling cadence; there are no configurable priority
 tiers. It orders outbound attempts only, without awaiting acknowledgement or
 completion. Delivery and remote execution order between different canisters
@@ -216,8 +212,8 @@ The lightweight sequence is:
 1. Authenticate the caller against explicitly trusted Event Horizon instances.
 2. Resolve its immutable observed-Ledger context from the local trusted registry.
 3. Check whether the application intentionally accepts all activity for that Ledger.
-4. Without local global interest, return immediately on an empty vector.
-5. Discard non-empty target hints outside the locally approved interest set.
+4. Accept the global flag only when local policy intentionally wants global activity.
+5. Discard matches outside the locally approved subject and target set (for self-only consumers, require `subject == self`).
 6. Compare `max_amount` with each target's local minimum in that Ledger's atomic units.
 7. If nothing relevant remains, return without expensive work.
 8. Otherwise coalesce the wake-up and schedule bounded authoritative reconciliation.
@@ -229,22 +225,16 @@ Ledger, Index or other expensive inter-canister call. The checks are local;
 they require no Event Horizon subscription lookup or external approval call.
 
 ```text
-poke(self_matches, external_matches):
-    accept(self_matches with subject=self, external_matches or [])
-
-poke_subjects(external_matches):
-    accept([], external_matches)
-
-accept(self_matches, external_matches):
-    matches = self_matches + external_matches
+poke(notification):
     context = trusted_event_horizon_instances.get(caller)
     if context is absent:
         return
 
     relevant_matches = filter_by_local_approved_subjects_targets_and_amounts(
-        context, matches
+        context, notification.matches
     )
-    if not context.wants_global_activity and relevant_matches is empty:
+    global_wake = context.wants_global_activity and notification.global_activity
+    if not global_wake and relevant_matches is empty:
         return
 
     earliest_hint = none
@@ -449,37 +439,21 @@ interests and amounts. Global consumers have different exposure because any
 Ledger activity can be relevant. Keep reconciliation rate-limited or otherwise
 bounded; never trigger disproportionately expensive operations directly per poke.
 
-## Wake-up-only subscribers
+## General wake-up consumers
 
-Zero-argument `poke()` remains supported, but is an intentional general-wake
-policy rather than the default shortcut for scoped applications:
+A consumer intentionally interested in global activity still implements
+`poke(PokeNotification)`. Authenticate the caller, check `global_activity`
+against intentional local global interest, and coalesce bounded work. Empty
+matches do not imply a global match. Existing Index canisters are not assumed
+to export this method or to complete reconciliation before other subscribers.
 
-```candid
-service : {
-  poke : () -> ();
-}
-```
+## Jupiter receiver deployment dependency
 
-Event Horizon sends the standard two-argument `poke` sequence. Candid permits
-the zero-argument receiver to ignore those extra arguments for both empty global
-and non-empty specific-match payloads; no negotiation occurs. External-only hints instead require the explicitly
-supported `poke_subjects` method and are not delivered through zero-argument `poke`.
-
-This is appropriate only when the application deliberately treats **every
-authenticated** Event Horizon poke as a general reconciliation wake-up, needs
-no target/amount hints to decide relevance, and makes redundant wakes cheap and
-bounded through coalescing, rate limiting or similar protection. It can suit
-some indexing or general Ledger-monitoring applications. Authenticate the
-caller, resolve its trusted Ledger context, schedule rather than reconcile
-inline, and retain independent authoritative/periodic reconciliation.
-
-Do not choose zero arguments merely for convenience when only a limited set of
-accounts or neurons matters. Discarding the payload prevents cheap identification
-of an unsolicited irrelevant target or a below-local-threshold hint. Choosing
-`poke()` neither makes the application a global subscriber nor prevents a third
-party from funding unwanted specific subscriptions. It is not inherently insecure;
-safety depends on the intentionally bounded work performed after each authenticated
-wake-up. Existing Index canisters are not assumed to export `poke`.
-An Index that uses zero-argument `poke()` must still authenticate the caller
-and bound/coalesce its indexing work; the interface does not establish catch-up
-or completion before another subscriber executes.
+Jupiter Faucet and Disburser's current receiving methods are incompatible with
+this callback. Their separate repository must implement the exact Candid above
+and coordinate its receiver rollout with Event Horizon before relying on
+notifications. Authenticate the trusted Event Horizon principal, select
+`match.subject == self`, and preserve existing local targets and thresholds
+before scheduling authoritative work. No Event Horizon fallback will bridge
+this change. Disburser-to-Historian forwarding is a separate contract and is
+not assumed to change. This release does not modify or deploy Jupiter.

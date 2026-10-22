@@ -63,7 +63,7 @@ Full adds:
 - canonical ICP shared-scan and separate generic ICRC-3 readers at idle, 1, 5, and 20 blocks/second plus 1,024- and 4,096-block bursts;
 - archive-prefix skipping and live-tail decoding for both reader architectures;
 - settled global fan-out at 0, 1, 10, 100, 256, and 1,024 subscribers;
-- matching and non-matching specific subscriptions, coalescing, mixed global/specific delivery, a representative expanded range, and zero-argument `poke()` execution;
+- matching and non-matching specific subscriptions, coalescing, mixed global/specific delivery, a representative expanded range, and unified `poke(PokeNotification)` execution;
 - simulated transaction-to-receiver latency in every active tier plus a burst/coalescing case;
 - every threshold immediately below, exactly at, and immediately above both entry and exit boundaries, followed by a top-up/decline/interruption/recovery sequence;
 - actual PocketIC balances at 1, 2, 5, 10, 25, 60, 100, 200, and 1,000 T.

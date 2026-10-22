@@ -1,6 +1,17 @@
-type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
-type PokeMatch = record { target : PokeTarget; first_block_index : nat64; max_amount : nat };
-// Event Horizon always sends this payload. A wake-up-only subscriber may
-// instead implement `poke : () -> ()`; see docs/subscriber-guide.md.
-type SubjectPokeMatch = record { subject : principal; target : PokeTarget; first_block_index : nat64; max_amount : nat };
-service : { poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> (); poke_subjects : (vec SubjectPokeMatch) -> (); }
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+type PokeMatch = record {
+  subject : principal;
+  target : PokeTarget;
+  first_block_index : nat64;
+  max_amount : nat;
+};
+type PokeNotification = record {
+  global_activity : bool;
+  matches : vec PokeMatch;
+};
+service : {
+  poke : (PokeNotification) -> ();
+}

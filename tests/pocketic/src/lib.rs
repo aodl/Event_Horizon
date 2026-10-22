@@ -9,9 +9,7 @@ mod tests {
     };
 
     use anyhow::{anyhow, bail, Context, Result};
-    use candid::{
-        decode_args, decode_one, encode_args, encode_one, CandidType, Deserialize, Principal,
-    };
+    use candid::{decode_args, decode_one, encode_one, CandidType, Deserialize, Principal};
     use pocket_ic::{CreateCanisterParams, PocketIc, PocketIcBuilder};
     use sha2::{Digest, Sha224, Sha256};
 
@@ -20,7 +18,6 @@ mod tests {
     static HISTORIAN_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static CMC_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
-    static SUBSCRIBER_NO_ARGS_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SNS_ROOT_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
@@ -300,9 +297,18 @@ mod tests {
     }
     #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
     struct PokeMatch {
+        subject: Principal,
         target: WatchTarget,
         first_block_index: u64,
         max_amount: candid::Nat,
+    }
+    #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+    struct PokeNotification {
+        global_activity: bool,
+        matches: Vec<PokeMatch>,
+    }
+    fn notification(env: &Env, id: Principal) -> Result<PokeNotification> {
+        query(&env.pic, id, "debug_last_notification", ())
     }
     fn targets(matches: &[PokeMatch]) -> Vec<WatchTarget> {
         matches.iter().map(|value| value.target).collect()
@@ -363,7 +369,7 @@ mod tests {
         historian: Principal,
         cmc: Principal,
         subscriber: Principal,
-        subscriber_no_args: Principal,
+        subscriber_second: Principal,
         event_horizon: Principal,
         faucet: Principal,
         sns_root: Option<Principal>,
@@ -373,11 +379,12 @@ mod tests {
     struct SubscriberObservation {
         pokes: u64,
         matches: Vec<PokeMatch>,
+        global_activity: bool,
         last_caller: Option<Principal>,
     }
 
     #[derive(Debug)]
-    struct NoArgsSubscriberObservation {
+    struct SecondSubscriberObservation {
         pokes: u64,
         last_caller: Option<Principal>,
     }
@@ -480,7 +487,7 @@ mod tests {
             let historian = pic.create_canister();
             let cmc = pic.create_canister();
             let subscriber = pic.create_canister();
-            let subscriber_no_args = pic.create_canister();
+            let subscriber_second = pic.create_canister();
             let sns_root = sns.then(|| pic.create_canister());
             let event_horizon = pic
                 .create_canister_with_params(
@@ -498,7 +505,7 @@ mod tests {
                 historian,
                 cmc,
                 subscriber,
-                subscriber_no_args,
+                subscriber_second,
             ]
             .into_iter()
             .chain(sns_root)
@@ -565,8 +572,8 @@ mod tests {
                 None,
             );
             pic.install_canister(
-                subscriber_no_args,
-                wasm(&SUBSCRIBER_NO_ARGS_WASM, "mock-subscriber-no-args", None)?,
+                subscriber_second,
+                wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
                 vec![],
                 None,
             );
@@ -592,7 +599,7 @@ mod tests {
                 historian,
                 cmc,
                 subscriber,
-                subscriber_no_args,
+                subscriber_second,
                 event_horizon,
                 faucet,
                 sns_root,
@@ -605,13 +612,14 @@ mod tests {
             Ok(SubscriberObservation {
                 pokes: query(&self.pic, self.subscriber, "debug_pokes", ())?,
                 matches: query(&self.pic, self.subscriber, "debug_last_matches", ())?,
+                global_activity: notification(self, self.subscriber)?.global_activity,
                 last_caller: query(&self.pic, self.subscriber, "debug_last_caller", ())?,
             })
         }
-        fn no_args_subscriber_observation(&self) -> Result<NoArgsSubscriberObservation> {
-            Ok(NoArgsSubscriberObservation {
-                pokes: query(&self.pic, self.subscriber_no_args, "debug_pokes", ())?,
-                last_caller: query(&self.pic, self.subscriber_no_args, "debug_last_caller", ())?,
+        fn second_subscriber_observation(&self) -> Result<SecondSubscriberObservation> {
+            Ok(SecondSubscriberObservation {
+                pokes: query(&self.pic, self.subscriber_second, "debug_pokes", ())?,
+                last_caller: query(&self.pic, self.subscriber_second, "debug_last_caller", ())?,
             })
         }
         fn wait_for_subscriber<F>(
@@ -636,7 +644,7 @@ mod tests {
             }
             bail!(
                 "one-way subscriber callback did not reach expected condition `{expected}`; \
-                 subscriber principal: {} type: vec PokeMatch; \
+                 subscriber principal: {} type: PokeNotification; \
                  ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
                  last observed subscriber state: {last:?}; Event Horizon state: {:?}",
                 self.subscriber,
@@ -644,9 +652,9 @@ mod tests {
                 self.state()?
             )
         }
-        fn wait_for_no_args_pokes(&self, expected: u64) -> Result<NoArgsSubscriberObservation> {
+        fn wait_for_second_pokes(&self, expected: u64) -> Result<SecondSubscriberObservation> {
             let started = std::time::Instant::now();
-            let mut last = self.no_args_subscriber_observation()?;
+            let mut last = self.second_subscriber_observation()?;
             for ticks in 0..=MAX_ONE_WAY_CALLBACK_TICKS {
                 if last.pokes == expected {
                     return Ok(last);
@@ -655,15 +663,15 @@ mod tests {
                     break;
                 }
                 self.pic.tick();
-                last = self.no_args_subscriber_observation()?;
+                last = self.second_subscriber_observation()?;
             }
             bail!(
                 "one-way subscriber callback did not reach expected count {expected}; \
-                 subscriber principal: {} type: zero arguments; \
+                 subscriber principal: {} type: PokeNotification; \
                  ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
                  observed count: {}; last caller: {:?}; vector subscriber state: {:?}; \
                  Event Horizon state: {:?}",
-                self.subscriber_no_args,
+                self.subscriber_second,
                 started.elapsed(),
                 last.pokes,
                 last.last_caller,
@@ -1244,13 +1252,6 @@ mod tests {
         mode: String,
         page_size: Option<u32>,
     }
-    #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-    struct SubjectPokeMatch {
-        subject: Principal,
-        target: WatchTarget,
-        first_block_index: u64,
-        max_amount: candid::Nat,
-    }
     #[derive(Clone, Debug, CandidType, Deserialize)]
     struct AliasMetadata {
         revision: Option<Vec<u8>>,
@@ -1278,13 +1279,11 @@ mod tests {
         #[serde(rename = "neuron_nonce")]
         NeuronNonce,
     }
-    static SUBJECT_SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
-    static LEGACY_SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     fn subject_receiver(env: &Env, id: Principal) -> Result<()> {
         env.pic
             .reinstall_canister(
                 id,
-                wasm(&SUBJECT_SUBSCRIBER_WASM, "mock-subscriber-subjects", None)?,
+                wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
                 vec![],
                 None,
             )
@@ -1333,11 +1332,11 @@ mod tests {
             Some(memo),
         )
     }
-    fn subjects(env: &Env, id: Principal) -> Result<Vec<SubjectPokeMatch>> {
-        query(&env.pic, id, "debug_last_subjects", ())
+    fn matches_for(env: &Env, id: Principal) -> Result<Vec<PokeMatch>> {
+        query(&env.pic, id, "debug_last_matches", ())
     }
-    fn subject_count(env: &Env, id: Principal) -> Result<u64> {
-        query(&env.pic, id, "debug_subject_pokes", ())
+    fn poke_count(env: &Env, id: Principal) -> Result<u64> {
+        query(&env.pic, id, "debug_pokes", ())
     }
 
     #[test]
@@ -1414,7 +1413,10 @@ mod tests {
         for _ in 0..10 {
             env.pic.tick();
         }
-        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, first);
+        assert_eq!(
+            matches_for(&env, env.subscriber)?[0].first_block_index,
+            first
+        );
         assert!(env.global_subscription()?);
         assert_eq!(env.state()?.cmc_state, old.cmc_state);
         Ok(())
@@ -1515,7 +1517,7 @@ mod tests {
         env.append(source.clone(), destination.clone(), 900_000_000, None)?;
         env.poll()?;
         assert_eq!(
-            subject_count(&env, env.subscriber)?,
+            poke_count(&env, env.subscriber)?,
             0,
             "no replay after alias discovery"
         );
@@ -1527,15 +1529,15 @@ mod tests {
         env.set_abort_after_staged_admission(true)?;
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, before);
-        assert_eq!(subject_count(&env, env.subscriber)?, 0);
+        assert_eq!(poke_count(&env, env.subscriber)?, 0);
         env.set_abort_after_staged_admission(false)?;
         env.poll()?;
         for _ in 0..10 {
             env.pic.tick();
         }
         assert_eq!(
-            subjects(&env, env.subscriber)?,
-            vec![SubjectPokeMatch {
+            matches_for(&env, env.subscriber)?,
+            vec![PokeMatch {
                 subject: env.cmc,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: first,
@@ -1550,19 +1552,22 @@ mod tests {
         for _ in 0..10 {
             env.pic.tick();
         }
-        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, lower);
         assert_eq!(
-            subjects(&env, env.subscriber)?[0].max_amount,
+            matches_for(&env, env.subscriber)?[0].first_block_index,
+            lower
+        );
+        assert_eq!(
+            matches_for(&env, env.subscriber)?[0].max_amount,
             candid::Nat::from(2_000_000u64)
         );
-        let before = subject_count(&env, env.subscriber)?;
+        let before = poke_count(&env, env.subscriber)?;
         fund_suffix(&env, "A@H.0")?;
         env.poll()?;
         for _ in 0..10 {
             env.pic.tick();
         }
         assert_eq!(
-            subject_count(&env, env.subscriber)?,
+            poke_count(&env, env.subscriber)?,
             before,
             "admitting Faucet payout cannot match its own declaration"
         );
@@ -1576,8 +1581,11 @@ mod tests {
         for _ in 0..10 {
             env.pic.tick();
         }
-        assert_eq!(subject_count(&env, env.subscriber)?, before + 1);
-        assert_eq!(subjects(&env, env.subscriber)?[0].first_block_index, next);
+        assert_eq!(poke_count(&env, env.subscriber)?, before + 1);
+        assert_eq!(
+            matches_for(&env, env.subscriber)?[0].first_block_index,
+            next
+        );
         Ok(())
     }
 
@@ -1678,14 +1686,14 @@ mod tests {
             for _ in 0..10 {
                 env.pic.tick();
             }
-            let matches = subjects(&env, env.subscriber)?;
-            assert!(matches.contains(&SubjectPokeMatch {
+            let matches = matches_for(&env, env.subscriber)?;
+            assert!(matches.contains(&PokeMatch {
                 subject: env.cmc,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: first,
                 max_amount: 1_500_000_000u64.into()
             }));
-            assert!(matches.contains(&SubjectPokeMatch {
+            assert!(matches.contains(&PokeMatch {
                 subject: env.cmc,
                 target: WatchTarget::Subaccount(8),
                 first_block_index: second,
@@ -1700,25 +1708,73 @@ mod tests {
                 None,
             )?;
             for n in 0..256 {
-                env.append_observed(
-                    source.clone(),
-                    account_id(env.cmc, numbered(n)),
-                    200_000_000,
-                    None,
-                )?;
+                if kind == 0 {
+                    env.append_observed(
+                        source.clone(),
+                        account_id(env.cmc, numbered(n)),
+                        200_000_000,
+                        None,
+                    )?;
+                } else {
+                    let mut amount = candid::Nat::from(1u8);
+                    amount.0 <<= 4096usize;
+                    env.append_observed_nat(
+                        source.clone(),
+                        account_id(env.cmc, numbered(n)),
+                        amount + candid::Nat::from(n),
+                    )?;
+                }
             }
+            let counts = env.poke_counts()?;
+            let cycles = env.pic.cycle_balance(env.event_horizon);
             env.poll()?;
             for _ in 0..10 {
                 env.pic.tick();
             }
-            let own: Vec<PokeMatch> = query(&env.pic, env.subscriber, "debug_last_matches", ())?;
-            let external = subjects(&env, env.subscriber)?;
-            assert_eq!(own.len(), 1);
-            assert_eq!(external.len(), 255);
-            let encoded = encode_args((&own, Some(&external)))?;
+            assert_eq!(env.poke_counts()?, vec![counts[0] + 1, counts[1] + 1]);
+            let received = notification(&env, env.subscriber)?;
+            assert!(!received.global_activity);
+            assert_eq!(received.matches.len(), 256);
+            assert_eq!(
+                received
+                    .matches
+                    .iter()
+                    .filter(|m| m.subject == env.subscriber)
+                    .count(),
+                1
+            );
+            assert_eq!(
+                received
+                    .matches
+                    .iter()
+                    .filter(|m| m.subject == env.cmc)
+                    .count(),
+                255
+            );
+            assert!(received
+                .matches
+                .windows(2)
+                .all(|w| (w[0].subject.as_slice(), w[0].target)
+                    < (w[1].subject.as_slice(), w[1].target)));
+            assert!(!received
+                .matches
+                .iter()
+                .any(|m| m.subject == env.cmc && m.target == WatchTarget::Subaccount(255)));
+            if kind != 0 {
+                let mut expected = candid::Nat::from(1u8);
+                expected.0 <<= 4096usize;
+                let last = received
+                    .matches
+                    .iter()
+                    .find(|m| m.subject == env.cmc && m.target == WatchTarget::Subaccount(254))
+                    .unwrap();
+                assert_eq!(last.max_amount, expected + candid::Nat::from(254u64));
+            }
+            let encoded = encode_one(&received)?;
             println!(
-                "subject_callback_max kind={kind} entries=256 bytes={}",
-                encoded.len()
+                "subject_callback_max kind={kind} entries=256 bytes={} cycles={}",
+                encoded.len(),
+                cycles.saturating_sub(env.pic.cycle_balance(env.event_horizon))
             );
             env.upgrade_same_debug_wasm()?;
             assert_eq!(preview(&env, "A@B.0-255")?.unwrap().target_count, 256);
@@ -1734,12 +1790,12 @@ mod tests {
         env.pic.add_cycles(trap, 200_000_000_000_000);
         env.pic.install_canister(
             trap,
-            wasm(&SUBJECT_SUBSCRIBER_WASM, "mock-subscriber-subjects", None)?,
+            wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
             vec![],
             None,
         );
         update::<_, ()>(&env.pic, trap, "debug_set_trap", true)?;
-        subject_receiver(&env, env.subscriber_no_args)?;
+        subject_receiver(&env, env.subscriber_second)?;
         set_aliases(
             &env,
             vec![
@@ -1753,7 +1809,7 @@ mod tests {
                 },
                 CanisterAlias {
                     alias: "C".into(),
-                    canister_id: env.subscriber_no_args,
+                    canister_id: env.subscriber_second,
                 },
                 CanisterAlias {
                     alias: "D".into(),
@@ -1765,6 +1821,10 @@ mod tests {
         )?;
         refresh_aliases(&env)?;
         env.poll()?;
+        fund_suffix(
+            &env,
+            &format!("{}@B.7", env.ledger.to_text().replace('-', "")),
+        )?;
         for suffix in ["A@B.7", "C@B.7", "D@B.7"] {
             fund_suffix(&env, suffix)?;
         }
@@ -1780,16 +1840,12 @@ mod tests {
         for _ in 0..12 {
             env.pic.tick();
         }
-        assert_eq!(env.poke_counts()?[0] - before, 3);
+        assert_eq!(env.poke_counts()?[0] - before, 4);
+        assert_eq!(poke_count(&env, env.subscriber)?, 1);
+        assert_eq!(poke_count(&env, trap)?, 0);
+        assert_eq!(poke_count(&env, env.subscriber_second)?, 1);
         assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            0,
-            "missing subject method never falls back to legacy poke"
-        );
-        assert_eq!(subject_count(&env, trap)?, 0);
-        assert_eq!(subject_count(&env, env.subscriber_no_args)?, 1);
-        assert_eq!(
-            subjects(&env, env.subscriber_no_args)?[0].first_block_index,
+            matches_for(&env, env.subscriber_second)?[0].first_block_index,
             index
         );
         Ok(())
@@ -1947,11 +2003,11 @@ mod tests {
                 Env::new()?
             };
             subject_receiver(&env, env.subscriber)?;
-            subject_receiver(&env, env.subscriber_no_args)?;
+            subject_receiver(&env, env.subscriber_second)?;
             subject_receiver(&env, env.cmc)?;
             let a = env.subscriber;
             let b = env.cmc;
-            let c = env.subscriber_no_args;
+            let c = env.subscriber_second;
             set_aliases(
                 &env,
                 vec![
@@ -1995,7 +2051,7 @@ mod tests {
                 None,
             )?;
             env.poll()?;
-            assert_eq!(subject_count(&env, a)?, 0);
+            assert_eq!(poke_count(&env, a)?, 0);
             for declaration in ["A@B.7:1", "C@B.7:10", "B.7", "B@A.7", "A@C.7", "A.7"] {
                 fund_suffix(&env, declaration)?;
             }
@@ -2020,63 +2076,51 @@ mod tests {
             for _ in 0..10 {
                 env.pic.tick();
             }
-            assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, 1);
-            assert_eq!(subject_count(&env, a)?, 0);
-            assert_eq!(
-                query::<_, Vec<PokeMatch>>(&env.pic, a, "debug_last_matches", ())?,
-                vec![PokeMatch {
-                    target: WatchTarget::Subaccount(7),
-                    first_block_index: first_self,
-                    max_amount: 9u8.into()
-                }]
-            );
-            assert_eq!(query::<_, u64>(&env.pic, b, "debug_pokes", ())?, 1);
-            assert_eq!(
-                query::<_, Vec<PokeMatch>>(&env.pic, b, "debug_last_matches", ())?,
-                vec![PokeMatch {
-                    target: WatchTarget::Subaccount(7),
-                    first_block_index: first_b,
-                    max_amount: 1_500_000_000u64.into()
-                }]
-            );
-            assert_eq!(
-                subjects(&env, b)?,
-                vec![SubjectPokeMatch {
-                    subject: a,
-                    target: WatchTarget::Subaccount(7),
-                    first_block_index: first_self,
-                    max_amount: 9u8.into()
-                }]
-            );
-            let actual = subjects(&env, a)?;
-            assert_eq!(actual.len(), 2);
-            assert!(actual.contains(&SubjectPokeMatch {
+            assert_eq!(poke_count(&env, a)?, 1);
+            assert_eq!(poke_count(&env, b)?, 1);
+            let own_a = PokeMatch {
+                subject: a,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first_self,
+                max_amount: 9u8.into(),
+            };
+            let own_b = PokeMatch {
                 subject: b,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: first_b,
-                max_amount: 1_500_000_000u64.into()
-            }));
-            assert!(actual.contains(&SubjectPokeMatch {
+                max_amount: 1_500_000_000u64.into(),
+            };
+            let actual = matches_for(&env, a)?;
+            assert_eq!(actual.len(), 3);
+            assert!(actual.contains(&own_a));
+            assert!(actual.contains(&own_b));
+            assert!(actual.contains(&PokeMatch {
                 subject: c,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: first_c,
-                max_amount: 1u8.into()
+                max_amount: 1u8.into(),
             }));
-            assert_eq!(subject_count(&env, c)?, 1);
+            assert!(!notification(&env, a)?.global_activity);
+            let other = matches_for(&env, b)?;
+            assert_eq!(other.len(), 2);
+            assert!(other.contains(&own_a));
+            assert!(other.contains(&own_b));
+            assert_eq!(poke_count(&env, c)?, 1);
             assert_eq!(
-                subjects(&env, c)?,
-                vec![SubjectPokeMatch {
+                matches_for(&env, c)?,
+                vec![PokeMatch {
                     subject: b,
                     target: WatchTarget::Subaccount(7),
                     first_block_index: large_b,
-                    max_amount: 1_500_000_000u64.into()
+                    max_amount: 1_500_000_000u64.into(),
                 }]
             );
+            assert!(!notification(&env, c)?.global_activity);
             assert_eq!(
                 query::<_, Option<Principal>>(&env.pic, a, "debug_last_caller", ())?,
                 Some(env.event_horizon)
             );
-            // External only must not invoke legacy poke; alias spelling merges only the relation threshold.
+            // External-only activity uses the same callback; alias spelling merges only the relation threshold.
             fund_suffix(&env, "AA@B.7:0.01")?;
             env.poll()?;
             let next =
@@ -2085,11 +2129,10 @@ mod tests {
             for _ in 0..10 {
                 env.pic.tick();
             }
-            assert_eq!(subject_count(&env, a)?, 1);
-            assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, 1);
-            assert_eq!(subjects(&env, a)?[0].first_block_index, next);
-            assert_eq!(subject_count(&env, c)?, 1);
-            // A@A normalizes to the old self store. Later global+external uses one normal two-arg poke.
+            assert_eq!(poke_count(&env, a)?, 2);
+            assert_eq!(matches_for(&env, a)?[0].first_block_index, next);
+            assert_eq!(poke_count(&env, c)?, 1);
+            // A@A normalizes to the self store. Global and external activity share one callback.
             fund_suffix(&env, "A@AA.8")?;
             fund_suffix(&env, "A")?;
             env.poll()?;
@@ -2100,8 +2143,8 @@ mod tests {
                 env.pic.tick();
             }
             assert_eq!(query::<_, u64>(&env.pic, a, "debug_pokes", ())?, count + 1);
-            assert!(query::<_, Vec<PokeMatch>>(&env.pic, a, "debug_last_matches", ())?.is_empty());
-            assert_eq!(subjects(&env, a)?.len(), 1);
+            assert!(notification(&env, a)?.global_activity);
+            assert_eq!(matches_for(&env, a)?.len(), 1);
             let before = env.state()?;
             env.upgrade_same_debug_wasm()?;
             assert_eq!(env.state()?.observed_next_block, before.observed_next_block);
@@ -2112,210 +2155,61 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn legacy_and_subject_receiver_sequences_are_safe() -> Result<()> {
+    fn unified_receiver_decodes_maximum_notifications_with_pinned_cdk_defaults() -> Result<()> {
         let env = Env::new()?;
-        subject_receiver(&env, env.subscriber)?;
-        let legacy = env.pic.create_canister();
-        env.pic.add_cycles(legacy, 200_000_000_000_000);
-        env.pic.install_canister(
-            legacy,
-            wasm(&LEGACY_SUBSCRIBER_WASM, "mock-subscriber-legacy", None)?,
-            vec![],
-            None,
-        );
-        #[derive(CandidType, Deserialize)]
-        struct OldMatch {
-            target: WatchTarget,
-            max_amount: candid::Nat,
+        // Independent crate, ordinary #[ic_cdk::update], no decode_with or quota override.
+        // Exercise actual Wasm entry-point decoding, rather than native Candid alone.
+        for global_activity in [false, true] {
+            for bits in [256usize, 4096, 32768] {
+                let mut amount = candid::Nat::from(1u8);
+                amount.0 <<= bits;
+                let matches: Vec<_> = (0..256u64)
+                    .map(|n| {
+                        let mut principal_bytes = [42u8; 29];
+                        principal_bytes[..8].copy_from_slice(&n.to_be_bytes());
+                        principal_bytes[28] = 1;
+                        PokeMatch {
+                            subject: Principal::from_slice(&principal_bytes),
+                            target: if n % 2 == 0 {
+                                WatchTarget::Subaccount(u64::MAX - n)
+                            } else {
+                                WatchTarget::NeuronNonce(u64::MAX - n)
+                            },
+                            first_block_index: u64::MAX - n,
+                            max_amount: amount.clone() + candid::Nat::from(n),
+                        }
+                    })
+                    .collect();
+                let expected = PokeNotification {
+                    global_activity,
+                    matches,
+                };
+                let bytes = encode_one(&expected)?;
+                assert!(bytes.len() < 2 * 1024 * 1024);
+                let cycles = env.pic.cycle_balance(env.subscriber);
+                decode_args::<()>(&update_raw(
+                    &env.pic,
+                    env.subscriber,
+                    "poke",
+                    bytes.clone(),
+                )?)?;
+                assert_eq!(notification(&env, env.subscriber)?, expected);
+                println!("unified_receiver entries=256 principal_bytes=29 nat_bits={} global={} payload_bytes={} receiver_cycles={}",
+                    bits + 1, global_activity, bytes.len(), cycles.saturating_sub(env.pic.cycle_balance(env.subscriber)));
+            }
         }
-        let own = vec![PokeMatch {
-            target: WatchTarget::Subaccount(0),
-            first_block_index: 0,
-            max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(1u8),
-        }];
-        let foreign: Vec<_> = (0..255)
-            .map(|n| SubjectPokeMatch {
-                subject: env.cmc,
-                target: WatchTarget::Subaccount(n),
-                first_block_index: u64::MAX - n,
-                max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(n),
-            })
-            .collect();
-        let bytes = encode_args((&own, Some(&foreign)))?;
-        for receiver in [legacy, env.subscriber, env.subscriber_no_args] {
-            decode_args::<()>(&update_raw(&env.pic, receiver, "poke", bytes.clone())?)?;
-        }
-        let old: Vec<OldMatch> = query(&env.pic, legacy, "debug_last_matches", ())?;
-        assert_eq!(old.len(), 1);
-        assert_eq!(old[0].max_amount, own[0].max_amount);
-        assert_eq!(subjects(&env, env.subscriber)?, foreign);
+        let global = PokeNotification {
+            global_activity: true,
+            matches: vec![],
+        };
         decode_args::<()>(&update_raw(
             &env.pic,
             env.subscriber,
-            "poke_subjects",
-            encode_one(&foreign)?,
+            "poke",
+            encode_one(&global)?,
         )?)?;
-        assert_eq!(subject_count(&env, env.subscriber)?, 1);
-        assert!(update_raw(&env.pic, legacy, "poke_subjects", encode_one(&foreign)?).is_err());
-        assert_eq!(query::<_, u64>(&env.pic, legacy, "debug_pokes", ())?, 1);
-        set_aliases(
-            &env,
-            vec![CanisterAlias {
-                alias: "L".into(),
-                canister_id: legacy,
-            }],
-            "",
-            None,
-        )?;
-        refresh_aliases(&env)?;
-        env.poll()?;
-        fund_suffix(&env, "L.7")?;
-        env.poll()?;
-        env.append(
-            account_id(Principal::from_slice(&[91, 1]), [0; 32]),
-            account_id(legacy, numbered(7)),
-            123,
-            None,
-        )?;
-        env.poll()?;
-        for _ in 0..12 {
-            env.pic.tick();
-        }
-        assert_eq!(
-            query::<_, u64>(&env.pic, legacy, "debug_pokes", ())?,
-            2,
-            "old two-field record decodes production two-argument one-way call"
-        );
-        assert_eq!(
-            query::<_, Option<Principal>>(&env.pic, legacy, "debug_last_caller", ())?,
-            Some(env.event_horizon)
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[ignore = "builds wasm and runs PocketIC"]
-    fn generated_subscriber_entrypoints_obey_candid_argument_compatibility() -> Result<()> {
-        let pic = PocketIcBuilder::new().with_application_subnet().build();
-        let vector_subscriber = pic.create_canister();
-        let no_args_subscriber = pic.create_canister();
-        for subscriber in [vector_subscriber, no_args_subscriber] {
-            pic.add_cycles(subscriber, 200_000_000_000_000);
-        }
-        pic.install_canister(
-            vector_subscriber,
-            wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?,
-            vec![],
-            None,
-        );
-        pic.install_canister(
-            no_args_subscriber,
-            wasm(&SUBSCRIBER_NO_ARGS_WASM, "mock-subscriber-no-args", None)?,
-            vec![],
-            None,
-        );
-
-        let empty_payload = encode_one(Vec::<PokeMatch>::new())?;
-        for subscriber in [vector_subscriber, no_args_subscriber] {
-            let reply = update_raw(&pic, subscriber, "poke", empty_payload.clone())?;
-            decode_args::<()>(&reply)?;
-        }
-        assert_eq!(
-            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
-            1
-        );
-        assert_eq!(
-            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
-            1
-        );
-        assert!(
-            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?
-                .is_empty()
-        );
-
-        // The general `update` helper uses `encode_one(())`, which is one null
-        // argument. This arity-sensitive case deliberately supplies the true
-        // empty argument sequence instead.
-        let zero_arguments = encode_args(())?;
-        let reply = update_raw(&pic, no_args_subscriber, "poke", zero_arguments.clone())?;
-        decode_args::<()>(&reply)?;
-        assert!(pic
-            .update_call(
-                vector_subscriber,
-                Principal::anonymous(),
-                "poke",
-                zero_arguments
-            )
-            .is_err());
-        assert_eq!(
-            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
-            1
-        );
-        assert_eq!(
-            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
-            2
-        );
-
-        let matches = vec![
-            PokeMatch {
-                target: WatchTarget::Subaccount(7),
-                first_block_index: (1u64 << 53) + 1,
-                max_amount: candid::Nat::from(9u8),
-            },
-            PokeMatch {
-                target: WatchTarget::NeuronNonce(11),
-                first_block_index: u64::MAX,
-                max_amount: candid::Nat::from_str("18446744073709551616")?,
-            },
-        ];
-        let nonempty_payload = encode_one(&matches)?;
-        for subscriber in [vector_subscriber, no_args_subscriber] {
-            let reply = update_raw(&pic, subscriber, "poke", nonempty_payload.clone())?;
-            decode_args::<()>(&reply)?;
-        }
-        assert_eq!(
-            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
-            2
-        );
-        assert_eq!(
-            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
-            3
-        );
-        assert_eq!(
-            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?,
-            matches
-        );
-        assert_eq!(
-            query::<_, Option<Principal>>(&pic, vector_subscriber, "debug_last_caller", ())?,
-            Some(Principal::anonymous())
-        );
-        assert_eq!(
-            query::<_, Option<Principal>>(&pic, no_args_subscriber, "debug_last_caller", ())?,
-            Some(Principal::anonymous())
-        );
-        let full: Vec<_> = (0..256u64)
-            .map(|n| PokeMatch {
-                target: WatchTarget::Subaccount(n),
-                first_block_index: u64::MAX - n,
-                max_amount: candid::Nat::from(u128::MAX) + candid::Nat::from(n),
-            })
-            .collect();
-        let payload = encode_one(&full)?;
-        for subscriber in [vector_subscriber, no_args_subscriber] {
-            decode_args::<()>(&update_raw(&pic, subscriber, "poke", payload.clone())?)?;
-        }
-        assert_eq!(
-            query::<_, Vec<PokeMatch>>(&pic, vector_subscriber, "debug_last_matches", ())?,
-            full
-        );
-        assert_eq!(
-            query::<_, u64>(&pic, vector_subscriber, "debug_pokes", ())?,
-            3
-        );
-        assert_eq!(
-            query::<_, u64>(&pic, no_args_subscriber, "debug_pokes", ())?,
-            4
-        );
+        assert_eq!(notification(&env, env.subscriber)?, global);
+        assert_eq!(poke_count(&env, env.subscriber)?, 7);
         Ok(())
     }
 
@@ -2432,16 +2326,19 @@ mod tests {
                 received.matches,
                 vec![
                     PokeMatch {
+                        subject: env.subscriber,
                         target: WatchTarget::Subaccount(7),
                         first_block_index: first_seven,
                         max_amount: candid::Nat::from(15 * threshold)
                     },
                     PokeMatch {
+                        subject: env.subscriber,
                         target: WatchTarget::Subaccount(8),
                         first_block_index: first_eight,
                         max_amount: candid::Nat::from(3 * threshold)
                     },
                     PokeMatch {
+                        subject: env.subscriber,
                         target: WatchTarget::NeuronNonce(42),
                         first_block_index: first_neuron,
                         max_amount: candid::Nat::from(20 * threshold)
@@ -2475,6 +2372,7 @@ mod tests {
             )?;
             env.poll()?;
             let next = env.wait_for_matches(&[PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: next_index,
                 max_amount: candid::Nat::from(threshold),
@@ -2490,24 +2388,24 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn shared_icp_mixed_receiver_styles_cover_global_specific_and_coalescing() -> Result<()> {
+    fn shared_icp_unified_notifications_cover_global_specific_and_coalescing() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
 
         env.admit_for(env.subscriber, 7, None, 1_000_000_000)?;
-        env.admit_for(env.subscriber_no_args, 7, None, 1_000_000_000)?;
+        env.admit_for(env.subscriber_second, 7, None, 1_000_000_000)?;
         assert!(env.subscription_for(env.subscriber, 7)?.is_some());
-        assert!(env.subscription_for(env.subscriber_no_args, 7)?.is_some());
+        assert!(env.subscription_for(env.subscriber_second, 7)?.is_some());
 
         env.admit_global_for(env.subscriber, GLOBAL_BASE_E8S)?;
         let vector_before_second_global = env.subscriber_observation()?.pokes;
-        env.admit_global_for(env.subscriber_no_args, GLOBAL_BASE_E8S)?;
+        env.admit_global_for(env.subscriber_second, GLOBAL_BASE_E8S)?;
         env.wait_for_pokes(vector_before_second_global + 1)?;
         assert!(env.global_subscription_for(env.subscriber)?);
-        assert!(env.global_subscription_for(env.subscriber_no_args)?);
+        assert!(env.global_subscription_for(env.subscriber_second)?);
 
         let vector_global_before = env.subscriber_observation()?.pokes;
-        let no_args_global_before = env.no_args_subscriber_observation()?.pokes;
+        let second_global_before = env.second_subscriber_observation()?.pokes;
         let dispatch_global_before = env.poke_counts()?;
         env.append(
             account_id(Principal::from_slice(&[90]), [0; 32]),
@@ -2517,11 +2415,16 @@ mod tests {
         )?;
         env.poll()?;
         let vector_global = env.wait_for_pokes(vector_global_before + 1)?;
-        let no_args_global = env.wait_for_no_args_pokes(no_args_global_before + 1)?;
+        let second_global = env.wait_for_second_pokes(second_global_before + 1)?;
         assert_eq!(vector_global.pokes, vector_global_before + 1);
         assert!(vector_global.matches.is_empty());
+        assert!(vector_global.global_activity);
+        assert!(notification(&env, env.subscriber_second)?.global_activity);
+        assert!(notification(&env, env.subscriber_second)?
+            .matches
+            .is_empty());
         assert_eq!(vector_global.last_caller, Some(env.event_horizon));
-        assert_eq!(no_args_global.last_caller, Some(env.event_horizon));
+        assert_eq!(second_global.last_caller, Some(env.event_horizon));
         assert_eq!(
             env.poke_counts()?,
             vec![dispatch_global_before[0] + 2, dispatch_global_before[1] + 2],
@@ -2529,7 +2432,7 @@ mod tests {
         );
 
         let vector_specific_before = vector_global.pokes;
-        let no_args_specific_before = no_args_global.pokes;
+        let second_specific_before = second_global.pokes;
         let dispatch_specific_before = env.poke_counts()?;
         let source = account_id(Principal::from_slice(&[92]), [0; 32]);
         let mut matching_indices = Vec::new();
@@ -2544,25 +2447,28 @@ mod tests {
         for amount in [4, 8] {
             env.append(
                 source.clone(),
-                account_id(env.subscriber_no_args, numbered(7)),
+                account_id(env.subscriber_second, numbered(7)),
                 amount,
                 None,
             )?;
         }
         env.poll()?;
         let vector_specific = env.wait_for_pokes(vector_specific_before + 1)?;
-        let no_args_specific = env.wait_for_no_args_pokes(no_args_specific_before + 1)?;
+        let second_specific = env.wait_for_second_pokes(second_specific_before + 1)?;
         assert_eq!(
             vector_specific.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(9u8),
             }],
-            "specific matches take precedence over the same subscriber's global interest"
+            "global activity and specific matches are carried together"
         );
         assert_eq!(vector_specific.last_caller, Some(env.event_horizon));
-        assert_eq!(no_args_specific.last_caller, Some(env.event_horizon));
+        assert!(vector_specific.global_activity);
+        assert!(notification(&env, env.subscriber_second)?.global_activity);
+        assert_eq!(second_specific.last_caller, Some(env.event_horizon));
         assert_eq!(
             env.poke_counts()?,
             vec![
@@ -2583,22 +2489,22 @@ mod tests {
             vector_specific_before + 1
         );
         assert_eq!(
-            env.no_args_subscriber_observation()?.pokes,
-            no_args_specific_before + 1
+            env.second_subscriber_observation()?.pokes,
+            second_specific_before + 1
         );
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn generic_icrc3_specific_activity_executes_both_receiver_styles() -> Result<()> {
+    fn generic_icrc3_specific_activity_executes_both_receivers() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.admit_for(env.subscriber, 19, None, 1_000_000_000)?;
-        env.admit_for(env.subscriber_no_args, 19, None, 1_000_000_000)?;
+        env.admit_for(env.subscriber_second, 19, None, 1_000_000_000)?;
 
         let vector_before = env.subscriber_observation()?.pokes;
-        let no_args_before = env.no_args_subscriber_observation()?.pokes;
+        let second_before = env.second_subscriber_observation()?.pokes;
         let dispatch_before = env.poke_counts()?;
         let source = account_id(Principal::from_slice(&[93]), [0; 32]);
         let mut matching_indices = Vec::new();
@@ -2611,7 +2517,7 @@ mod tests {
             )?);
             env.append_observed(
                 source.clone(),
-                account_id(env.subscriber_no_args, numbered(19)),
+                account_id(env.subscriber_second, numbered(19)),
                 amount - 1,
                 None,
             )?;
@@ -2619,17 +2525,20 @@ mod tests {
         env.poll()?;
 
         let vector = env.wait_for_pokes(vector_before + 1)?;
-        let no_args = env.wait_for_no_args_pokes(no_args_before + 1)?;
+        let second = env.wait_for_second_pokes(second_before + 1)?;
         assert_eq!(
             vector.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(19),
                 first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(13u8),
             }]
         );
         assert_eq!(vector.last_caller, Some(env.event_horizon));
-        assert_eq!(no_args.last_caller, Some(env.event_horizon));
+        assert!(!vector.global_activity);
+        assert!(!notification(&env, env.subscriber_second)?.global_activity);
+        assert_eq!(second.last_caller, Some(env.event_horizon));
         assert_eq!(
             env.poke_counts()?,
             vec![dispatch_before[0] + 2, dispatch_before[1] + 2]
@@ -2715,6 +2624,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::NeuronNonce(nonce),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(2_000_000u64),
@@ -2754,6 +2664,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::NeuronNonce(nonce),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(77u8),
@@ -2926,6 +2837,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(256),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(123_456u64),
@@ -2933,6 +2845,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(256),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(123_456u64),
@@ -2981,11 +2894,13 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::NeuronNonce(0),
                     first_block_index: nonce_zero_index,
                     max_amount: candid::Nat::from(100u8),
                 },
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::NeuronNonce(2),
                     first_block_index: nonce_two_index,
                     max_amount: candid::Nat::from(200u16),
@@ -3035,16 +2950,19 @@ mod tests {
         env.poll()?;
         let expected = vec![
             PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::NeuronNonce(0),
                 first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(10u8),
             },
             PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::NeuronNonce(1),
                 first_block_index: matching_indices[1],
                 max_amount: candid::Nat::from(20u8),
             },
             PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::NeuronNonce(2),
                 first_block_index: matching_indices[2],
                 max_amount: candid::Nat::from(30u8),
@@ -3073,6 +2991,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(256),
             first_block_index: matching_index,
             max_amount: amount.clone(),
@@ -3080,6 +2999,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(256),
                 first_block_index: matching_index,
                 max_amount: amount,
@@ -3164,6 +3084,7 @@ mod tests {
         }
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_indices[0],
             max_amount: candid::Nat::from(2_000_000u64),
@@ -3171,6 +3092,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_indices[0],
                 max_amount: candid::Nat::from(2_000_000u64),
@@ -3212,6 +3134,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
@@ -3463,6 +3386,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
@@ -3470,6 +3394,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -3572,6 +3497,7 @@ mod tests {
         )?;
         later_transfer.poll()?;
         later_transfer.wait_for_matches(&[PokeMatch {
+            subject: later_transfer.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
@@ -3584,6 +3510,7 @@ mod tests {
                 ()
             )?,
             vec![PokeMatch {
+                subject: later_transfer.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -3606,6 +3533,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(1u8),
@@ -3613,6 +3541,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -3693,6 +3622,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -3871,6 +3801,7 @@ mod tests {
         assert_eq!(
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -4055,6 +3986,7 @@ mod tests {
         assert_eq!(
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(41u8),
@@ -4189,16 +4121,19 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::Subaccount(0),
                     first_block_index: matching_indices[0],
                     max_amount: candid::Nat::from(1u8)
                 },
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::Subaccount(128),
                     first_block_index: matching_indices[1],
                     max_amount: candid::Nat::from(1u8)
                 },
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::Subaccount(255),
                     first_block_index: matching_indices[2],
                     max_amount: candid::Nat::from(1u8)
@@ -4370,6 +4305,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(512),
             first_block_index: matching_index,
             max_amount: amount,
@@ -4414,11 +4350,13 @@ mod tests {
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::Subaccount(11),
                     first_block_index: first_indices[2],
                     max_amount: candid::Nat::from(10_000_000u64)
                 },
                 PokeMatch {
+                    subject: env.subscriber,
                     target: WatchTarget::Subaccount(18),
                     first_block_index: first_indices[3],
                     max_amount: candid::Nat::from(100_000_000u64)
@@ -4470,6 +4408,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: later_indices[1],
                 max_amount: candid::Nat::from(1u8),
@@ -4610,6 +4549,7 @@ mod tests {
         assert_eq!(
             received.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(23u8),
@@ -4625,23 +4565,23 @@ mod tests {
         let env = Env::new()?;
         env.poll()?;
         env.admit_global(GLOBAL_BASE_E8S)?;
-        env.admit_for(env.subscriber_no_args, 7, None, 1_000_000_000)?;
+        env.admit_for(env.subscriber_second, 7, None, 1_000_000_000)?;
         // Drain the earlier global wake before enabling the receiver trap.
         for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
             env.pic.tick();
         }
         let global_before = env.subscriber_observation()?.pokes;
-        let specific_before = env.no_args_subscriber_observation()?.pokes;
+        let specific_before = env.second_subscriber_observation()?.pokes;
         let counts = env.poke_counts()?;
         update::<_, ()>(&env.pic, env.subscriber, "debug_set_trap", true)?;
         env.append(
             account_id(Principal::from_slice(&[9]), [0; 32]),
-            account_id(env.subscriber_no_args, numbered(7)),
+            account_id(env.subscriber_second, numbered(7)),
             13,
             None,
         )?;
         env.poll()?;
-        let received = env.wait_for_no_args_pokes(specific_before + 1)?;
+        let received = env.wait_for_second_pokes(specific_before + 1)?;
         assert_eq!(received.pokes, specific_before + 1);
         assert_eq!(received.last_caller, Some(env.event_horizon));
         assert_eq!(env.poke_counts()?, vec![counts[0] + 2, counts[1] + 2]);
@@ -4724,6 +4664,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -4894,6 +4835,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
@@ -5153,6 +5095,7 @@ mod tests {
         assert_eq!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: live,
                 max_amount: candid::Nat::from(17u8),
@@ -5293,6 +5236,7 @@ mod tests {
         )?;
         env.poll()?;
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(5u8),
@@ -5347,6 +5291,7 @@ mod tests {
         assert_eq!(
             env.subscriber_observation()?.matches,
             vec![PokeMatch {
+                subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
                 first_block_index: live,
                 max_amount: candid::Nat::from(23u8),
@@ -5403,6 +5348,7 @@ mod tests {
         );
         assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: live,
             max_amount: candid::Nat::from(29u8),
@@ -5544,6 +5490,7 @@ mod tests {
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, 1);
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: matching_index,
             max_amount: candid::Nat::from(31u8),
@@ -5597,6 +5544,7 @@ mod tests {
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, start + 257);
         env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
             target: WatchTarget::Subaccount(7),
             first_block_index: start + 256,
             max_amount: candid::Nat::from(37u8),

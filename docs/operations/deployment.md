@@ -482,15 +482,19 @@ the new additive stable stores, E-table revision and ordinary notification flow.
 Then deploy the reviewed frontend whose backend hash pin matches the installed
 reviewed backend. Verify the coordinated final module hashes. Deployment,
 controller changes, funding transfers and domain actions require separate
-express approval. Existing receivers consume external-only hints only after
-they implement `poke_subjects`; do not assume Jupiter subscribers already do.
+express approval.
 
-The reviewed alias/subject backend candidate built from source revision
-`d68b5d8` has independently verified canonical SHA-256
-`1e15b0272a1c692ab8c761a8645bbb575eefe69bf5d5a5a48b9356f9be8a707e`.
-The frontend registry pin is coordinated to this artifact, not the earlier
-`68db55e1…` module or the superseded first intermediate build. Final release
-gates require rebuilding the pinned frontend, two independent clean canonical
-builds, both export audits, the artifact manifest, and agreement between the
-embedded pin and final backend artifact. See the release evidence accompanying
-the final source revision. None of these preparations installs a live module.
+Before relying on callbacks, coordinate a separate Jupiter Faucet/Disburser
+receiver update to the exact `poke(PokeNotification)` contract in
+[candid/subscriber.did](../../candid/subscriber.did). Presently deployed receiver
+ABIs are incompatible. New receivers must authenticate Event Horizon, select
+matches belonging to their own principals, and retain their existing local
+target/threshold filters. Disburser-to-Historian forwarding is separate and is
+not implicitly changed. No fallback callback is available.
+
+Final artifact identities and validation evidence are recorded in the
+[release report](../codex/permanent-aliases-subjects-release.md). The frontend's
+reviewed backend hash must match the canonical backend artifact. Require two
+independent clean Docker builds, both production export audits, manifest
+verification and agreement with the embedded frontend pin. None of these
+preparations installs a live module.

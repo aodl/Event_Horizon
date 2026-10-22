@@ -525,13 +525,12 @@ for canister_lib in [
     root/'tests/mocks/mock-historian/src/lib.rs',
     root/'tests/mocks/mock-cmc/src/lib.rs',
     root/'tests/mocks/mock-subscriber/src/lib.rs',
-    root/'tests/mocks/mock-subscriber-no-args/src/lib.rs',
     root/'tests/mocks/mock-sns-root/src/lib.rs',
 ]:
     assert 'ic_cdk::export_candid!();' in canister_lib.read_text(), f'missing export_candid in {canister_lib}'
 
 lock=(root/'Cargo.lock').read_text()
-for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-subscriber-no-args','mock-sns-root']:
+for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-sns-root']:
     assert f'name = "{package}"' in lock, f'Cargo.lock missing workspace package {package}'
 
 link_docs = [root/'README.md', root/'SPEC.md', root/'tools/xtask/README.md']
@@ -554,16 +553,26 @@ for path in ['canisters/event-horizon/src/clients/subscriber.rs', 'tests/mocks/m
     text = (root/path).read_text()
     record = text.split('struct PokeMatch {', 1)[1].split('}', 1)[0]
     assert 'first_block_index: u64' in record
+    assert 'subject: Principal' in record
     assert 'Option<' not in record
 assert 'no block index, complete transaction record' not in spec
 
 assert 'preview_subscription : (text)' in backend_did
-assert 'poke : (vec PokeMatch, opt vec SubjectPokeMatch)' in subscriber_did
-assert 'poke_subjects : (vec SubjectPokeMatch)' in subscriber_did
+assert 'poke : (PokeNotification) -> ();' in subscriber_did
+assert 'global_activity : bool' in subscriber_did
+assert 'matches : vec PokeMatch' in subscriber_did
+assert 'poke_subjects' not in subscriber_did
+assert 'opt ' not in subscriber_did
 assert 'subject : principal' in subscriber_did
 sender=(root/'canisters/event-horizon/src/clients/subscriber.rs').read_text()
-assert 'call.with_args(&(notification.self_matches, external))' in sender
-assert 'notification.method()' in sender and 'call.get_cost()' in sender
+assert 'Call::bounded_wait(subscriber, "poke").with_arg(&notification)' in sender
+assert 'call.get_cost()' in sender and 'call.oneway()' in sender
+for obsolete in ['poke_subjects', 'self_matches', 'subject_matches', 'with_args', 'notification.method()']:
+    assert obsolete not in sender
+receiver = (root/'tests/mocks/mock-subscriber/src/lib.rs').read_text()
+assert 'fn poke(notification: PokeNotification)' in receiver
+assert 'decode_with' not in receiver and 'skipping_quota' not in receiver
+assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
 for region in ['ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9)', 'ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10)', 'EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11)']:
     assert region in (root/'canisters/event-horizon/src/state.rs').read_text()
 assert 'resolve_subscription_memo(memo, state::alias)' in polling

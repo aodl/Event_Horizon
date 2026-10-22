@@ -48,13 +48,14 @@ cargo test --locked -p event-horizon-pocketic --lib '<exact-test-name>' \
 
 One-way subscriber callbacks are tested with a bounded condition-based PocketIC wait. Exhaustion reports the expected condition, subscriber principal and receiver style, deterministic tick bound, elapsed time, the last mock-subscriber observation, and Event Horizon debug state. Positive delivery assertions require a fresh receiver-side counter increment and verify the recorded caller; Event Horizon's accepted one-way-call counter alone is not treated as execution evidence.
 
-Ordinary Rust tests distinguish a zero-argument Candid sequence, one `null`
-argument, and one empty match vector, then cover both zero-argument and
-vector-taking decoders with empty, nonempty, and 256-match payloads. A direct
-PocketIC case sends identical encoded vectors through the two fixtures' real
-CDK-generated entry points. Production-path cases then use ordinary
-Faucet/Historian admission and Ledger polling with both receiver styles in one
-instance, across the shared ICP reader and a separate ICRC-3 observed ledger.
+The separately compiled mock subscriber implements the exact required
+`PokeNotification` record using the pinned CDK's ordinary generated entry point
+and unchanged default decoder configuration. PocketIC decodes 256-entry actual
+messages with 29-byte subject principals, full-width indices/targets and
+257-, 4,097- and 32,769-bit Nat amounts. Production-path cases exercise self,
+external, mixed and global/specific callbacks through actual one-way dispatch
+on ICP, ICRC-3 and SNS, including the combined 256-match cap. No compatibility
+receiver or alternate method remains.
 
 ## What PocketIC covers
 
@@ -70,9 +71,8 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - non-Faucet admission rejection;
 - unfiltered and thresholded watched accounts;
 - one poke carrying deterministic target/first-block-index/maximum-amount matches per subscriber per poll, bounded to 256 specific targets;
-- zero-argument wake-up receivers alongside payload-aware receivers, including
-  real entry-point arity rejection, global and specific delivery, caller
-  authentication evidence, coalescing, precedence, and no-new-work behavior;
+- unified record receivers, explicit global and specific activity, caller
+  identity evidence, coalescing, deterministic priority, and no-new-work behavior;
 - NNS and verified-SNS neuron ownership, nonce derivation, ranges, and exact raw amounts;
 - SNS Root transport and relationship failures that remain fail-closed and log once per uninterrupted failure episode;
 - ordinary full-width `u64` targets, arbitrary-precision `Nat` callbacks, and the outbound 256-target bound;
@@ -257,7 +257,7 @@ for evidence and the limitations of dated mode/liquid readings.
 
 Specific-match regressions independently aggregate the earliest qualifying observed
 Ledger block index and largest individual amount across pages, thresholds,
-admissions and archive gaps. Both real receiver styles decode the new payload;
+admissions and archive gaps. The separately compiled unified receiver decodes the new payload;
 full-width `nat64` indices and 256-entry Candid vectors are covered. Aggregates
 remain transient across ordinary upgrades and separate polls.
 
@@ -270,10 +270,9 @@ verified before a genuine old-to-new in-place upgrade preserving existing
 subscriptions, financial state, pricing and cursors. This is separate from
 new-to-new upgrade tests for aliases and external relations.
 
-The updated receiver implements both two-argument `poke` and `poke_subjects`.
-Separate fixtures retain Jupiter-compatible one-vector, old two-field records,
-and zero-argument receivers. Tests use actual encoded Candid and production
-oneway dispatch, including external-only safety and failed-method isolation.
+The unified receiver consumes one subject-aware `poke` record. Tests use actual
+encoded Candid and production oneway dispatch, including external-only activity,
+explicit global classification and failed-method isolation.
 External ranges exercise ICP, ICRC-3 and SNS governance, multi-page aggregation,
 archives, staged-admission failure recovery and the combined 256-hint cap.
 The shared-account capacity case measures 1,024 indexed external watchers with

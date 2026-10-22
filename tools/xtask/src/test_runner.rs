@@ -1048,13 +1048,18 @@ mod tests {
 
     #[test]
     fn invalid_timeout_is_rejected_before_spawn() {
-        let marker = Path::new("/tmp/event-horizon-invalid-timeout-spawned");
-        let _ = std::fs::remove_file(marker);
+        let marker = std::env::temp_dir().join("event-horizon-invalid-timeout-spawned");
+        let _ = std::fs::remove_file(&marker);
         for value in ["0", "not-a-number", "18446744073709551615"] {
             let spec = SuiteSpec::command_with_env(
                 "invalid timeout",
                 "sh",
-                &["-c", "touch /tmp/event-horizon-invalid-timeout-spawned"],
+                &[
+                    "-c",
+                    r#"touch -- "$1""#,
+                    "invalid-timeout",
+                    marker.to_str().unwrap(),
+                ],
                 &[(COMMAND_TIMEOUT_ENV, value)],
                 Parser::Command,
                 "true",

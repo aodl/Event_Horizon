@@ -1,66 +1,60 @@
-# Permanent aliases and subject subscriptions: release record
+# Permanent aliases, subject subscriptions and unified notifications
 
-This release candidate prepares permanent Historian aliases and independent
-subscribers watching another canister's accounts. It authorizes no mainnet
-operation. The normative contract is [SPEC.md](../../SPEC.md); integration and
-security advice remains centralized in the [subscriber guide](../subscriber-guide.md).
+This release retains the completed alias, admission, indexed subscription,
+matching, frontend and upgrade implementation. No mainnet operation is authorized
+or performed. The normative contract is [SPEC.md](../../SPEC.md).
 
-## Release status: blocked on decoder compatibility
+## Architectural decision
 
-The requested unconditional one-vector receiver compatibility cannot currently
-be established for large mixed callbacks. The pinned CDK configures Candid's
-skipping quota to 10,000. A native probe using that exact budget accepts one
-self plus 64 external hints, but rejects one self plus 100 or 255 external
-hints even with one-unit amounts. Both the current one-vector shape and the
-older two-field record fail. The receiving-canister regression also rejects
-the large optional vector with `Skipping cost exceeds the limit`.
+There are no users or admitted subscribers requiring callback compatibility.
+The decoder-budget blocker is eliminated by intentionally replacing the old
+callback with one required subject-aware notification record. Every match,
+including self, carries its subject. Global activity is an independent explicit
+boolean; false plus no matches is never sent. There are no compatibility
+receivers, optional extra arguments, alternate dispatch methods, probes,
+acknowledgements or retries. The 256-specific-match bound is unchanged.
 
-The regression retains the required success assertion and uses a valid combined
-256-hint payload; no receiver budget or protocol limit was weakened. The full
-managed suite continues independent checks, but release completion is blocked.
-A requirement decision is needed: explicitly accept documented decoder-budget
-failures as a best-effort limitation, require bounded receiver decoder updates,
-or amend the callback/retention policy. No sender-side acknowledgement,
-capability probing or fallback has been added to conceal this limitation.
+The new separately compiled receiver uses the pinned `ic-cdk` 0.20.1 ordinary
+update macro. Its actual generated decoder retains the default 10,000 skipping
+quota; no custom decoder or budget adjustment is used. Maximum-count messages
+are decoded through real Wasm entry points in PocketIC. This does not claim
+compatibility with Jupiter's presently deployed receiver ABI.
 
-Final two-build reproducibility was intentionally stopped after this failure.
-The hashes below are independently verified intermediate candidate artifacts,
-not a completed deployable release. All final gates must be rerun after the
-compatibility decision and any resulting changes. No mainnet action occurred.
+## Final callback Candid
 
-## Reviewed sources and artifact identity
+```candid
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+type PokeMatch = record {
+  subject : principal;
+  target : PokeTarget;
+  first_block_index : nat64;
+  max_amount : nat;
+};
+type PokeNotification = record {
+  global_activity : bool;
+  matches : vec PokeMatch;
+};
+service : {
+  poke : (PokeNotification) -> ();
+}
+```
 
-Event Horizon upstream was checked against
-`44d83c04a190dba2b8420c0d812e1fd8ee07ff19` before implementation and re-fetched
-during release preparation; it remained at that revision. Jupiter's actual
-Historian API and E-only publication were inspected at prerequisite
-`1c86d9b32c774a470489b4e4a5cfe4ddfaae7341`. This source inspection does not verify
-that those Jupiter contracts are installed live.
+`global_activity` reports a qualifying global subscription match during the
+completed poll. The vector independently reports specific matches across every
+subject, with either boolean value. Empty matches never imply global activity.
+Deterministic ordering is subject principal then target kind/number. Each
+retained identity independently preserves its minimum qualifying block index
+and maximum individual qualifying Nat. There is one attempted call per
+subscriber per completed poll, globally matched subscribers first, each phase
+in principal order. Actual encoded call cost protects the reserve; failures
+continue to later subscribers. Shared-account watchers have no arbitrary cap.
 
-The backend runtime candidate was built canonically from
-`d68b5d88199947fc3f3550698f8d0690971eb0f9`. The coordinated frontend pin and bundle
-were built from `f02b28e1cb2ef51e4aba47a1a46b417d91b5cc73`. The final release
-source is the clean commit containing this record and its source manifest;
-canonical commands print its full revision. Later changes in that commit are
-regression coverage, audit checks and this record; they must reproduce these
-same runtime artifacts:
+## Production backend Candid
 
-| Uncompressed canonical artifact | SHA-256 |
-| --- | --- |
-| Backend | `1e15b0272a1c692ab8c761a8645bbb575eefe69bf5d5a5a48b9356f9be8a707e` |
-| Frontend | `8e16de80f439c1e1166906a008b92f0e26d01b8f2c70a8a428fc4e141c716bb5` |
-
-These hashes were obtained from Docker artifacts, verified with the artifact
-manifest and independently recomputed with Python's SHA-256. The frontend
-registry and rebuilt bundle pin the backend hash above; the pinned string was
-also checked in the canonical frontend Wasm. The initial intermediate artifact
-from `0886cad` was superseded by the strict admission-order fix and must not be
-used. Final two-build reproducibility and export gates below remain mandatory
-from the final clean revision; artifact identity alone is insufficient.
-
-## Production Candid
-
-The exact backend interface is:
+The backend's application interface is retained, including alias-aware preview:
 
 ```candid
 type SubscriptionPreview = record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 };
@@ -93,39 +87,6 @@ service : (InitArgs) -> {
   preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
 }
 ```
-
-No backend application update method was introduced. `preview_subscription`
-uses the same parser/resolver as admission, performs no awaits or writes, and
-reports syntax/resolution, never funding or admission. Production exports are
-limited to these three queries; the frontend still exposes exactly
-`http_request` as its application method. The binary audit also rejects debug
-markers and a compiled-in canonical Event Horizon instance identity.
-
-The canonical subscriber interface is:
-
-```candid
-type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
-type PokeMatch = record { target : PokeTarget; first_block_index : nat64; max_amount : nat };
-// Event Horizon always sends this payload. A wake-up-only subscriber may
-// instead implement `poke : () -> ()`; see docs/subscriber-guide.md.
-type SubjectPokeMatch = record { subject : principal; target : PokeTarget; first_block_index : nat64; max_amount : nat };
-service : { poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> (); poke_subjects : (vec SubjectPokeMatch) -> (); }
-```
-
-The first vector contains only self-subject matches. Self-only and global-only
-calls have a null second argument. Mixed self/external or genuine global/external
-activity uses one normal two-argument call. External-only activity uses only
-`poke_subjects`; missing/trapping methods do not cause a fallback or stop other
-attempts. Old one-vector, old two-field-record, and zero-argument `poke` receivers
-retain their intended self/global compatibility. External-aware receivers need
-both methods. There is no capability negotiation or sender retry.
-
-The actual global-match flag controls global-first dispatch, with deterministic
-principal order within each phase. Payloads retain deterministic target order
-within each vector, and external vectors additionally sort by subject principal.
-At most one call is attempted per subscriber per completed poll. The combined
-self/external first-retained hint cap remains 256. Remote delivery/execution
-order, Index visibility and Index completion remain unguaranteed.
 
 ## Identity, funding and storage
 
@@ -187,28 +148,7 @@ cannot suppress updates to an already-retained identity. These aggregates and
 page-local decoded watcher caches are transient, with no transaction journal,
 additional Ledger reads, archive traversal or Index dependency.
 
-## Regression and upgrade evidence
-
-The managed suites enumerate 137 Rust tests, 138 frontend tests and 119 PocketIC
-cases. Complete gate results are reported alongside the final clean revision;
-this coverage record does not substitute for executing those commands.
-
-New dedicated scenarios cover:
-
-- Alias/principal and explicit-self resolution, all declaration classes,
-  malformed/unknown references, u64 endpoints, 256/257 range bounds, decimals,
-  NNS/SNS derivation, and shared preview/admission parsing.
-- Daily/cache/reserve behavior, failed refresh isolation from polling, additive
-  publication and persistence, and unknown-alias non-replay.
-- Both Ledger readers, A/B/C independently watching B.7, reverse A/B watching,
-  different thresholds and independently correct first indices/maxima, multiple
-  subjects, self/external mixtures, exact route spelling, overlapping ranges,
-  archive gaps, multi-page aggregation and staged-page failure/recovery.
-- Actual Candid and receiving canisters for every receiver shape, full-width
-  indices and large Nat amounts, external-only safety, genuine global/external
-  classification, method failures, 256 combined hints, and caller identity.
-- Debounced preview gating, stale input/instance/disposal responses, unknown
-  aliases and direct-principal fallback, byte bounds, subject roles and E routing.
+## Upgrade evidence
 
 The independently built pre-change debug Wasm comes from the exact reviewed
 44d83c0 source archive, whose source manifest was verified. Its digest is
@@ -222,139 +162,34 @@ subscription/pricing encodings and retained financial/cursor state, adds aliases
 and external relations, upgrades again and verifies coexistence and the external
 threshold. This is a genuine old-to-new upgrade, separate from new-to-new cases.
 
-Existing reader, archive, duplicate-block, admission, neuron, reserve, pricing,
-funding and scheduler regressions remain in the complete managed suite. No test
-asserts remote cross-canister execution ordering.
+## Validation and artifact evidence
 
-## Resource measurements
+Final gate results, canonical artifact identities and measurements are recorded
+below after running validation on this implementation. The earlier intermediate
+candidate hashes are superseded and must not be used for this callback revision.
 
-The initial uncached 1,024-watcher/256-transfer workload exceeded PocketIC's
-40-billion-instruction message limit. Reusing decoded account watchers within a
-page removes repeated stable decoding; staged admissions invalidate the affected
-cache immediately. Both Ledger readers now complete that workload without
-resumable state, dropped subscriptions or altered pricing/limits.
+## Coordinated deployment dependencies
 
-Settled local cycle measurements (30 post-poll ticks; synthetic recipients,
-1,024 independently stored watchers with raw thresholds 0–15 and transfer amount
-20) were:
+Jupiter Faucet and Disburser must implement the exact callback Candid above in
+their separate repository. Authenticate Event Horizon, select matches whose
+subject equals the receiving canister's own principal, and preserve the existing
+local target and threshold filters. Disburser-to-Historian forwarding is a
+separate mechanism and is not automatically changed. No Jupiter source is
+modified and no compatibility branch is added to Event Horizon.
 
-| Incoming transfers to one watched account | Shared ICP cycles | ICRC-3 cycles |
-| --- | ---: | ---: |
-| 1 | 5,904,612,876 | 5,911,610,415 |
-| 32 | 6,132,808,879 | 6,142,259,611 |
-| 256 | 7,780,162,512 | 7,814,511,298 |
+Operators must separately verify Historian's alias API, additive E-only alias
+publication and payout routing. X is retired. Update the incompatible Jupiter
+receivers before relying on Event Horizon notifications. Upgrade Event Horizon
+in place, verify preserved financial state/cursors, and deploy the reviewed
+frontend with its matching backend hash. Mainnet deployments, controller changes,
+funding transfers and domain actions require separate authorization. None was
+performed by this task.
 
-These are local workload measurements, not mainnet forecasts or remote-delivery
-proof. Exact instruction counts are not emitted by this fixture; completion is
-checked under the ordinary message limit. Shared-account work remains
-proportional to the number of interested relations. There are no subscriber
-quotas or speculative new prices.
-
-The existing global-fanout fixture measured 1,463,490,158 cycles for 256
-recipients and 5,791,562,161 for 1,024. Compared with its previous recorded run
-(1,431,240,087 and 5,662,738,686), this is approximately 2.3% higher. The normal
-two-argument encoding adds 32 bytes to the representative self-only (98→130)
-and global-only (44→76) payloads. A real combined 256-hint callback measured
-8,511 bytes in the ICP, ICRC-3 and SNS receiving-canister tests. Subject principal
-bytes additionally increase each external hint. Arbitrary-precision Nat means
-payload sizes depend on actual amounts.
-
-Stable allocation in these fixtures rises from 75,563,008 to 100,728,832 bytes
-with the three new regions: 24 MiB additional initial bucket allocation. Seeding
-1,024 external records fits within that allocation and caused no further stable
-page growth. Records still consume space within those buckets. Call reserve
-checks use the actual chosen method and newly encoded payload's `get_cost()`.
-
-## Required clean-source gates and rollout
-
-Run and retain results for:
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --locked --workspace --all-targets -- -D warnings
-cargo run -p xtask -- test_unit
-POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
-./tools/scripts/security-scan
-./tools/scripts/source-manifest verify
-git diff --check
-npm run verify:reproducible-artifacts
-./tools/scripts/docker-build
-```
-
-The reproducibility command creates two independent clean BuildKit builders,
-uses no build cache, and compares all resulting artifacts byte for byte. Final
-artifact manifests, both production export audits and the frontend's embedded
-backend pin must agree with the hashes above. Dependency security scans retain
-the four existing documented advisory exceptions; no new exception was added.
-
-Outstanding operator work requires separate approval: deploy/verify Jupiter's
-alias API and E routing first; preserve existing state/cursors through an ordinary
-backend upgrade; deploy the reviewed frontend with the matching backend pin;
-verify ordinary ICP/cycles funding, cursors and notification behavior before and
-after. External-aware recipients must implement `poke_subjects` before relying
-on external-only acceleration. Do not assume existing Jupiter receivers already
-do. No canister creation, mainnet deploy/upgrade/reinstall, controller change,
-fund transfer or domain action was performed by this task.
-
-Primary guidance consulted includes the current DFINITY stable-memory and
-multi-canister skills, [ICP timers](https://docs.internetcomputer.org/concepts/timers/),
-[Candid sequence compatibility](https://github.com/dfinity/candid/blob/master/spec/Candid.md),
-[CDK call/cycle APIs](https://docs.rs/ic-cdk/latest/ic_cdk/call/struct.Call.html),
-[ICP Ledger interface](https://github.com/dfinity/ic/blob/master/rs/ledger_suite/icp/ledger.did)
-and [ICRC-3](https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3).
-
-## Files changed
-
-```text
-Cargo.lock
-Cargo.toml
-MANIFEST.sha256
-README.md
-SPEC.md
-candid/jupiter-historian.subset.did
-candid/subscriber.did
-canisters/event-horizon/README.md
-canisters/event-horizon/event_horizon.did
-canisters/event-horizon/event_horizon_debug.did
-canisters/event-horizon/src/aliases.rs
-canisters/event-horizon/src/clients/historian.rs
-canisters/event-horizon/src/clients/subscriber.rs
-canisters/event-horizon/src/lib.rs
-canisters/event-horizon/src/memo.rs
-canisters/event-horizon/src/polling.rs
-canisters/event-horizon/src/state.rs
-canisters/event-horizon/src/subscription.rs
-canisters/frontend/README.md
-canisters/frontend/public/app.bundle.js
-canisters/frontend/public/app.js
-canisters/frontend/public/index.html
-canisters/frontend/public/instances.js
-canisters/frontend/public/memo.js
-canisters/frontend/public/pricing-client.js
-canisters/frontend/public/subscription-preview.js
-canisters/frontend/test/generic.test.mjs
-canisters/frontend/test/helpers.mjs
-canisters/frontend/test/ledger-counter-integration.test.mjs
-canisters/frontend/test/subject-memo.test.mjs
-docs/architecture/economics-pricing.md
-docs/architecture/production-surface.md
-docs/architecture/stable-memory.md
-docs/architecture/trust-model.md
-docs/codex/permanent-aliases-subjects-release.md
-docs/development/testing.md
-docs/operations/deployment.md
-docs/operations/operational-backend.md
-docs/operations/reproducible-builds.md
-docs/subscriber-guide.md
-tests/fixtures/event_horizon_44d83c0_debug.provenance.txt
-tests/fixtures/event_horizon_44d83c0_debug.wasm
-tests/mocks/mock-historian/Cargo.toml
-tests/mocks/mock-historian/src/lib.rs
-tests/mocks/mock-subscriber-legacy/Cargo.toml
-tests/mocks/mock-subscriber-legacy/src/lib.rs
-tests/mocks/mock-subscriber-subjects/Cargo.toml
-tests/mocks/mock-subscriber-subjects/src/lib.rs
-tests/pocketic/src/lib.rs
-tools/audit-wasm.py
-tools/static-check.py
-```
+Primary guidance consulted: current DFINITY
+[multi-canister](https://github.com/dfinity/icskills/blob/main/skills/multi-canister/SKILL.md),
+[stable-memory](https://github.com/dfinity/icskills/blob/main/skills/stable-memory/SKILL.md),
+[canister-security](https://github.com/dfinity/icskills/blob/main/skills/canister-security/SKILL.md),
+[cycles-management](https://github.com/dfinity/icskills/blob/main/skills/cycles-management/SKILL.md),
+[ICRC Ledger](https://github.com/dfinity/icskills/blob/main/skills/icrc-ledger/SKILL.md)
+and [static-site](https://github.com/dfinity/icskills/blob/main/skills/static-site/SKILL.md)
+guidance; pinned CDK macro source is checked locally for actual decoder defaults.

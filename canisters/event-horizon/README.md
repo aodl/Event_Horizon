@@ -48,13 +48,13 @@ admitted.
 
 Qualifying activity is coalesced once per subscriber per poll. A specific callback
 reports sorted subject-qualified target/`first_block_index`/maximum-raw-amount entries.
-Self entries remain in the first vector; external entries use the optional second
-vector, or `poke_subjects` for external-only activity. `poke([], null)` represents
-global-only activity. The minimum index and maximum amount may come from different
-transactions. Direct-Ledger readers use their own cursors and bounded archive-aware
-reconciliation; see the [subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
-Specific matches take precedence when both match, so an
-intentionally global consumer treats either vector shape as a wake-up.
+Every entry includes its subject, including self subscriptions. The single
+`poke(PokeNotification)` also carries `global_activity` independently of specific
+matches. False with empty matches is never sent. The minimum index and maximum
+amount may come from different transactions. Direct-Ledger readers keep their
+own cursors and bounded archive-aware reconciliation; see the
+[subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
+Jupiter's current receivers require a coordinated breaking ABI update.
 
 Within each completed poll, the backend attempts all actually globally matched
 recipients first, including mixed matches with specific payloads, then

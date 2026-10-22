@@ -13,9 +13,8 @@ matching numeric subaccount or neuron nonce with its first qualifying Ledger blo
 transfer amount. Scoped subscribers should normally use target-aware `poke`
 to filter locally approved targets and amount thresholds before expensive work:
 any patron can fund a subscription without the receiving canister's consent.
-A trusted caller is not proof of wanted activity. Zero-argument `poke()` remains
-Candid-compatible for intentional general wake-ups with cheap, bounded/coalesced
-work; it discards those filtering hints. See the [subscriber guide](docs/subscriber-guide.md).
+A trusted caller is not proof of wanted activity. The unified `poke(PokeNotification)`
+reports an explicit global-activity flag and always includes each match’s subject. See the [subscriber guide](docs/subscriber-guide.md).
 Subscribers keep authoritative ledger cursors and independent reconciliation;
 an Index is optional.
 
@@ -35,7 +34,7 @@ uses alias `E` only as an example; every instance uses its reviewed alias:
 The planned IO alias `I` is intended, not published. The full memo—including
 alias, dot, subscriber, scope or range, and optional threshold—must fit
 Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
-Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand once at admission into indexed watched-account relations. `n<nonce>` selects a subject-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. Self/global `poke` remains compatible with older receivers; external-only activity uses `poke_subjects`. A non-empty vector of target/max-amount matches takes precedence and shares a cap of 256 subject-qualified hints.
+Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand once at admission into indexed watched-account relations. `n<nonce>` selects a subject-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. One unified callback reports global activity and at most 256 subject-qualified specific matches together. This intentionally breaks Jupiter’s current receiving ABI; its Faucet and Disburser receivers require a coordinated update before rollout. Their separate forwarding mechanism is unaffected.
 
 A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 

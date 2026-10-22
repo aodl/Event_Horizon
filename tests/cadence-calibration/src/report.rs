@@ -192,7 +192,6 @@ pub fn run(directory: &Path) -> Result<String> {
     }
     let full_delivery_shapes = [
         "real_global_coalesced_10_transactions",
-        "zero_argument_poke_compatibility",
         "range_expanded_32_targets_one_match",
         "mixed_global_and_specific_real_receivers",
     ]
@@ -207,7 +206,7 @@ pub fn run(directory: &Path) -> Result<String> {
         "\nSelected model coefficient: {} backend cycles per additional notification. This independently compares with the earlier approximately 5.49 million-cycle observation, but remains specific to this PocketIC fixture and payload. Synthetic fan-out does not include recipient execution. {}\n\n",
         integer(simulations.calibration.cycles_per_subscriber_notification),
         if full_delivery_shapes {
-            "Dedicated cases separately confirmed real vector receivers, zero-argument `poke()` receivers, ten-transaction coalescing, mixed global/specific delivery, and a 32-target expanded range."
+            "Dedicated cases separately confirmed unified record receivers, ten-transaction coalescing, mixed global/specific delivery, and a 32-target expanded range."
         } else {
             "Those receiver-execution and delivery-shape cases require the full profile and are not claimed by this compact dataset."
         },

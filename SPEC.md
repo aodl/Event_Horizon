@@ -6,7 +6,7 @@ This file is the normative design contract for Event Horizon v1. Implementation 
 
 Event Horizon improves the responsiveness of canisters that react to compatible ICRC token ledgers without becoming part of their correctness path.
 
-Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. A non-empty poke contains specific targets, per-target first qualifying Ledger block indices and maximum qualifying raw transfer amounts; an empty first vector with no external hints signals global-only observed-ledger activity; external-only hints use `poke_subjects`. Each subscriber retains authoritative reconciliation.
+Event Horizon reads an immutable configured Observed Ledger and makes a best-effort target-aware `poke` when relevant activity is observed. Canonical ICP uses its fixed legacy `query_blocks` protocol; every non-ICP observed ledger must support ICRC-1, ICRC-3, and `1xfer`. Each poke contains an explicit `global_activity` flag and subject-qualified specific targets with first qualifying Ledger block indices and maximum qualifying raw transfer amounts. Each subscriber retains authoritative reconciliation.
 
 A missed, rejected, delayed, or duplicated poke must therefore affect only latency.
 
@@ -108,7 +108,7 @@ Each poll captures a fixed exclusive ending boundary from the Ledger chain lengt
 
 For each relevant transfer to an admitted watched account, Event Horizon records independently the minimum qualifying block index and maximum individual qualifying transfer amount for that subject-qualified semantic target in a transient sorted map keyed by subscriber. Generic amounts remain arbitrary-precision `Nat`. At most 256 distinct specific targets are retained per subscriber per poll; later new targets may be omitted, while retained targets may still lower their first indices and increase their maxima. Omission affects wake-up latency only. It separately records global activity and preserves ledger-order admission semantics. Event Horizon never enumerates the global registry per transaction.
 
-Event Horizon attempts at most one poke to each accumulated subscriber. A non-empty target/index/max-amount vector takes precedence even when the same subscriber also matched globally. A subscriber with only a global match receives `poke([], null)`. A poll that processes no transactions produces no global poke.
+Event Horizon attempts at most one poke to each accumulated subscriber. The notification independently reports qualifying global activity and specific matches. A subscriber with only a global match receives `poke(record { global_activity = true; matches = vec {} })`. A poll that processes no transactions produces no global poke.
 
 Within a single completed poll, Event Horizon attempts all globally matched
 subscriber pokes before attempting specific-only subscriber pokes. Each phase
@@ -158,22 +158,43 @@ This is acceptable because subscribers retain authoritative reconciliation.
 ## 8. Poke contract
 
 ```candid
-type PokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
-type PokeMatch = record { target : PokeTarget; first_block_index : nat64; max_amount : nat };
-type SubjectPokeMatch = record { subject : principal; target : PokeTarget; first_block_index : nat64; max_amount : nat };
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+type PokeMatch = record {
+  subject : principal;
+  target : PokeTarget;
+  first_block_index : nat64;
+  max_amount : nat;
+};
+type PokeNotification = record {
+  global_activity : bool;
+  matches : vec PokeMatch;
+};
 service : {
-  poke : (vec PokeMatch, opt vec SubjectPokeMatch) -> ();
-  poke_subjects : (vec SubjectPokeMatch) -> ();
+  poke : (PokeNotification) -> ();
 }
 ```
 
-Keep the old record unchanged: the first vector contains only self matches. Encode two actual Candid arguments, not one tuple-valued argument. Legacy one-vector receivers (including older records without first_block_index) safely discard extra fields/arguments; zero-argument receivers discard the entire sequence. External-aware receivers implement both methods and authenticate/filter subject as well as target/amount locally. Unsolicited funded subscriptions do not establish receiver consent.
+This is a deliberate breaking callback change: no existing subscriber population
+requires compatibility. There is one method and one required record argument,
+without a separate receiver protocol, optional arguments or fallback methods.
+The subject is always present, including self subscriptions. Receivers authenticate
+Event Horizon and filter subjects, targets and amounts against local policy;
+funded subscriptions do not establish receiver consent.
 
-Exactly one outbound method is attempted per subscriber/poll: self only uses `poke(self, null)`; genuine global only uses `poke([], null)`; self plus external or genuine global plus external uses `poke(self_or_empty, opt external)`; external only without self/global uses `poke_subjects(external)`. External-only activity must never become a false legacy global `poke([])`. Missing/trapping subject methods cause no fallback/probe/retry and must not stop later recipients. An empty first vector with a nonempty second argument is not global-only. Updated receivers need both methods to consume external hints; older receivers may miss external-only acceleration.
+`global_activity = true` means this subscriber had a qualifying global subscription
+match during the completed poll. Specific matches are independently threshold-filtered
+and may be present with either flag value. An empty matches vector never implies
+global activity. A notification with `global_activity = false` and no matches is
+never sent. Exactly one `poke` call is attempted per subscriber per completed poll.
+Missing or trapping receivers cause no acknowledgement, probe, fallback or retry
+and must not stop later recipients.
 
-Aggregate by `(subject, WatchTarget)` under each subscriber. Deterministic item order is ascending subject principal bytes, then ordinary numeric targets, then neuron nonces. Combined self/external retention is 256 distinct identities, using the first-retained policy; retain updates to minimum index and maximum Nat after overflow. Global-first principal phases remain unchanged and use actual global-match state. Outbound calls remain one-way and reserve-protected using actual encoded payload cost. Distinct canisters' delivery/execution order and Index completion remain unguaranteed. Shared-account fanout is inherent work proportional to interested relations; measure it without quotas, dropped accepted subscriptions or changed pricing.
+Aggregate by `(subject, WatchTarget)` under each subscriber. Deterministic item order is ascending subject principal bytes, then ordinary numeric targets, then neuron nonces. Combined retention across every subject is 256 distinct identities, using the first-retained policy; retain updates to minimum index and maximum Nat after overflow. Global-first principal phases remain unchanged and use actual global-match state. Outbound calls remain one-way and reserve-protected using actual encoded payload cost. Distinct canisters' delivery/execution order and Index completion remain unguaranteed. Shared-account fanout is inherent work proportional to interested relations; measure it without quotas, dropped accepted subscriptions or changed pricing.
 
-`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still lower its first index and increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. For an admitted global subscriber, `poke([], null)` means global-only activity without a specific match. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
+`max_amount` is the largest individual qualifying incoming transfer Event Horizon observed for that target during the completed poll, in raw observed-token atomic units. Numeric subaccounts sort first ascending, then neuron nonces ascending. At most 256 specific targets are retained per subscriber per poll. After the bound is reached, an already-retained target may still lower its first index and increase its maximum; additional new target identities may be omitted. Event Horizon sends at most one poke per subscriber per completed poll. Global-only activity has `global_activity = true` and an empty `matches` vector. Omission affects acceleration only, and `max_amount` is a prefilter hint, never proof of payment.
 
 `first_block_index : nat64` is required (Rust `u64`). For each receiving
 subscriber and retained semantic target in one successfully completed poll, it
@@ -209,11 +230,18 @@ exists. The subscriber's durable cursor is authoritative: a hint at 150 must
 not skip unprocessed blocks 100–149, nor automatically rewind a cursor already
 beyond 150. Prospective initialization is an explicit application policy.
 
-Global-only activity remains `poke([], null)` with no index. Specific-only and mixed
-notifications carry an index on each specific entry; mixed matches still
-receive exactly one poke in the global-first phase. There is no global index,
-global block-index argument, capability negotiation, fallback or per-subscription opt-in. The separate subject method prevents false legacy global callbacks. Zero-argument
-receivers remain intentionally supported and discard all supplied hints.
+Global-only activity carries no index. Specific-only and mixed notifications
+carry an index on each specific entry. Mixed global/specific matches receive
+one poke in the global-first phase, preserving both the global flag and every
+retained specific match. There is no global block index, capability negotiation,
+fallback, separate legacy protocol or per-subscription opt-in.
+
+Jupiter Faucet and Disburser must separately adopt this exact callback contract
+before coordinated deployment; their current receiving ABI is incompatible.
+Their new receivers must authenticate Event Horizon, select matches whose
+`subject` equals their own principal, and preserve existing local target and
+threshold filters. Disburser-to-Historian forwarding is a separate mechanism
+and is not implicitly changed by Event Horizon's callback ABI.
 
 Direct-Ledger subscribers need no Index. They use bounded legacy ICP
 `query_blocks` or generic `icrc3_get_blocks` reads, follow the corresponding
@@ -245,10 +273,10 @@ subscriptions. A scoped receiver rejects empty hints, unapproved targets and
 below-local-threshold maxima before Ledger/Index reads or other expensive calls.
 No Event Horizon subscription lookup or external authorisation query is needed.
 
-An intentionally global consumer treats either vector shape as a wake-up:
-specific matches take precedence even when global activity also matched. A
-non-empty vector does not establish the absence of global activity. Without
-intentional local global interest, `poke([])` is cheaply ignored.
+An intentionally global consumer treats `global_activity = true` as a wake-up,
+including when specific matches are also present. Without intentional local global
+interest, the flag alone is cheaply ignored; only locally approved subject/target
+matches meeting local thresholds schedule work.
 
 The target identity, first block index and per-target maximum are aggregate hints, not
 authoritative transaction data, payment receipts, finality proofs or Index-

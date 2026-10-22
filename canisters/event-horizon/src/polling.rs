@@ -32,31 +32,25 @@ struct MatchState {
 
 fn dispatch_matches(
     matches: BTreeMap<Principal, MatchState>,
-    mut poke: impl FnMut(Principal, subscriber::Notification) -> bool,
+    mut poke: impl FnMut(Principal, subscriber::PokeNotification) -> bool,
 ) {
     let (globals, specifics): (Vec<_>, Vec<_>) = matches.into_iter().partition(|(_, s)| s.global);
     for (principal, state) in globals.into_iter().chain(specifics) {
-        let mut notification = subscriber::Notification {
-            global: state.global,
-            ..Default::default()
-        };
-        for ((subject, target), m) in state.subs {
-            if subject == principal {
-                notification.self_matches.push(subscriber::PokeMatch {
+        let notification = subscriber::PokeNotification {
+            global_activity: state.global,
+            matches: state
+                .subs
+                .into_iter()
+                .map(|((subject, target), m)| subscriber::PokeMatch {
+                    subject,
                     target,
                     first_block_index: m.first_block_index,
                     max_amount: m.max_amount,
                 })
-            } else {
-                notification
-                    .subject_matches
-                    .push(subscriber::SubjectPokeMatch {
-                        subject,
-                        target,
-                        first_block_index: m.first_block_index,
-                        max_amount: m.max_amount,
-                    })
-            }
+                .collect(),
+        };
+        if !notification.global_activity && notification.matches.is_empty() {
+            continue;
         }
         let _ = poke(principal, notification);
     }
@@ -992,16 +986,25 @@ mod target_match_tests {
         let mut seen = vec![];
         dispatch_matches(matches, |recipient, n| {
             seen.push(recipient);
-            assert_eq!(n.method(), "poke");
+            assert_eq!(
+                n.global_activity,
+                recipient == p(3) || recipient == p(4) || recipient == p(5)
+            );
             if recipient == p(4) {
-                assert!(n.self_matches.is_empty() && n.subject_matches.is_empty())
+                assert!(n.matches.is_empty())
             } else {
-                assert_eq!(n.self_matches[0].max_amount, Nat::from(100u8));
-                assert_eq!(n.subject_matches[0].subject, p(9));
+                assert_eq!(n.matches[0].max_amount, Nat::from(100u8));
+                assert_eq!(n.matches[1].subject, p(9));
             }
             true
         });
         assert_eq!(seen, vec![p(3), p(4), p(5), p(1), p(2)]);
+    }
+    #[test]
+    fn no_notification_for_empty_non_global_state() {
+        dispatch_matches(BTreeMap::from([(p(1), MatchState::default())]), |_, _| {
+            panic!("empty notification must not be attempted")
+        });
     }
     #[test]
     fn failed_global_attempts_do_not_block_specific_attempts() {
@@ -1025,11 +1028,11 @@ mod target_match_tests {
                 ),
             ]),
             |p, n| {
-                seen.push((p, n.method()));
+                seen.push((p, n.global_activity));
                 false
             },
         );
-        assert_eq!(seen, vec![(p(2), "poke"), (p(1), "poke_subjects")]);
+        assert_eq!(seen, vec![(p(2), true), (p(1), false)]);
     }
     #[test]
     fn dispatch_preserves_bounded_sorted_maxima_in_both_phases() {
@@ -1056,15 +1059,13 @@ mod target_match_tests {
             let mut attempts = 0;
             dispatch_matches(BTreeMap::from([(p(1), s)]), |_, n| {
                 attempts += 1;
-                assert_eq!(n.method(), "poke");
-                assert_eq!(n.self_matches.len() + n.subject_matches.len(), 256);
-                assert!(n.self_matches.windows(2).all(|w| w[0].target < w[1].target));
+                assert_eq!(n.matches.len(), 256);
                 assert!(n
-                    .subject_matches
+                    .matches
                     .windows(2)
                     .all(|w| (w[0].subject, w[0].target) < (w[1].subject, w[1].target)));
                 let m = n
-                    .subject_matches
+                    .matches
                     .iter()
                     .find(|m| m.target == WatchTarget::Subaccount(7))
                     .unwrap();
