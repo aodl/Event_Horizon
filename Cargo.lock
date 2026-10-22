@@ -1346,6 +1346,7 @@ dependencies = [
  "candid",
  "ic-cdk",
  "serde",
+ "sha2",
 ]
 
 [[package]]

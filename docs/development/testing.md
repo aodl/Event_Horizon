@@ -52,7 +52,11 @@ The separately compiled mock subscriber implements the exact required
 `PokeNotification` record using the pinned CDK's ordinary generated entry point
 and unchanged default decoder configuration. PocketIC decodes 256-entry actual
 messages with 29-byte subject principals, full-width indices/targets and
-257-, 4,097- and 32,769-bit Nat amounts. Production-path cases exercise self,
+257-, 4,097- and 32,769-bit Nat amounts. A compact SHA-256 of the
+complete decoded notification is computed by a separate test-only update;
+this verifies every field without re-encoding large values under the lower
+query instruction budget. Decoder quotas and the 256-match limit are unchanged.
+Production-path cases exercise self,
 external, mixed and global/specific callbacks through actual one-way dispatch
 on ICP, ICRC-3 and SNS, including the combined 256-match cap. No compatibility
 receiver or alternate method remains.

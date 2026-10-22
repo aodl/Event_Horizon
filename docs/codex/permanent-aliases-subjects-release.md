@@ -17,7 +17,9 @@ acknowledgements or retries. The 256-specific-match bound is unchanged.
 The new separately compiled receiver uses the pinned `ic-cdk` 0.20.1 ordinary
 update macro. Its actual generated decoder retains the default 10,000 skipping
 quota; no custom decoder or budget adjustment is used. Maximum-count messages
-are decoded through real Wasm entry points in PocketIC. This does not claim
+are decoded through real Wasm entry points in PocketIC. A separate test-only
+update returns a SHA-256 of the complete decoded/re-encoded value, so the
+largest payload is verified without the lower query serialization budget. This does not claim
 compatibility with Jupiter's presently deployed receiver ABI.
 
 ## Final callback Candid
@@ -164,9 +166,18 @@ threshold. This is a genuine old-to-new upgrade, separate from new-to-new cases.
 
 ## Validation and artifact evidence
 
-Final gate results, canonical artifact identities and measurements are recorded
-below after running validation on this implementation. The earlier intermediate
-candidate hashes are superseded and must not be used for this callback revision.
+Canonical Docker artifacts currently have these identities; final gate results
+and resource measurements follow when validation completes. The earlier
+intermediate callback candidates are superseded.
+
+| Uncompressed artifact | SHA-256 |
+| --- | --- |
+| Backend | `2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528` |
+| Frontend | `338565e50d946d09201be87131d9c7f5319923320bf68926a17a4f6d19582067` |
+
+The frontend registry and rebuilt bundle pin the backend hash above. Both
+production Wasms pass their export audits. Two independent clean Docker builds
+and the complete final test suite remain required release gates.
 
 ## Coordinated deployment dependencies
 

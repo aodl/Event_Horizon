@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -65,6 +66,15 @@ fn debug_last_matches() -> Vec<PokeMatch> {
 #[ic_cdk::query]
 fn debug_last_notification() -> PokeNotification {
     STATE.with(|s| s.borrow().last_notification.clone())
+}
+
+// An update has the ordinary 40B instruction budget. Returning the full large
+// stress fixture from a query would spend its lower 5B budget serializing it.
+#[ic_cdk::update]
+fn debug_notification_digest() -> Vec<u8> {
+    STATE.with(|s| {
+        Sha256::digest(candid::encode_one(&s.borrow().last_notification).unwrap()).to_vec()
+    })
 }
 
 #[ic_cdk::query]

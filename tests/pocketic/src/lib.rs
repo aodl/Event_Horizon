@@ -2192,9 +2192,14 @@ mod tests {
                     "poke",
                     bytes.clone(),
                 )?)?;
-                assert_eq!(notification(&env, env.subscriber)?, expected);
+                let receiver_cycles = cycles.saturating_sub(env.pic.cycle_balance(env.subscriber));
+                // Compare the complete decoded value through a compact digest under
+                // the ordinary update budget, avoiding query re-encoding limits.
+                let digest: Vec<u8> =
+                    update(&env.pic, env.subscriber, "debug_notification_digest", ())?;
+                assert_eq!(digest, Sha256::digest(&bytes).to_vec());
                 println!("unified_receiver entries=256 principal_bytes=29 nat_bits={} global={} payload_bytes={} receiver_cycles={}",
-                    bits + 1, global_activity, bytes.len(), cycles.saturating_sub(env.pic.cycle_balance(env.subscriber)));
+                    bits + 1, global_activity, bytes.len(), receiver_cycles);
             }
         }
         let global = PokeNotification {
