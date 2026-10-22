@@ -484,3 +484,13 @@ reviewed backend. Verify the coordinated final module hashes. Deployment,
 controller changes, funding transfers and domain actions require separate
 express approval. Existing receivers consume external-only hints only after
 they implement `poke_subjects`; do not assume Jupiter subscribers already do.
+
+The reviewed alias/subject backend candidate built from source revision
+`d68b5d8` has independently verified canonical SHA-256
+`1e15b0272a1c692ab8c761a8645bbb575eefe69bf5d5a5a48b9356f9be8a707e`.
+The frontend registry pin is coordinated to this artifact, not the earlier
+`68db55e1…` module or the superseded first intermediate build. Final release
+gates require rebuilding the pinned frontend, two independent clean canonical
+builds, both export audits, the artifact manifest, and agreement between the
+embedded pin and final backend artifact. See the release evidence accompanying
+the final source revision. None of these preparations installs a live module.
