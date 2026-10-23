@@ -584,7 +584,7 @@ index_receiver = (root/'tests/mocks/mock-index-poke/src/lib.rs').read_text()
 assert '#[ic_cdk::update]\nfn poke()' in index_receiver
 assert 'trusted_event_horizon' in index_receiver
 assert 'decode_with' not in index_receiver and 'set_skipping_quota' not in index_receiver
-for document in [root/'SPEC.md', root/'README.md', root/'docs/subscriber-guide.md', root/'canisters/event-horizon/README.md', root/'docs/architecture/overview.md', root/'docs/development/cadence-calibration.md']:
+for document in [root/'SPEC.md', root/'README.md', root/'docs/subscriber-guide.md', root/'canisters/event-horizon/README.md', root/'docs/architecture/overview.md', root/'docs/development/cadence-calibration.md', root/'tests/pocketic/src/lib.rs', root/'tests/cadence-calibration/src/measurement.rs']:
     current = document.read_text()
     for obsolete in ['poke([], null)', 'poke(vec PokeMatch)', 'first vector', 'second vector', 'second argument', 'specific vector wins', 'global empty hint']:
         assert obsolete not in current, f'obsolete callback description in {document}: {obsolete}'

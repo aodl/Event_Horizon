@@ -1198,7 +1198,7 @@ fn measure_fanout(kind: &str, count: u64, config: &RunConfig) -> Result<Measurem
         )
     };
     result.notes.push(
-        "Synthetic principals isolate backend dispatch pressure; accepted one-way calls are not recipient execution evidence. The recorded callback payload is the exact empty global hint or the largest one-match specific hint in the scenario. Balance was sampled after rejection/refund traffic settled.".into(),
+        "Synthetic principals isolate backend dispatch pressure; accepted one-way calls are not recipient execution evidence. The recorded callback payload is the exact global-only notification or the largest specific-only notification with one match in the scenario. Balance was sampled after rejection/refund traffic settled.".into(),
     );
     Ok(result)
 }

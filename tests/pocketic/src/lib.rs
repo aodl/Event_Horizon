@@ -4595,7 +4595,7 @@ mod tests {
         assert!(
             query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?
                 .is_empty(),
-            "unrelated activity retains the one empty global hint"
+            "unrelated activity yields no specific matches"
         );
 
         env.admit(7, Some("1"), 1_000_000_000)?;
@@ -4982,7 +4982,7 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn global_admission_and_poke_precedence_are_enforced() -> Result<()> {
+    fn global_admission_and_mixed_notification_are_enforced() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
 
@@ -5059,7 +5059,7 @@ mod tests {
                 first_block_index: matching_index,
                 max_amount: candid::Nat::from(1u8),
             }],
-            "specific account information takes precedence over the global empty hint"
+            "qualifying specific matches remain present alongside global activity"
         );
         Ok(())
     }
