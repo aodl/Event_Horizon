@@ -51,6 +51,7 @@ component's identity and role.
 ## Integration and history
 
 - [Subscriber guide](subscriber-guide.md)
+- [Index wake-up interoperability validation](codex/index-poke-validation.md)
 - [Checkpoint history](../CHECKPOINT.md)
 - [Landing ledger-counter validation](codex/ledger-counter-validation.md)
 - [Landing hero and sampled-rate validation](codex/ledger-hero-refinement-validation.md)

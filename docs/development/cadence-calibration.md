@@ -118,8 +118,8 @@ inputs: the fraction of blocks matching any specific subscription and the
 assumed number of distinct subscriber matches per matching block. They are
 capped at one notification per specific subscriber per poll. A separate
 overlap count prevents a subscriber present in both registries from being
-charged twice when its specific payload takes precedence over the global
-empty hint. This is a deterministic distribution assumption, not a claim that
+charged twice when one notification carries both the global flag and its
+independently filtered specific matches. This is a deterministic distribution assumption, not a claim that
 every relevant block matches every subscriber.
 
 The batch projector tracks which completed polls actually process live blocks. It collapses repeating per-poll states for long horizons, while a bounded per-poll reference checks burst and backlog cases. Each workload supplies an **assumed** blocks-per-poll capacity (4,096 in the default fixture). PocketIC completing a 4,096-block backlog supports that test size but does not establish a protocol maximum. Archived prefixes skipped without live decoding do not generate notifications in the workload model.

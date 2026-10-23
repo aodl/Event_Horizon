@@ -9,6 +9,7 @@ members = [
   "tests/mocks/mock-historian",
   "tests/mocks/mock-cmc",
   "tests/mocks/mock-subscriber",
+  "tests/mocks/mock-index-poke",
   "tests/mocks/mock-sns-root",
   "tests/pocketic",
   "tests/cadence-calibration",

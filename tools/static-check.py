@@ -525,12 +525,13 @@ for canister_lib in [
     root/'tests/mocks/mock-historian/src/lib.rs',
     root/'tests/mocks/mock-cmc/src/lib.rs',
     root/'tests/mocks/mock-subscriber/src/lib.rs',
+    root/'tests/mocks/mock-index-poke/src/lib.rs',
     root/'tests/mocks/mock-sns-root/src/lib.rs',
 ]:
     assert 'ic_cdk::export_candid!();' in canister_lib.read_text(), f'missing export_candid in {canister_lib}'
 
 lock=(root/'Cargo.lock').read_text()
-for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-sns-root']:
+for package in ['event-horizon','event-horizon-frontend','event-horizon-pocketic','mock-cmc','mock-historian','mock-icp-ledger','mock-icrc3-ledger','mock-subscriber','mock-index-poke','mock-sns-root']:
     assert f'name = "{package}"' in lock, f'Cargo.lock missing workspace package {package}'
 
 link_docs = [root/'README.md', root/'SPEC.md', root/'tools/xtask/README.md']
@@ -577,3 +578,14 @@ for region in ['ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9)', 'ALIAS_METADATA
     assert region in (root/'canisters/event-horizon/src/state.rs').read_text()
 assert 'resolve_subscription_memo(memo, state::alias)' in polling
 assert 'memo.to_vec()' in polling
+
+# Index receiver interoperability is test-only; the production sender stays uniform.
+index_receiver = (root/'tests/mocks/mock-index-poke/src/lib.rs').read_text()
+assert '#[ic_cdk::update]\nfn poke()' in index_receiver
+assert 'trusted_event_horizon' in index_receiver
+assert 'decode_with' not in index_receiver and 'set_skipping_quota' not in index_receiver
+for document in [root/'SPEC.md', root/'README.md', root/'docs/subscriber-guide.md', root/'canisters/event-horizon/README.md', root/'docs/architecture/overview.md', root/'docs/development/cadence-calibration.md']:
+    current = document.read_text()
+    for obsolete in ['poke([], null)', 'poke(vec PokeMatch)', 'first vector', 'second vector', 'second argument', 'specific vector wins', 'global empty hint']:
+        assert obsolete not in current, f'obsolete callback description in {document}: {obsolete}'
+assert '## Proposed zero-argument Index receiver' in subscriber_guide

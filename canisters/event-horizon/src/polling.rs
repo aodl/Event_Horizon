@@ -970,7 +970,7 @@ mod target_match_tests {
         }
     }
     #[test]
-    fn dispatches_global_matches_first_in_principal_order_with_specific_payload_precedence() {
+    fn dispatches_global_matches_first_in_principal_order_with_unified_payloads() {
         let mut matches = BTreeMap::new();
         for n in [5, 3, 1, 4, 2] {
             let mut s = MatchState {

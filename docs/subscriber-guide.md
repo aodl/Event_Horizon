@@ -193,7 +193,7 @@ Event Horizon caller principal
     -> observed ledger identity
     -> token decimals / local economic policy
     -> intentional global-interest flag
-    -> locally approved subaccounts / neuron nonces
+    -> locally approved subjects, subaccounts / neuron nonces
     -> local minimum atomic amount per approved target
     -> independent per-Ledger reconciliation cursor/state
 ```
@@ -253,10 +253,13 @@ poke(notification):
 # The independent periodic timer schedules this same reconciliation path.
 ```
 
-A non-empty vector does **not** mean there was no global activity. Specific
-matches take precedence over the empty global-only hint. An intentionally global
-consumer must therefore treat either shape as a global wake-up; a scoped
-consumer must not process `poke([])` merely because its caller is trusted.
+`global_activity` and `matches` have independent meanings. A true flag with
+empty matches is global-only activity; a true flag may also accompany specific
+matches. A nonempty matches vector establishes neither the presence nor the
+absence of global activity. A standard receiver accepts the flag only under
+intentional local global-interest policy and independently filters every match
+by approved subject, target and local threshold. A trusted caller alone does
+not establish local interest.
 
 Reconciliation state must be independent per observed Ledger. Never advance a
 cursor, accept a payment or perform accounting from a poke alone.
@@ -266,9 +269,11 @@ cursor, accept a payment or perform accounting from a poke alone.
 Each specific match has a required `first_block_index : nat64`: the earliest
 qualifying transfer Event Horizon actually observed for that target during the
 completed poll, under its effective admission and threshold policy. It is
-relative to the authenticated caller's observed Ledger. Global-only `poke([], null)`
-has no index; mixed matches retain their specific entries in one global-phase
-poke. Zero-argument receivers intentionally discard these hints.
+relative to the authenticated caller's observed Ledger. A record with
+`global_activity = true` and `matches = []` has no specific index. A record
+with nonempty matches retains each entry's index regardless of the global flag.
+A standard direct-Ledger receiver uses the full record to apply its local
+subject, target and amount filters before scheduling reconciliation.
 
 The index and `max_amount` aggregate independently. Transfers to subaccount 7 at
 blocks 12,450 (4 ICP), 12,453 (15 ICP), and 12,461 (8 ICP) produce index 12450
@@ -328,7 +333,9 @@ belongs to the application and adds no Event Horizon configuration setting.
 ## Index catch-up
 
 A global subscription can provide accelerated wake-ups to an Index canister
-that supports `poke`. Applications may query that Index when they receive
+that implements a compatible receiving method. The standard method is
+`poke(PokeNotification)`; the [proposed lightweight Index receiver](#proposed-zero-argument-index-receiver)
+is a separately tested argument-discarding implementation. Applications may query that Index when they receive
 their own specific-target pokes. Even with global-first dispatch, the
 application can query before the Index has ingested the triggering Ledger
 transaction. This is an eventual-consistency timing issue, not necessarily a
@@ -353,9 +360,10 @@ Event Horizon completes poll
 For reconciliation that depends on an Index, the recommended sequence is:
 
 1. Authenticate Event Horizon as caller and resolve its Ledger context.
-2. Filter supplied targets and amount hints against local approved interests,
-   cheaply rejecting unapproved targets, below-local-threshold amounts and
-   unwanted global-only pokes.
+2. Independently filter `notification.matches` by locally approved subjects,
+   targets and amount thresholds, and accept `notification.global_activity`
+   only under intentional local global-interest policy. An empty matches vector
+   does not establish global activity.
 3. Coalesce an accepted poke with any already pending reconciliation.
 4. Perform the initial Index reconciliation with sensible work bounds.
 5. After that first pass, schedule a second reconciliation approximately five
@@ -411,7 +419,12 @@ finality, or proof that an Index already exposes the transfer. Acceptance,
 accounting and payment processing require verified authoritative reconciliation.
 An Index may lag the Ledger; retry/backoff belongs to the subscriber.
 
-Similarly, `poke([], null)` contains no specific target match. An empty first vector with nonempty external hints still requires subject filtering. A subscriber uninterested in global activity can immediately return. Event Horizon provides no retries or acknowledgements, so independent periodic reconciliation remains required.
+A record with `global_activity = true` and `matches = []` contains no specific
+match. A scoped receiver ignores that global flag unless it has intentional
+local global interest. With nonempty matches it independently applies its
+subject, target and threshold filters, regardless of the flag. Event Horizon
+provides no retries or acknowledgements, so independent periodic reconciliation
+remains required.
 
 
 ## Economics and bounded unwanted work
@@ -446,6 +459,63 @@ A consumer intentionally interested in global activity still implements
 against intentional local global interest, and coalesce bounded work. Empty
 matches do not imply a global match. Existing Index canisters are not assumed
 to export this method or to complete reconciliation before other subscribers.
+
+## Proposed zero-argument Index receiver
+
+The standard interface required for new subscription receivers remains:
+
+```candid
+poke : (PokeNotification) -> ();
+```
+
+A proposed lightweight Index implementation instead exposes:
+
+```candid
+poke : () -> ();
+```
+
+This relies on Candid's allowance for a receiver to ignore surplus arguments.
+Event Horizon still sends its complete, ordinary `PokeNotification` record,
+including any specific matches. There is no Index detection, alternate method,
+fallback, negotiation, payload truncation or suppression of specific matches.
+Event Horizon remains Index-independent.
+
+The separately compiled Rust `mock-index-poke` uses the pinned ic-cdk 0.20.1
+ordinary zero-argument update macro and authenticates Event Horizon before
+recording a wake-up. In that macro's zero-argument branch, no argument decoder
+is generated: the payload is never read or traversed. The 10,000 skipping quota
+used by argument-bearing entry points therefore does not apply to this fixture.
+A native Candid decoder asked to skip a record is a different code path and is
+not evidence of this receiving canister's behavior.
+
+PocketIC exercises actual Event Horizon oneway callbacks for canonical ICP,
+generic ICRC-3, specific-only activity, and global activity with zero, one,
+64 mixed self/external, and 256 combined specific matches. A paired standard
+receiver verifies the complete emitted record. The zero-argument receiver accepted global-only records (65 bytes), one-match
+records (131 bytes), 64 mixed self/external matches with 32,769-bit amounts
+(302,177 bytes), and 256 combined matches with 4,097-bit amounts (159,938 bytes).
+It also accepted specific-only activity with a false global flag. No skipping
+quota rejection occurred in these actual receiving-Wasm tests. Full details are in the
+[Index interoperability validation](codex/index-poke-validation.md).
+No quota is increased and the existing full-record maximum-payload regression
+is retained.
+
+These observations are specific to the compiled fixture and pinned Rust CDK.
+They do not establish unlimited payload acceptance, portable decoder behavior
+for other CDKs/languages, or compatibility of a future Index Wasm. IC message
+size, execution and cycle limits still apply. Recommend the full record-based
+method whenever an Index must support the complete range of legitimate
+notification payloads, and validate the actual Index build before production
+integration.
+
+The zero-argument receiver cannot inspect the global flag, subjects, targets,
+thresholds, first indices or amounts. It cannot implement local target/threshold
+filtering and treats every authenticated callback, including specific-only
+activity, as a wake-up. This is appropriate only for an Index intentionally
+accepting such general wakes with bounded, coalesced work. It must authenticate
+its trusted Event Horizon instance, retain its own authoritative Ledger cursor,
+and keep independent periodic polling. A poke is never proof that the Index
+has caught up, and other subscribers cannot assume Index work finishes first.
 
 ## Jupiter receiver deployment dependency
 

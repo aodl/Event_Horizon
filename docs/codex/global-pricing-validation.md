@@ -1,5 +1,12 @@
 # Global subscriptions and dynamic pricing validation
 
+> Historical checkpoint evidence: callback shapes and notification descriptions
+> below describe that implementation. They are superseded by the normative
+> `poke(PokeNotification)` contract in [SPEC.md](../../SPEC.md), with independent
+> `global_activity` and subject-qualified `matches`. See the current
+> [subscriber guide](../subscriber-guide.md). This note does not reinterpret
+> the historical tests or measurements.
+
 ## Identity
 
 - Starting commit: `c48778d1744f3b645d0165cfdccec2ee704db71c`

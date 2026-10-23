@@ -1,5 +1,11 @@
 # Permanent aliases, subject subscriptions and unified notifications
 
+> Historical validation of the unified-callback release at `3e24af8`.
+> The later [Index interoperability follow-up](index-poke-validation.md)
+> retains the production protocol and separately measures the proposed Index
+> argument-discarding receiver. Counts and measurements below belong to this
+> release and are unchanged.
+
 This release retains the completed alias, admission, indexed subscription,
 matching, frontend and upgrade implementation. No mainnet operation is authorized
 or performed. The normative contract is [SPEC.md](../../SPEC.md).

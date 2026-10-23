@@ -58,8 +58,18 @@ this verifies every field without re-encoding large values under the lower
 query instruction budget. Decoder quotas and the 256-match limit are unchanged.
 Production-path cases exercise self,
 external, mixed and global/specific callbacks through actual one-way dispatch
-on ICP, ICRC-3 and SNS, including the combined 256-match cap. No compatibility
-receiver or alternate method remains.
+on ICP, ICRC-3 and SNS, including the combined 256-match cap. Production has
+one notification protocol and no alternate method.
+
+A separate, test-only `mock-index-poke` compiles an authenticated genuine
+`poke : () -> ()` receiving method. The current inventory has 134 Rust unit tests, 138 frontend tests and 121
+isolated PocketIC scenarios. The three Index-specific scenarios cover
+canonical ICP global wakes, generic ICRC-3 global wakes with ICP-only admission,
+and real specific/global mixed envelopes through the 256-match cap. They reuse
+the harness's Wasm cache and bounded receiver counter/caller waits. A standard
+record receiver independently verifies each mixed notification. The existing
+large full-record decoding regression is unchanged; see the
+[Index interoperability report](../codex/index-poke-validation.md).
 
 ## What PocketIC covers
 

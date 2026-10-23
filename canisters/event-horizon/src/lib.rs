@@ -1,6 +1,6 @@
 //! Event Horizon backend.
 //!
-//! Production exposes only the bounded `get_instance` and `get_pricing` queries.
+//! Production exposes only `get_instance`, `get_pricing`, and `preview_subscription` read-only queries.
 //! Autonomous timers drive the ledger readers and ICP-to-cycles maintenance. The
 //! `debug_api` feature exists only for local/PocketIC validation and must not be present
 //! in the canonical production Wasm.

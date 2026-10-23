@@ -1,5 +1,12 @@
 # Generic ledger instances corrective validation
 
+> Historical checkpoint evidence: callback shapes and notification descriptions
+> below describe that implementation. They are superseded by the normative
+> `poke(PokeNotification)` contract in [SPEC.md](../../SPEC.md), with independent
+> `global_activity` and subject-qualified `matches`. See the current
+> [subscriber guide](../subscriber-guide.md). This note does not reinterpret
+> the historical tests or measurements.
+
 ## Target-aware u64 and nervous-system extension
 
 The final schema uses canonical decimal `u64` numeric targets encoded as `24 zero bytes || N.to_be_bytes()`. Inclusive ranges may begin anywhere and expand to at most 256 watched accounts. `n<N>` uses the shared SHA-256 `neuron-stake` controller/nonce derivation. ICP resolves those accounts under fixed NNS Governance; an SNS-aware generic instance stores immutable `sns_root`, verifies Root's Ledger/Governance tuple and the Ledger's Governance-default minting account, then caches Governance in the observed profile. Non-SNS generic instances retain `neuron_governance = null`.

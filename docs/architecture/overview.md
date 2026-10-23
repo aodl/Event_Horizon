@@ -28,7 +28,7 @@ Event Horizon consists of an autonomous backend and a separately controlled cert
 
 ## Poll lane
 
-Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Qualifying transfers accumulate per-target maximum `Nat` amounts, capped at 256 distinct targets per subscriber. Only decoded live blocks count as activity; archive-only progress never wakes global subscribers. Each subscriber receives at most one poke: a non-empty specific vector wins over a global empty hint.
+Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Qualifying transfers independently accumulate the first qualifying block index and maximum `Nat` amount for each `(subject, target)`, capped at 256 combined specific matches per subscriber. Only decoded live blocks count as activity; archive-only progress never wakes global subscribers. Each subscriber receives at most one `poke(PokeNotification)`. Its explicit `global_activity` flag and subject-qualified `matches` are independent: global-only activity has a true flag and no matches, while specific matches may accompany either flag value.
 
 The reader uses no Index or archive traversal. A proven archived prefix is logged and skipped. Subscribers own authoritative reconciliation.
 

@@ -10,7 +10,7 @@ Horizon as raw ICP, pooled, and converted into cycles. The canonical ICP
 instance reads the ICP Ledger's legacy `query_blocks` log; non-ICP instances
 read compatible ICRC-1/ICRC-3 ledgers. Its payload-bearing poke reports each
 matching numeric subaccount or neuron nonce with its first qualifying Ledger block index and largest qualifying raw
-transfer amount. Scoped subscribers should normally use target-aware `poke`
+transfer amount. Scoped subscribers implement `poke(PokeNotification)`
 to filter locally approved targets and amount thresholds before expensive work:
 any patron can fund a subscription without the receiving canister's consent.
 A trusted caller is not proof of wanted activity. The unified `poke(PokeNotification)`

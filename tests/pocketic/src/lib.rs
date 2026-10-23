@@ -18,6 +18,7 @@ mod tests {
     static HISTORIAN_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static CMC_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SUBSCRIBER_WASM: OnceLock<Vec<u8>> = OnceLock::new();
+    static INDEX_POKE_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static SNS_ROOT_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_WASM: OnceLock<Vec<u8>> = OnceLock::new();
     static EVENT_HORIZON_PROD_WASM: OnceLock<Vec<u8>> = OnceLock::new();
@@ -653,8 +654,23 @@ mod tests {
             )
         }
         fn wait_for_second_pokes(&self, expected: u64) -> Result<SecondSubscriberObservation> {
+            self.wait_for_wakeup_pokes(self.subscriber_second, expected)
+        }
+        // Counter/caller observations also support receivers that discard payloads,
+        // without querying large records under a query's lower instruction budget.
+        fn wait_for_wakeup_pokes(
+            &self,
+            subscriber: Principal,
+            expected: u64,
+        ) -> Result<SecondSubscriberObservation> {
+            let observe = || -> Result<SecondSubscriberObservation> {
+                Ok(SecondSubscriberObservation {
+                    pokes: query(&self.pic, subscriber, "debug_pokes", ())?,
+                    last_caller: query(&self.pic, subscriber, "debug_last_caller", ())?,
+                })
+            };
             let started = std::time::Instant::now();
-            let mut last = self.second_subscriber_observation()?;
+            let mut last = observe()?;
             for ticks in 0..=MAX_ONE_WAY_CALLBACK_TICKS {
                 if last.pokes == expected {
                     return Ok(last);
@@ -663,19 +679,13 @@ mod tests {
                     break;
                 }
                 self.pic.tick();
-                last = self.second_subscriber_observation()?;
+                last = observe()?;
             }
             bail!(
-                "one-way subscriber callback did not reach expected count {expected}; \
-                 subscriber principal: {} type: PokeNotification; \
-                 ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; wall time consumed: {:?}; \
-                 observed count: {}; last caller: {:?}; vector subscriber state: {:?}; \
-                 Event Horizon state: {:?}",
-                self.subscriber_second,
+                "one-way callback to {subscriber} did not reach count {expected}; \
+                 ticks consumed: {MAX_ONE_WAY_CALLBACK_TICKS}; elapsed: {:?}; \
+                 receiver: {last:?}; Event Horizon state: {:?}",
                 started.elapsed(),
-                last.pokes,
-                last.last_caller,
-                self.subscriber_observation()?,
                 self.state()?
             )
         }
@@ -2148,6 +2158,211 @@ mod tests {
             env.upgrade_same_debug_wasm()?;
             assert_eq!(env.state()?.observed_next_block, before.observed_next_block);
             assert_eq!(preview(&env, "A@B.n0")?.is_ok(), !generic);
+        }
+        Ok(())
+    }
+
+    fn install_index_poke(env: &Env) -> Result<()> {
+        env.pic
+            .reinstall_canister(
+                env.subscriber_second,
+                wasm(&INDEX_POKE_WASM, "mock-index-poke", None)?,
+                encode_one(env.event_horizon)?,
+                None,
+            )
+            .map_err(|e| anyhow!("install zero-argument Index: {e:?}"))?;
+        Ok(())
+    }
+
+    fn index_poke_global_wakeup(generic: bool) -> Result<()> {
+        let env = if generic {
+            Env::new_two_ledgers()?
+        } else {
+            Env::new()?
+        };
+        install_index_poke(&env)?;
+        let index = env.subscriber_second;
+        env.poll()?;
+        let before = env.state()?;
+        assert!(!env.global_subscription_for(index)?);
+        // All funding/Historian admission evidence is on the protocol ICP Ledger.
+        env.admit_global_for(index, GLOBAL_BASE_E8S)?;
+        assert!(env.global_subscription_for(index)?);
+        assert_eq!(
+            env.state()?.admission_next_block,
+            before.admission_next_block + 1
+        );
+        assert_eq!(
+            poke_count(&env, index)?,
+            0,
+            "admission alone is not a wake-up"
+        );
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        let unrelated = account_id(Principal::from_slice(&[92, 1]), numbered(999));
+        if generic {
+            assert_ne!(env.ledger, env.observed_ledger);
+            assert_eq!(env.state()?.observed_next_block, before.observed_next_block);
+            let counters = env.poke_counts()?;
+            env.append(source.clone(), unrelated.clone(), 1, None)?;
+            env.poll()?;
+            for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+                env.pic.tick();
+            }
+            assert_eq!(
+                env.poke_counts()?,
+                counters,
+                "ICP-only activity cannot wake a generic Index"
+            );
+            assert_eq!(poke_count(&env, index)?, 0);
+        } else {
+            assert_eq!(env.ledger, env.observed_ledger);
+        }
+        let counters = env.poke_counts()?;
+        let observed_start = env.state()?.observed_next_block;
+        for amount in 1..=10 {
+            env.append_observed(source.clone(), unrelated.clone(), amount, None)?;
+        }
+        env.poll()?;
+        let received = env.wait_for_second_pokes(1)?;
+        assert_eq!(received.last_caller, Some(env.event_horizon));
+        assert_eq!(env.poke_counts()?, vec![counters[0] + 1, counters[1] + 1]);
+        assert_eq!(env.state()?.observed_next_block, observed_start + 10);
+        assert_eq!(env.subscriber_observation()?.pokes, 0);
+        let counters = env.poke_counts()?;
+        env.poll()?;
+        for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+            env.pic.tick();
+        }
+        assert_eq!(env.poke_counts()?, counters);
+        assert_eq!(poke_count(&env, index)?, 1);
+        println!("index_poke_global generic={generic} admitted=true live_blocks=10 attempts=1 received=1 caller={} empty_poll_delta=0", received.last_caller.unwrap());
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn index_poke_global_only_canonical_icp() -> Result<()> {
+        index_poke_global_wakeup(false)
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn index_poke_global_only_generic_icrc3() -> Result<()> {
+        index_poke_global_wakeup(true)
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn index_poke_ignores_real_mixed_and_maximum_count_envelopes() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        install_index_poke(&env)?;
+        let index = env.subscriber_second;
+        let mut bytes = [42u8; 29];
+        bytes[28] = 1;
+        let other_subject = Principal::from_slice(&bytes);
+        set_aliases(
+            &env,
+            vec![
+                CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: env.subscriber,
+                },
+                CanisterAlias {
+                    alias: "B".into(),
+                    canister_id: other_subject,
+                },
+                CanisterAlias {
+                    alias: "I".into(),
+                    canister_id: index,
+                },
+            ],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        env.poll()?;
+        // The standard receiver observes exactly the same subject/target identities
+        // as the Index: Index-owned accounts plus a second, 29-byte subject.
+        for suffix in ["A@I.0-127", "I.0-127", "A@B.0-127", "I@B.0-127"] {
+            fund_suffix(&env, suffix)?;
+        }
+        env.poll()?;
+        assert!(env.subscription_for(index, 0)?.is_some());
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        for (global_activity, count, bits) in [
+            (false, 1u64, 256usize),
+            (true, 0, 0),
+            (true, 1, 256),
+            (true, 64, 32768),
+            (true, 256, 4096),
+        ] {
+            if global_activity && !env.global_subscription_for(index)? {
+                env.admit_global_for(index, GLOBAL_BASE_E8S)?;
+                env.admit_global_for(env.subscriber, GLOBAL_BASE_E8S)?;
+            }
+            let before_index = poke_count(&env, index)?;
+            let before_record = poke_count(&env, env.subscriber)?;
+            let counters = env.poke_counts()?;
+            let mut matches = Vec::new();
+            if count == 0 {
+                env.append_observed(
+                    source.clone(),
+                    account_id(Principal::from_slice(&[92, 1]), [0; 32]),
+                    1,
+                    None,
+                )?;
+            } else {
+                let mut base = candid::Nat::from(1u8);
+                base.0 <<= bits;
+                for n in 0..count {
+                    let subject = if n % 2 == 0 { index } else { other_subject };
+                    let target = n / 2;
+                    let amount = base.clone() + candid::Nat::from(n);
+                    let first_block_index = env.append_observed_nat(
+                        source.clone(),
+                        account_id(subject, numbered(target)),
+                        amount.clone(),
+                    )?;
+                    matches.push(PokeMatch {
+                        subject,
+                        target: WatchTarget::Subaccount(target),
+                        first_block_index,
+                        max_amount: amount,
+                    });
+                }
+            }
+            matches.sort_by_key(|m| (m.subject, m.target));
+            let expected = PokeNotification {
+                global_activity,
+                matches,
+            };
+            let encoded = encode_one(&expected)?;
+            let cycles_before = env.pic.cycle_balance(index);
+            env.poll()?;
+            let received = env.wait_for_second_pokes(before_index + 1)?;
+            assert_eq!(received.last_caller, Some(env.event_horizon));
+            let record = env.wait_for_wakeup_pokes(env.subscriber, before_record + 1)?;
+            assert_eq!(record.last_caller, Some(env.event_horizon));
+            assert_eq!(
+                env.poke_counts()?,
+                vec![counters[0] + 2, counters[1] + 2],
+                "one oneway per receiver, no alternate method or fallback"
+            );
+            // Verify the full notification through the independent standard receiver.
+            // The Index never reads or decodes these fields, even for large records.
+            let digest: Vec<u8> =
+                update(&env.pic, env.subscriber, "debug_notification_digest", ())?;
+            assert_eq!(digest, Sha256::digest(&encoded).to_vec());
+            println!("index_poke_envelope global={global_activity} matches={count} self_matches={} external_matches={} nat_bits={} payload_bytes={} attempts=2 index_delta=1 record_verified=true receiver_cycles={}",
+                expected.matches.iter().filter(|m| m.subject == index).count(),
+                expected.matches.iter().filter(|m| m.subject != index).count(),
+                if count == 0 { 0 } else { bits + 1 }, encoded.len(), cycles_before.saturating_sub(env.pic.cycle_balance(index)));
+            env.poll()?;
+            for _ in 0..MAX_ONE_WAY_CALLBACK_TICKS {
+                env.pic.tick();
+            }
+            assert_eq!(env.poke_counts()?, vec![counters[0] + 2, counters[1] + 2]);
+            assert_eq!(poke_count(&env, index)?, before_index + 1);
         }
         Ok(())
     }

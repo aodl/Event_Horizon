@@ -72,13 +72,17 @@ approximately five seconds after their initial reconciliation; see
 
 Any patron may fund account, range, neuron or global declarations without
 subscriber consent, including irrelevant targets or weaker thresholds. Scoped
-subscribers should normally implement `poke(vec PokeMatch)`, authenticate the
-caller, and check their own per-Ledger target/amount policy before expensive
-work. Trusted origin does not establish local interest. Zero-argument `poke()`
-remains compatible with the same outgoing payload through Candid; it is suitable
-only for deliberately accepting all authenticated wakes with cheap, bounded and
-coalesced processing. See the [subscriber guide](../../docs/subscriber-guide.md)
-for the recommended handler and local global-interest policy.
+subscribers must implement `poke(PokeNotification)`, authenticate the Event Horizon
+caller, and independently filter subjects, targets, local amount thresholds and
+the global flag before expensive work. Global activity is accepted only under
+intentional local global-interest policy; nonempty matches do not imply a
+particular flag value. Trusted origin does not establish local interest.
+
+The proposed zero-argument Index `poke()` is a separate receiving-side
+interoperability experiment. It discards the entire record and cannot filter
+its contents; it is not the standard subscriber interface. See the
+[measured Index receiver behavior](../../docs/subscriber-guide.md#proposed-zero-argument-index-receiver)
+before integrating an Index. Event Horizon's sender does not special-case it.
 
 The callback remains one-way and best-effort. Event Horizon does not negotiate
 signatures, retry or account for delivery. Subscribers retain independent
