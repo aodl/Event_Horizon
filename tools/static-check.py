@@ -589,3 +589,13 @@ for document in [root/'SPEC.md', root/'README.md', root/'docs/subscriber-guide.m
     for obsolete in ['poke([], null)', 'poke(vec PokeMatch)', 'first vector', 'second vector', 'second argument', 'specific vector wins', 'global empty hint']:
         assert obsolete not in current, f'obsolete callback description in {document}: {obsolete}'
 assert '## Proposed zero-argument Index receiver' in subscriber_guide
+
+# Current public copy must describe the unified callback, including global matches.
+for document in (root/'canisters/frontend/public').rglob('*.html'):
+    current = document.read_text()
+    for obsolete in ['poke([])', 'poke([], null)', 'poke(vec PokeMatch)', 'poke_subjects', 'optional second argument']:
+        assert obsolete not in current, f'obsolete public callback description in {document}: {obsolete}'
+landing = (root/'canisters/frontend/public/index.html').read_text()
+fast_path = landing.split('<h3>Fast path</h3>', 1)[1].split('</p>', 1)[0]
+for required in ['poke(PokeNotification)', 'global_activity = true', 'matches', 'independent', 'may be empty', 'one', 'per completed poll']:
+    assert required in fast_path, f'missing unified callback detail: {required}'

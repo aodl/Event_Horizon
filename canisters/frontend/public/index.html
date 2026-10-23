@@ -260,7 +260,7 @@
         <article class="principle">
           <p class="principle__number">01</p>
           <h3>Fast path</h3>
-          <p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global trigger attempts one <code>poke([])</code> when a poll processes any block.</p>
+          <p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global subscription triggers one <code>poke(PokeNotification)</code> attempt per completed poll with observed Ledger activity, setting <code>global_activity = true</code>. The independent <code>matches</code> vector contains any qualifying specific targets and may be empty.</p>
         </article>
         <article class="principle">
           <p class="principle__number">02</p>
