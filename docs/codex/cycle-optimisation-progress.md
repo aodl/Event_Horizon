@@ -4,20 +4,20 @@ Baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`; clean tree, no existing bu
 Independent detached worktree: `/home/codexdev/src/Event_Horizon-baseline-81c5a0d`.
 Evidence root: `observations/cycle-optimisation/` (ignored raw artifacts/logs).
 
-## Status
+## Status — current checkpoint
 
-- Read normative specification, stable-memory contract, subscriber guide, xtask and canonical build instructions.
-- Current primary DFINITY guidance being consulted before production edits.
-- Baseline canonical build passed in the detached worktree; reviewed hashes reproduced. Debug baseline built and preserved as a tracked test fixture with SHA-256 provenance. Focused serial paired harness compiling (log `harness-compile.log`, exec session 63807). No production edits yet.
-- A–G, independent differential oracle, fixed-principal production measurements, compiler z/s/2/3 screening: pending.
-- Full regression, security, pin update, canonical two-build gate: pending.
-- No deployment or external repository writes authorised/performed.
+- Baseline canonical/debug artifacts preserved and independently verified; baseline self-comparison passed (diagnostic costs only).
+- A/B, C, D, E, F committed as correctness-tested prototypes. G focused units (89 plus one filtered long oracle), strict backend Clippy, threshold-invalidation, alias paging/upgrade, and cross-subject exact-route PocketIC checks all passed. G is ready to commit.
+- Individual cumulative debug artifacts frozen under `baseline/`, `ab/`, `c/`, `d/`, `e/`, `f/`, `g/`. No measured performance acceptance or release candidate claimed yet.
+- Production fixed-anchor helper/test added but not executed. Full workload expansion, three-sample serial measurements/attribution, controlled differential interleavings and new baseline upgrade tests remain pending.
+- Compiler z/s/2/3 screening, scheduler/model recalibration, full regression/security, frontend pin and final canonical two-build gates remain pending.
+- No deployment, mainnet mutation, or external repository writes performed.
 
 ## Resume
 
 Inspect `git status --short`, `git log -5 --oneline`, and active processes first.
 Inspect raw logs under `observations/cycle-optimisation/logs/`.
-Next: finish baseline canonical build; preserve hashes/locks/tool versions; implement serial paired harness before production refactoring.
+Current runtime work is G; verify commit via `git log -1 --oneline` and working-tree status. Next: commit G if still uncommitted, then run `production_fixed_work` smoke with preserved baseline and locally built production candidate; label that unshrunk smoke, not canonical evidence. Read remaining-work checklist below before performance claims. Prepared helper patches outside Git have already been applied through G; do not reapply them.
 Do not overwrite baseline artifacts. Do not treat interrupted commands as passed.
 
 ## Contract checkpoints
@@ -93,3 +93,20 @@ Host-only `Env::with_anchors` supports production fixed ICP/Historian/CMC/Faucet
 F acceptance checkpoint: exact encoding/count unit passed; both canonical ICP and generic ICRC-3 global-only Index tests passed, plus `global_fanout_reserve_skips_still_attempt_all_recipients` (1,024 recipients). F is ready to commit. Broader mixed/max payload, actual-cost near-reserve and complete regressions remain final-gate requirements, not replaced by these focused checks.
 
 Next G: apply prepared relation-key/context patch; add isolated native stable-write counters/tests and pending-improvement/no-op invalidation tests. Also remove the unnecessary Nat clone in `SubjectSubscription::account` via a pure account-for-controller helper. Keep unchanged aliases fully validated and always update alias metadata timestamps/revision. Do not touch financial/cursor/price metadata writes. Record that G's cost delta includes completing A's derivation-key reuse.
+
+## G working checkpoint (not yet accepted)
+
+F commit `7cc440e`. G is applied in the working tree. `RelationContext` holds only operation-immutable mode/governance; `RelationKey` reuses unchanged existing AccountKey/ExternalKey encodings through staging, cache invalidation, and publication. Pending duplicates compare against effective pending improvements and retain them; unchanged candidates do not invalidate watcher generations. Publication suppresses unchanged self/external values, repeated global membership, and identical alias bindings. Alias metadata publication remains unconditional; complete snapshot validation is untouched. No financial/cursor/pricing journal write suppression.
+
+`SubjectSubscription::account` no longer clones its Nat-bearing subscription to substitute the controller; both self/subject use a pure identical account derivation helper. Internal debug/test wrappers are cfg-gated because production now uses keyed helpers directly. Unused private merge method removed; monotonic behaviour is covered by existing merge tests, new effective-state/write-count tests and pending-overlay tests.
+
+Initial G check found unused wrappers (now cfg-gated). Initial G unit compiles failed on ambiguous Nat RHS `.into()` in new assertions only; corrected to explicit Nat. Current focused rerun: exec 96030, `g-unit-corrected.log`; intentionally excludes the already-passed long randomized oracle until the next full acceptance. New tests count actual map inserts (`cfg(test)` only), verify alias timestamps/revision still advance, and preserve a staged lower threshold/cache generation across later no-op duplicates. Do not claim G passed until reading this log. Build/freeze G artifact, rerun D invalidation and aliases/upgrade/duplicate admission regressions next; then do serial paired costs and reject losing variants if needed.
+
+G focused units passed: 89 passed, long randomized oracle filtered once (already passed before G; still required in final full run). Strict backend all-target Clippy passed (`g-clippy.log`). G debug artifact preserved under `g/`; three serial installed-Wasm checks now active: smaller/equal post-threshold invalidation, full alias paging/cache/upgrade regression, cross-subject exact-route/threshold/callback regression. Logs `g-*.log`; no G commit until these are checked.
+
+Production fixture work: genuine baseline companion copied to `tests/fixtures/event_horizon_81c5a0d_production.wasm` with reviewed canonical hash, provenance appended. `production_fixed_work` is added to the host harness but NOT executed/accepted yet. It seeds state with the verified baseline debug module against fixed trust anchors, upgrades to uninstrumented production, settles initial timer lanes, and measures one scheduled Standard poll after 600 s with freezing threshold zero on both variants. After cost capture it upgrades to baseline debug for cursor/state inspection. Default candidate is local unshrunk smoke only; `EH_OPT_CANDIDATE_PROD` must point to final canonical bytes for canonical claims. Ordinary/no-memo and real global-only callback cases, ICP/generic, three pairs each. Cost may include storage accounting for the identical 600 s interval; do not label it isolated synchronous instruction cost. Validate actual behaviour/setup and reject incomplete scans before using any values. No production export/trust-anchor changes.
+
+
+G final focused checkpoint: strict backend all-target Clippy passed; installed-Wasm smaller/equal invalidation, aliases paging/cache/upgrade and cross-subject exact-route/callback tests all passed (`g-rerun-*.log`). Initial G PocketIC attempt was a host compile failure in the new production helper (moved reference snapshot), corrected before execution. It was not a failed behavioural assertion. Canonical baseline production fixture and host production helper are being committed with G; actual production run is still pending.
+
+Pinned transform extraction succeeded: `observations/cycle-optimisation/pinned-tool/ic-wasm --version` is 0.9.7, digest in `ic-wasm.sha256`. It was extracted from the unchanged pinned Docker tool stage using the baseline archive. This generated no release artifacts and changed no canonical recipe. Docker extraction exec 82463 should be reaped/checked if needed. Use this binary, never host 0.11.0, for screening after `ic-wasm shrink`.

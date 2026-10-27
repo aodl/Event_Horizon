@@ -9,3 +9,7 @@ cargo 1.94.1 (29ea6fb6a 2026-03-24)
 081815e5d42fd28c23c77fc1bba2c7c2fee495281ef9c1e04dc7091c56000679  rust-toolchain.toml
 7688c33de1a245072e5948d842701ab8f5a890952eced803249d22cb39b989fe  Dockerfile.repro
 325ea3d83c1694a2ccdd4c30b4473500fc9a4f3326bc1b0d1fc1dbea049b94ff  tests/fixtures/event_horizon_81c5a0d_debug.wasm
+
+Canonical production companion: tests/fixtures/event_horizon_81c5a0d_production.wasm
+Recipe: clean committed-source ./tools/scripts/docker-build in the independent baseline worktree; pinned Dockerfile.repro / Rust 1.94.1 / ic-wasm 0.9.7 shrink.
+2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528  tests/fixtures/event_horizon_81c5a0d_production.wasm

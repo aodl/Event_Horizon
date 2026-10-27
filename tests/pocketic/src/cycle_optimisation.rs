@@ -233,4 +233,136 @@ mod cycle_optimisation {
         );
         Ok(())
     }
+    /// Uninstrumented actual production exports and trust anchors. Debug fixture
+    /// setup/inspection is outside the measured production interval.
+    #[test]
+    #[ignore = "serial fixed-principal production-Wasm comparison"]
+    fn production_fixed_work() -> Result<()> {
+        let root = workspace_root()?;
+        let baseline =
+            std::fs::read(root.join("tests/fixtures/event_horizon_81c5a0d_production.wasm"))?;
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&baseline)),
+            "2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528"
+        );
+        let canonical = std::env::var_os("EH_OPT_CANDIDATE_PROD").is_some();
+        let candidate = if let Some(path) = std::env::var_os("EH_OPT_CANDIDATE_PROD") {
+            std::fs::read(path)?
+        } else {
+            wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?
+        };
+        let seed = super::cycle_optimisation::baseline()?;
+        for (cache, package) in [
+            (&LEDGER_WASM, "mock-icp-ledger"),
+            (&ICRC3_LEDGER_WASM, "mock-icrc3-ledger"),
+            (&HISTORIAN_WASM, "mock-historian"),
+            (&CMC_WASM, "mock-cmc"),
+            (&SUBSCRIBER_WASM, "mock-subscriber"),
+        ] {
+            wasm(cache, package, None)?;
+        }
+        let mut csv=String::from("variant,sample,generic,scenario,blocks,sender_cycles,stable_bytes,total_bytes,received,canonical_candidate\n");
+        for generic in [false, true] {
+            for (scenario, blocks) in [("ordinary", 256), ("global", 1)] {
+                for sample in 0..3 {
+                    let mut reference = None;
+                    for (variant, bytes) in [("baseline", &baseline), ("candidate", &candidate)] {
+                        let env = Env::with_anchors(
+                            seed.clone(),
+                            6_000_000_000_000,
+                            false,
+                            generic,
+                            false,
+                            true,
+                        )?;
+                        env.price_once()?;
+                        env.poll()?;
+                        refresh_aliases(&env)?;
+                        if scenario == "global" {
+                            env.admit_global(GLOBAL_BASE_E8S)?;
+                        }
+                        let initial = env.state()?;
+                        env.pic
+                            .upgrade_canister(
+                                env.event_horizon,
+                                bytes.clone(),
+                                candid::encode_args(())?,
+                                None,
+                            )
+                            .map_err(|e| anyhow!("production upgrade {e:?}"))?;
+                        for _ in 0..40 {
+                            env.pic.tick();
+                        } // Settle install/upgrade scheduler lanes outside measurement.
+                        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+                        for _ in 0..blocks {
+                            env.append_observed(
+                                source.clone(),
+                                account_id(env.subscriber, numbered(7)),
+                                20,
+                                None,
+                            )?;
+                        }
+                        // Standard's next poll is due after 600 s. No hourly funding or daily pricing is due.
+                        env.pic.advance_time(std::time::Duration::from_secs(600));
+                        let before = env.pic.cycle_balance(env.event_horizon);
+                        for _ in 0..40 {
+                            env.pic.tick();
+                        }
+                        let used = before
+                            .checked_sub(env.pic.cycle_balance(env.event_horizon))
+                            .context("unexpected production credit")?;
+                        let status = env
+                            .pic
+                            .canister_status(env.event_horizon, None)
+                            .map_err(|e| anyhow!("{e:?}"))?;
+                        let received = poke_count(&env, env.subscriber)?;
+                        assert_eq!(
+                            received,
+                            u64::from(scenario == "global"),
+                            "missed or duplicated production wake"
+                        );
+                        if scenario == "global" {
+                            let n = notification(&env, env.subscriber)?;
+                            assert!(n.global_activity);
+                            assert!(n.matches.is_empty());
+                        }
+                        // Stop production execution by argument-free upgrade only after measurement;
+                        // the verified baseline debug decoder inspects the same stable encodings.
+                        env.pic
+                            .upgrade_canister(
+                                env.event_horizon,
+                                seed.clone(),
+                                candid::encode_args(())?,
+                                None,
+                            )
+                            .map_err(|e| anyhow!("inspection upgrade {e:?}"))?;
+                        let state = env.state()?;
+                        assert_eq!(
+                            state.observed_next_block,
+                            initial.observed_next_block + blocks,
+                            "incomplete production scan"
+                        );
+                        assert_eq!(
+                            state.admission_next_block,
+                            initial.admission_next_block + if generic { 0 } else { blocks }
+                        );
+                        assert_eq!(state.cmc_state, initial.cmc_state);
+                        assert_eq!(state.polling_mode, PollingMode::Standard);
+                        let semantic = encode_one(&state)?;
+                        if let Some(ref old) = reference {
+                            assert_eq!(old, &semantic, "production state differential");
+                        } else {
+                            reference = Some(semantic);
+                        }
+                        csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{used},{},{},{received},{canonical}\n",status.memory_metrics.stable_memory_size,status.memory_size));
+                    }
+                }
+            }
+        }
+        if let Some(path) = std::env::var_os("EH_OPT_PRODUCTION_OUTPUT") {
+            std::fs::write(path, &csv)?;
+        }
+        println!("{csv}");
+        Ok(())
+    }
 }

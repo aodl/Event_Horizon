@@ -110,8 +110,8 @@ fn record_high_matches_independent_randomized_oracle() {
             let amount = match step % 9 {
                 0 => 0u8.into(),
                 1 => 1u8.into(),
-                2 => 20u8.into(),
-                3 => 20u8.into(),
+                2 => candid::Nat::from(20u8),
+                3 => candid::Nat::from(20u8),
                 4 => Nat(Nat::from(1u8).0 << 256usize),
                 5 => Nat(Nat::from(1u8).0 << 4096usize),
                 6 => Nat(Nat::from(1u8).0 << 32768usize),
@@ -161,7 +161,7 @@ fn equal_transfers_walk_1024_watchers_once_and_empty_sets_keep_no_nat() {
     );
     let mut out = BTreeMap::new();
     for i in 0..256 {
-        cache.observe(i, &20u8.into(), &mut out);
+        cache.observe(i, &candid::Nat::from(20u8), &mut out);
     }
     assert_eq!(cache.walked, 1024);
     assert_eq!(out.len(), 1024);
@@ -207,6 +207,7 @@ fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
                 own_id: p(9),
                 decimals: 8,
                 accounts: None,
+                relations: None,
             };
             let mut out = BTreeMap::new();
             let empty = icp_ledger::QueryBlocksResponse {
@@ -271,4 +272,72 @@ fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
         .join()
         .unwrap();
     }
+}
+
+#[test]
+fn duplicate_stage_keeps_pending_improvement_and_cache_generation() {
+    std::thread::spawn(|| {
+        let runtime = config::RuntimeConfig::production(p(8), None);
+        let ledger = runtime.icp_ledger;
+        state::initialize_instance_config(crate::instance::InstanceConfig {
+            observed_ledger: ledger,
+            observed_profile: None,
+            sns_root: None,
+            surplus_canister: None,
+        });
+        let make = |minimum| {
+            SubjectSubscription::self_subject(Subscription {
+                subscriber: p(1),
+                target: WatchTarget::Subaccount(7),
+                minimum_units: Nat::from(minimum),
+            })
+        };
+        state::put_relation(make(100u64));
+        state::put_relation(SubjectSubscription {
+            subject: p(1),
+            subscription: Subscription {
+                subscriber: p(2),
+                target: WatchTarget::Subaccount(7),
+                minimum_units: 0u8.into(),
+            },
+        });
+        let account = account_identifier_bytes(p(1), crate::account::numbered_subaccount(7));
+        let mut pending = PendingAdmissions::default();
+        let mut out = BTreeMap::new();
+        pending
+            .shared_subscriptions(account)
+            .observe(0, &150u16.into(), &mut out);
+        let mut context = AdmissionContext {
+            runtime: config::RuntimeConfig::production(ledger, None),
+            own_id: p(9),
+            decimals: 8,
+            accounts: None,
+            relations: None,
+        };
+        pending.stage(PreparedAdmission::Accounts(vec![make(20u64)]), &mut context);
+        assert!(!pending.shared_cache.contains_key(&account));
+        pending
+            .shared_subscriptions(account)
+            .observe(1, &10u8.into(), &mut out);
+        pending.stage(
+            PreparedAdmission::Accounts(vec![make(50u64), make(20u64)]),
+            &mut context,
+        );
+        assert_eq!(
+            pending.shared_cache[&account].record_high,
+            Some(10u8.into())
+        );
+        let writes = state::test_stable_writes()[0];
+        pending.publish();
+        assert_eq!(state::test_stable_writes()[0], writes + 1);
+        assert_eq!(
+            state::get_relation(p(1), p(1), WatchTarget::Subaccount(7))
+                .unwrap()
+                .subscription
+                .minimum_units,
+            candid::Nat::from(20u8)
+        );
+    })
+    .join()
+    .unwrap();
 }

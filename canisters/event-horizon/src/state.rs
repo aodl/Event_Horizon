@@ -355,27 +355,11 @@ pub fn modify_metadata(f: impl FnOnce(&mut Metadata)) {
     write_metadata(meta);
 }
 
+#[cfg(any(test, feature = "debug_api"))]
 pub fn put_subscription(subscription: Subscription) {
-    let runtime = crate::config::runtime();
-    let governance = read_instance_config()
-        .observed_profile
-        .and_then(|p| p.neuron_governance);
-    let account = subscription
-        .account(governance)
-        .expect("neuron subscription requires verified governance");
-    let key = if runtime.observed_ledger == runtime.icp_ledger {
-        AccountKey::icp(account_identifier_bytes(
-            account.owner,
-            *account.effective_subaccount(),
-        ))
-    } else {
-        AccountKey::from(account)
-    };
-    with_subscriptions(|map| {
-        let merged =
-            crate::subscription::merge_subscription(map.get(&key).map(|v| v.0), subscription);
-        map.insert(key, SubscriptionValue(merged));
-    });
+    put_relation(crate::subscription::SubjectSubscription::self_subject(
+        subscription,
+    ));
 }
 
 pub fn get_subscription(account: Account) -> Option<Subscription> {
@@ -386,6 +370,7 @@ pub fn get_icp_subscription(account_identifier: [u8; 32]) -> Option<Subscription
     with_subscriptions(|map| map.get(&AccountKey::icp(account_identifier)).map(|v| v.0))
 }
 
+#[cfg(feature = "debug_api")]
 pub fn get_target_subscription(
     subscriber: candid::Principal,
     target: WatchTarget,
@@ -434,9 +419,29 @@ pub fn write_surplus_policy(value: SurplusPolicyState) {
     });
 }
 
+#[cfg(test)]
+thread_local! { static TEST_WRITES: std::cell::Cell<[u64;4]> = const { std::cell::Cell::new([0;4]) }; }
+#[cfg(test)]
+fn test_written(kind: usize) {
+    TEST_WRITES.with(|v| {
+        let mut n = v.get();
+        n[kind] += 1;
+        v.set(n);
+    });
+}
+#[cfg(test)]
+pub(crate) fn test_stable_writes() -> [u64; 4] {
+    TEST_WRITES.with(std::cell::Cell::get)
+}
+
 pub fn put_global_subscriber(principal: candid::Principal) {
     with_global_subscribers(|map| {
-        map.insert(PrincipalKey::from(principal), 1);
+        let key = PrincipalKey::from(principal);
+        if !map.contains_key(&key) {
+            map.insert(key, 1);
+            #[cfg(test)]
+            test_written(2);
+        }
     });
 }
 
@@ -701,7 +706,11 @@ pub fn publish_aliases(
 ) {
     with_aliases(|m| {
         for i in items {
-            m.insert(i.alias, i.canister_id);
+            if m.get(&i.alias) != Some(i.canister_id) {
+                m.insert(i.alias, i.canister_id);
+                #[cfg(test)]
+                test_written(3);
+            }
         }
     });
     let mut meta = alias_metadata();
@@ -709,48 +718,101 @@ pub fn publish_aliases(
     meta.last_success = Some(now);
     write_alias_metadata(meta);
 }
-fn relation_account(s: &crate::subscription::SubjectSubscription) -> AccountKey {
-    let account = s
-        .account(
-            read_instance_config()
-                .observed_profile
-                .and_then(|p| p.neuron_governance),
-        )
-        .expect("verified governance");
-    let r = crate::config::runtime();
-    if r.observed_ledger == r.icp_ledger {
+/// Immutable derivation inputs for one admission operation, never mutable prices,
+/// aliases, balances, or endowment evidence.
+#[derive(Clone, Copy)]
+pub(crate) struct RelationContext {
+    shared: bool,
+    governance: Option<candid::Principal>,
+}
+pub(crate) fn relation_context(runtime: &crate::config::RuntimeConfig) -> RelationContext {
+    RelationContext {
+        shared: runtime.observed_ledger == runtime.icp_ledger,
+        governance: read_instance_config()
+            .observed_profile
+            .and_then(|p| p.neuron_governance),
+    }
+}
+#[derive(Clone)]
+pub(crate) struct RelationKey {
+    account: AccountKey,
+    external: Option<ExternalKey>,
+}
+impl RelationKey {
+    pub(crate) fn icp_identifier(&self) -> Option<[u8; 32]> {
+        if self.account.0.first() == Some(&0) {
+            self.account.0[1..].try_into().ok()
+        } else {
+            None
+        }
+    }
+}
+pub(crate) fn relation_key(
+    s: &crate::subscription::SubjectSubscription,
+    context: RelationContext,
+) -> RelationKey {
+    let account = s.account(context.governance).expect("verified governance");
+    let account = if context.shared {
         AccountKey::icp(account_identifier_bytes(
             account.owner,
             *account.effective_subaccount(),
         ))
     } else {
         AccountKey::from(account)
+    };
+    let external = (s.subject != s.subscription.subscriber).then(|| ExternalKey::new(&account, s));
+    RelationKey { account, external }
+}
+pub(crate) fn relation_at(key: &RelationKey) -> Option<crate::subscription::SubjectSubscription> {
+    match &key.external {
+        Some(key) => with_external(|m| m.get(key).map(|v| v.0)),
+        None => with_subscriptions(|m| {
+            m.get(&key.account)
+                .map(|v| crate::subscription::SubjectSubscription::self_subject(v.0))
+        }),
     }
 }
+pub(crate) fn put_relation_at(key: RelationKey, s: crate::subscription::SubjectSubscription) {
+    match key.external {
+        Some(key) => with_external(|m| {
+            if m.get(&key).is_some_and(|old| {
+                old.0.identity() == s.identity()
+                    && old.0.subscription.minimum_units <= s.subscription.minimum_units
+            }) {
+                return;
+            }
+            m.insert(key, ExternalValue(s));
+            #[cfg(test)]
+            test_written(1);
+        }),
+        None => with_subscriptions(|m| {
+            let candidate = s.subscription;
+            if m.get(&key.account).is_some_and(|old| {
+                old.0.subscriber == candidate.subscriber
+                    && old.0.target == candidate.target
+                    && old.0.minimum_units <= candidate.minimum_units
+            }) {
+                return;
+            }
+            m.insert(key.account, SubscriptionValue(candidate));
+            #[cfg(test)]
+            test_written(0);
+        }),
+    }
+}
+#[cfg(any(test, feature = "debug_api"))]
 pub fn put_relation(s: crate::subscription::SubjectSubscription) {
-    if s.subject == s.subscription.subscriber {
-        put_subscription(s.subscription);
-        return;
-    }
-    let key = ExternalKey::new(&relation_account(&s), &s);
-    with_external(|m| {
-        let v = match m.get(&key) {
-            Some(old) => old.0.merge(s),
-            None => s,
-        };
-        m.insert(key, ExternalValue(v));
-    });
+    let context = relation_context(&crate::config::runtime());
+    let key = relation_key(&s, context);
+    put_relation_at(key, s);
 }
+#[cfg(test)]
 pub fn get_relation(
     subscriber: candid::Principal,
     subject: candid::Principal,
     target: WatchTarget,
 ) -> Option<crate::subscription::SubjectSubscription> {
-    use crate::subscription::SubjectSubscription;
-    if subscriber == subject {
-        return get_target_subscription(subscriber, target).map(SubjectSubscription::self_subject);
-    }
-    let s = SubjectSubscription {
+    let s = crate::subscription::SubjectSubscription {
         subject,
         subscription: Subscription {
             subscriber,
@@ -758,11 +820,10 @@ pub fn get_relation(
             minimum_units: 0u8.into(),
         },
     };
-    with_external(|m| {
-        m.get(&ExternalKey::new(&relation_account(&s), &s))
-            .map(|v| v.0)
-    })
+    let key = relation_key(&s, relation_context(&crate::config::runtime()));
+    relation_at(&key)
 }
+
 fn interested(
     account: AccountKey,
     own: Option<Subscription>,
@@ -821,5 +882,75 @@ mod external_key_tests {
         other.subscription.target = WatchTarget::NeuronNonce(7);
         assert_ne!(key, ExternalKey::new(&icp, &other));
         assert!(key.0.len() <= 134);
+    }
+}
+
+#[cfg(test)]
+mod unchanged_write_tests {
+    use super::*;
+    #[test]
+    fn unchanged_effective_values_skip_map_writes_but_alias_metadata_advances() {
+        std::thread::spawn(|| {
+            let a = candid::Principal::from_slice(&[1, 1]);
+            let b = candid::Principal::from_slice(&[2, 1]);
+            initialize_instance_config(InstanceConfig {
+                observed_ledger: a,
+                observed_profile: None,
+                sns_root: None,
+                surplus_canister: None,
+            });
+            let sub = |minimum| Subscription {
+                subscriber: a,
+                target: WatchTarget::Subaccount(7),
+                minimum_units: candid::Nat::from(minimum),
+            };
+            put_subscription(sub(100u64));
+            put_subscription(sub(100u64));
+            put_subscription(sub(200u64));
+            put_subscription(sub(20u64));
+            let external = |minimum| crate::subscription::SubjectSubscription {
+                subject: b,
+                subscription: sub(minimum),
+            };
+            put_relation(external(100u64));
+            put_relation(external(100u64));
+            put_relation(external(200u64));
+            put_relation(external(20u64));
+            assert_eq!(
+                get_relation(a, a, WatchTarget::Subaccount(7))
+                    .unwrap()
+                    .subscription
+                    .minimum_units,
+                candid::Nat::from(20u8)
+            );
+            assert_eq!(
+                get_relation(a, b, WatchTarget::Subaccount(7))
+                    .unwrap()
+                    .subscription
+                    .minimum_units,
+                candid::Nat::from(20u8)
+            );
+            put_global_subscriber(a);
+            put_global_subscriber(a);
+            let mut meta = alias_metadata();
+            meta.last_attempt = Some(99);
+            write_alias_metadata(meta);
+            let items = || {
+                vec![crate::clients::historian::CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: a,
+                }]
+            };
+            publish_aliases(items(), vec![1; 32], 100);
+            publish_aliases(items(), vec![1; 32], 101);
+            assert_eq!(test_stable_writes(), [2, 2, 1, 1]);
+            assert_eq!(global_subscription_count(), 1);
+            assert_eq!(alias("A"), Some(a));
+            assert_eq!(alias_metadata().last_success, Some(101));
+            assert_eq!(alias_metadata().last_attempt, Some(99));
+            assert_eq!(alias_metadata().revision, Some(vec![1; 32]));
+        })
+        .join()
+        .unwrap();
     }
 }

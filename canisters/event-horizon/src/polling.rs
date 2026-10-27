@@ -104,54 +104,48 @@ impl CachedInterests {
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
-    subscriptions: BTreeMap<(Principal, Principal, WatchTarget), SubjectSubscription>,
+    subscriptions:
+        BTreeMap<(Principal, Principal, WatchTarget), (state::RelationKey, SubjectSubscription)>,
     shared_overlay: BTreeMap<([u8; 32], Principal, Principal, WatchTarget), SubjectSubscription>,
     shared_cache: BTreeMap<[u8; 32], CachedInterests>,
 }
 impl PendingAdmissions {
-    fn stage(&mut self, admission: PreparedAdmission, shared: bool) {
+    fn stage(&mut self, admission: PreparedAdmission, context: &mut AdmissionContext) {
         match admission {
             PreparedAdmission::Global(p) => {
                 self.globals.insert(p);
             }
             PreparedAdmission::Accounts(subscriptions) => {
                 for candidate in subscriptions {
-                    let key = candidate.identity();
-                    let existing = self
-                        .subscriptions
-                        .get(&key)
-                        .cloned()
-                        .or_else(|| state::get_relation(key.0, key.1, key.2));
-                    let effective = match existing {
-                        Some(old) => old.merge(candidate),
-                        None => candidate,
+                    let identity = candidate.identity();
+                    let key = if let Some((key, old)) = self.subscriptions.get(&identity) {
+                        if old.subscription.minimum_units <= candidate.subscription.minimum_units {
+                            continue;
+                        }
+                        key.clone()
+                    } else {
+                        let inputs = *context
+                            .relations
+                            .get_or_insert_with(|| state::relation_context(&context.runtime));
+                        let key = state::relation_key(&candidate, inputs);
+                        if state::relation_at(&key).is_some_and(|old| {
+                            old.identity() == identity
+                                && old.subscription.minimum_units
+                                    <= candidate.subscription.minimum_units
+                        }) {
+                            continue;
+                        }
+                        key
                     };
-                    if shared {
-                        let account = effective
-                            .account(
-                                state::read_instance_config()
-                                    .observed_profile
-                                    .and_then(|p| p.neuron_governance),
-                            )
-                            .expect("verified governance");
-                        self.shared_cache.remove(&account_identifier_bytes(
-                            account.owner,
-                            *account.effective_subaccount(),
-                        ));
+                    if context.runtime.observed_ledger == context.runtime.icp_ledger {
+                        let account = key.icp_identifier().expect("shared account key");
+                        self.shared_cache.remove(&account);
                         self.shared_overlay.insert(
-                            (
-                                account_identifier_bytes(
-                                    account.owner,
-                                    *account.effective_subaccount(),
-                                ),
-                                key.0,
-                                key.1,
-                                key.2,
-                            ),
-                            effective.clone(),
+                            (account, identity.0, identity.1, identity.2),
+                            candidate.clone(),
                         );
                     }
-                    self.subscriptions.insert(key, effective);
+                    self.subscriptions.insert(identity, (key, candidate));
                 }
             }
         }
@@ -179,8 +173,8 @@ impl PendingAdmissions {
         })
     }
     fn publish(self) {
-        for s in self.subscriptions.into_values() {
-            state::put_relation(s)
+        for (key, s) in self.subscriptions.into_values() {
+            state::put_relation_at(key, s)
         }
         for p in self.globals {
             state::put_global_subscriber(p)
@@ -301,6 +295,7 @@ struct AdmissionContext {
     own_id: Principal,
     decimals: u8,
     accounts: Option<([u8; 32], [u8; 32])>,
+    relations: Option<state::RelationContext>,
 }
 impl AdmissionContext {
     fn accounts(&mut self) -> &([u8; 32], [u8; 32]) {
@@ -733,7 +728,7 @@ async fn legacy_page(
                         }
                     }
                 }
-                pending.stage(admission, matches!(s, Stream::Shared));
+                pending.stage(admission, context);
                 if debug_abort_after_staged_admission() {
                     return Err("debug abort after staged legacy admission".into());
                 }
@@ -790,6 +785,7 @@ async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
         own_id: ic_cdk::api::canister_self(),
         decimals,
         accounts: None,
+        relations: None,
     };
     let first_length = page_length(at, None);
     let first = icp_ledger::query_blocks(r.icp_ledger, at, first_length).await?;
@@ -954,6 +950,7 @@ mod target_match_tests {
             own_id: own,
             decimals: 8,
             accounts: None,
+            relations: None,
         };
         assert!(context.accounts.is_none());
         for _ in 0..256 {
