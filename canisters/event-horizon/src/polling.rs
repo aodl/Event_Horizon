@@ -923,7 +923,10 @@ pub async fn run_poll() {
         }
         out
     };
-    dispatch_matches(out, subscriber::poke);
+    let mut global_cache = None;
+    dispatch_matches(out, |principal, notification| {
+        subscriber::poke(principal, notification, &mut global_cache)
+    });
 }
 
 #[cfg(test)]

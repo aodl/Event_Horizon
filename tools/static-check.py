@@ -566,7 +566,11 @@ assert 'poke_subjects' not in subscriber_did
 assert 'opt ' not in subscriber_did
 assert 'subject : principal' in subscriber_did
 sender=(root/'canisters/event-horizon/src/clients/subscriber.rs').read_text()
-assert 'Call::bounded_wait(subscriber, "poke").with_arg(&notification)' in sender
+# Exact typed/raw encoding equivalence and one-record contents are behavioural
+# unit tests; installed standard/Index receivers test the actual sending path.
+assert 'candid::encode_one(notification)' in sender
+assert '.with_raw_args(bytes)' in sender
+assert '.with_arg(&notification)' in sender
 assert 'call.get_cost()' in sender and 'call.oneway()' in sender
 for obsolete in ['poke_subjects', 'self_matches', 'subject_matches', 'with_args', 'notification.method()']:
     assert obsolete not in sender

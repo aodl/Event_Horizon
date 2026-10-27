@@ -81,3 +81,15 @@ E artifact frozen under `e/` (digest alongside). Five serial eligibility regress
 - Final full gates, all required tests/security, actual canonical backend hash, frontend pin/bundle/manifest, committed-source two-build reproducibility and population, remote CI status are ALL pending. Do not claim a release candidate yet.
 
 E acceptance checkpoint: existing 86 backend tests passed, plus the new traversal test separately (87 total cases now present). All five installed-Wasm eligibility/archive regressions listed above passed. No source-location assertion forces eager registry enumeration anymore; timing coverage resides in those tests plus the real-page visit counter. E is ready to commit; individual costs still pending.
+
+## F checkpoint
+
+E committed as `da43560`. Working F uses one optional batch-owned Candid buffer only for `global_activity=true,matches=[]`; ordinary typed encoding remains for specifics/mixed. Each recipient retains its own bounded-wait oneway Call, immediate actual `get_cost()` reserve check, no attached cycles, and the same attempt counters. Unit `f-encoding-unit-final.log` passed exact typed-byte/decode equivalence, one encoding across 1,024 lookups, pointer reuse, and non-global/specific exclusion; counter is cfg(test), absent from Wasm. F debug artifact is frozen under `f/`.
+
+Three F installed-Wasm checks are now active (inspect `f-*.log`): canonical/generic global-only Index callbacks and 1,024-recipient reserve recovery. Do not apply G until F is committed after these checks. Prepared G files: `/home/codexdev/eh-opt-g.py`, `/home/codexdev/eh-relation-keys.rs`; UNAPPLIED.
+
+Host-only `Env::with_anchors` supports production fixed ICP/Historian/CMC/Faucet principals, NNS subnet, deterministic initial time, and freezing threshold zero for controlled test liquidity. Existing fixture callers still use the old path unchanged. This setup support has not yet been measured or accepted as a production-path harness; add an actual uninstrumented production-Wasm scheduled-poll test (and post-measurement inspection) before making any canonical measurement claim.
+
+F acceptance checkpoint: exact encoding/count unit passed; both canonical ICP and generic ICRC-3 global-only Index tests passed, plus `global_fanout_reserve_skips_still_attempt_all_recipients` (1,024 recipients). F is ready to commit. Broader mixed/max payload, actual-cost near-reserve and complete regressions remain final-gate requirements, not replaced by these focused checks.
+
+Next G: apply prepared relation-key/context patch; add isolated native stable-write counters/tests and pending-improvement/no-op invalidation tests. Also remove the unnecessary Nat clone in `SubjectSubscription::account` via a pure account-for-controller helper. Keep unchanged aliases fully validated and always update alias metadata timestamps/revision. Do not touch financial/cursor/price metadata writes. Record that G's cost delta includes completing A's derivation-key reuse.
