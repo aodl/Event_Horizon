@@ -501,6 +501,21 @@ mod tests {
             sns: bool,
             fixed: bool,
         ) -> Result<Self> {
+            // Compile fixtures before starting the server: a cold/rebuilt Wasm
+            // can exceed PocketIC's idle TTL, independently of IC execution.
+            // Warm both ledgers before a mixed-architecture test creates any instance.
+            for (cache, package) in [
+                (&LEDGER_WASM, "mock-icp-ledger"),
+                (&ICRC3_LEDGER_WASM, "mock-icrc3-ledger"),
+                (&HISTORIAN_WASM, "mock-historian"),
+                (&CMC_WASM, "mock-cmc"),
+                (&SUBSCRIBER_WASM, "mock-subscriber"),
+            ] {
+                wasm(cache, package, None)?;
+            }
+            if sns {
+                wasm(&SNS_ROOT_WASM, "mock-sns-root", None)?;
+            }
             let builder = PocketIcBuilder::new().with_application_subnet();
             let builder = if fixed {
                 builder.with_nns_subnet().with_initial_time(
