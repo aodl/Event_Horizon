@@ -29,3 +29,14 @@ Keep IDs/encodings 0–11, public interfaces, exact routes, mutable alias/price 
 Serial paired installed-debug-Wasm harness: `tests::cycle_optimisation::paired_fixed_work`. Three independent samples per row; default smoke versus opt-in full ICP/generic matrix. Costs exclude fixture setup and observation queries; 30 settlement ticks at unchanged simulated time. No instruction or peak-heap claim yet. Canonical fixed-principal production harness remains required.
 
 Exact next: `EH_OPT_CANDIDATE=$PWD/tests/fixtures/event_horizon_81c5a0d_debug.wasm EH_OPT_OUTPUT=$PWD/observations/cycle-optimisation/baseline/smoke.csv POCKET_IC_MUTE_SERVER=1 DFX_IDENTITY=codex_local cargo test --locked -p event-horizon-pocketic --lib tests::cycle_optimisation::paired_fixed_work -- --exact --ignored --nocapture --test-threads=1`. Wait for all builds before measuring.
+
+## Active implementation checkpoint (A/B)
+
+Current committed scaffold: `5acaf93`; working tree contains A/B implementation and harness Time-API correction/formatting. Initial harness compile failed due to PocketIC 15 `Time` API; fixed using `.into()` and `as_nanos_since_unix_epoch`. Baseline self-comparison is active (exec 30437, `baseline-smoke.log`); warm fixture builds finish before measured regions. An unrelated B2Z build/benchmark began concurrently: treat this run as **diagnostic only**, not headline performance evidence. No external process was stopped and no external repo written.
+
+A: scan-local runtime and lazily derived Faucet/EH default account identifiers; memo absence rejects before pure address work. Alias, price, governance validation, Historian exact-route calls stay at their old logical points. Stage/publication derivation reuse is still pending.
+B: match recording borrows Nat, cloning only insertion/new maximum; ICRC decoding borrows validated Nat/memo. New pointer-identity/large-memo unit test plus existing malformed sender/memo tests protect extraction. `ab-unit.log` (exec 60177) may predate the latest two new unit tests: rerun it before committing A/B.
+
+Next commands: `cargo test --locked -p event-horizon --lib`; verify baseline self-comparison result; build A/B debug Wasm once, then run paired harness with that immutable file, serially in a quiet window. Do not claim concurrent diagnostic costs as final evidence. All C–G, production fixture, differential oracle, full matrix/profile/scheduler/release gates remain outstanding.
+
+A/B focused unit rerun: **83 passed**, including both new tests (`ab-unit-final.log`). No production adoption/performance acceptance claimed yet. Preserve the A/B artifact next before accumulator changes. Harness baseline diagnostic still active at this checkpoint; it prints the CSV only at completion.

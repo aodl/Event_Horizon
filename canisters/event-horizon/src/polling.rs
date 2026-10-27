@@ -227,7 +227,12 @@ fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principa
         let e = target.entry(p).or_default();
         e.global |= m.global;
         for (target_key, matched) in m.subs {
-            record_match(e, target_key, matched.first_block_index, matched.max_amount);
+            record_match(
+                e,
+                target_key,
+                matched.first_block_index,
+                &matched.max_amount,
+            );
         }
     }
 }
@@ -236,41 +241,52 @@ fn record_match(
     state: &mut MatchState,
     target: (Principal, WatchTarget),
     first_block_index: u64,
-    amount: Nat,
+    amount: &Nat,
 ) {
     if let Some(existing) = state.subs.get_mut(&target) {
         existing.first_block_index = existing.first_block_index.min(first_block_index);
-        if amount > existing.max_amount {
-            existing.max_amount = amount;
+        if amount > &existing.max_amount {
+            existing.max_amount = amount.clone();
         }
     } else if state.subs.len() < MAX_SPECIFIC_TARGETS_PER_POKE {
         state.subs.insert(
             target,
             TargetMatch {
                 first_block_index,
-                max_amount: amount,
+                max_amount: amount.clone(),
             },
         );
     }
 }
 
+struct AdmissionContext {
+    runtime: config::RuntimeConfig,
+    own_id: Principal,
+    decimals: u8,
+    accounts: Option<([u8; 32], [u8; 32])>,
+}
+impl AdmissionContext {
+    fn accounts(&mut self) -> &([u8; 32], [u8; 32]) {
+        self.accounts.get_or_insert_with(|| {
+            (
+                account_identifier_bytes(self.runtime.faucet_canister, [0; 32]),
+                account_identifier_bytes(self.own_id, [0; 32]),
+            )
+        })
+    }
+}
+
 async fn prepare_admission(
+    context: &mut AdmissionContext,
     from: &[u8],
     to: &[u8],
     memo: Option<&[u8]>,
-    decimals: u8,
 ) -> Option<PreparedAdmission> {
-    let r = config::runtime();
-    if account_id(from) != Some(account_identifier_bytes(r.faucet_canister, [0; 32]))
-        || account_id(to)
-            != Some(account_identifier_bytes(
-                ic_cdk::api::canister_self(),
-                [0; 32],
-            ))
-    {
+    let memo = memo?;
+    let (faucet, own) = context.accounts();
+    if account_id(from) != Some(*faucet) || account_id(to) != Some(*own) {
         return None;
     }
-    let memo = memo?;
     let Ok(resolved) = resolve_subscription_memo(memo, state::alias) else {
         return None;
     };
@@ -299,8 +315,8 @@ async fn prepare_admission(
     };
     let required = pricing::current_admission_e8s(class)?;
     match historian::route_is_admitted(
-        r.historian_canister,
-        ic_cdk::api::canister_self(),
+        context.runtime.historian_canister,
+        context.own_id,
         memo.to_vec(),
         required,
     )
@@ -312,7 +328,7 @@ async fn prepare_admission(
                     Some(PreparedAdmission::Global(subscriber))
                 }
                 x @ SubscriptionDeclaration::Account { .. } => {
-                    Subscription::from_declaration(x, decimals)
+                    Subscription::from_declaration(x, context.decimals)
                         .ok()
                         .map(|subscription| {
                             PreparedAdmission::Accounts(vec![SubjectSubscription {
@@ -328,7 +344,7 @@ async fn prepare_admission(
                     end,
                     minimum,
                 } => minimum
-                    .map(|x| x.to_units(decimals))
+                    .map(|x| x.to_units(context.decimals))
                     .transpose()
                     .ok()
                     .map(|minimum| {
@@ -373,7 +389,7 @@ fn observe_matches(
                 out.entry(s.subscription.subscriber).or_default(),
                 (s.subject, s.subscription.target),
                 index,
-                amount.clone(),
+                amount,
             )
         }
     }
@@ -600,7 +616,7 @@ async fn legacy_page(
     s: Stream,
     boundary: u64,
     requested: Range<u64>,
-    decimals: u8,
+    context: &mut AdmissionContext,
     out: &mut BTreeMap<Principal, MatchState>,
     shared_globals: Option<&mut SharedGlobalOrder>,
 ) -> Result<(u64, bool), String> {
@@ -659,7 +675,7 @@ async fn legacy_page(
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
             if let Some(admission) =
-                prepare_admission(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
+                prepare_admission(context, from, to, b.transaction.icrc1_memo.as_deref()).await
             {
                 if let PreparedAdmission::Global(subscriber) = &admission {
                     if let Some(order) = shared_globals.as_deref() {
@@ -724,6 +740,12 @@ async fn scan_legacy(
         admitted_at: BTreeMap::new(),
         last_live: None,
     });
+    let mut context = AdmissionContext {
+        runtime: r.clone(),
+        own_id: ic_cdk::api::canister_self(),
+        decimals,
+        accounts: None,
+    };
     let first_length = page_length(at, None);
     let first = icp_ledger::query_blocks(r.icp_ledger, at, first_length).await?;
     let boundary = first.chain_length;
@@ -745,7 +767,7 @@ async fn scan_legacy(
             s,
             boundary,
             at..request_end(at, requested_length, boundary)?,
-            decimals,
+            &mut context,
             out,
             shared_globals.as_mut(),
         )
@@ -860,6 +882,27 @@ mod target_match_tests {
         Principal::from_slice(&[n, 1])
     }
     #[test]
+    fn immutable_admission_accounts_are_lazy_and_reused() {
+        let own = p(7);
+        let runtime = config::RuntimeConfig::production(p(8), None);
+        let expected = (
+            account_identifier_bytes(runtime.faucet_canister, [0; 32]),
+            account_identifier_bytes(own, [0; 32]),
+        );
+        let mut context = AdmissionContext {
+            runtime,
+            own_id: own,
+            decimals: 8,
+            accounts: None,
+        };
+        assert!(context.accounts.is_none());
+        for _ in 0..256 {
+            assert_eq!(*context.accounts(), expected);
+        }
+        assert_eq!(context.accounts, Some(expected));
+    }
+
+    #[test]
     fn independent_first_index_and_maximum_include_zero_and_full_width() {
         for (events, first, maximum) in [
             (vec![(0, 7)], 0, 7),
@@ -870,7 +913,7 @@ mod target_match_tests {
             let mut s = MatchState::default();
             let key = (p(1), WatchTarget::Subaccount(7));
             for (i, a) in events {
-                record_match(&mut s, key, i, Nat::from(a as u64))
+                record_match(&mut s, key, i, &Nat::from(a as u64))
             }
             assert_eq!(
                 s.subs[&key],
@@ -886,12 +929,12 @@ mod target_match_tests {
         for reverse in [false, true] {
             let key = (p(2), WatchTarget::Subaccount(7));
             let mut early = MatchState::default();
-            record_match(&mut early, key, 100, 4u8.into());
+            record_match(&mut early, key, 100, &4u8.into());
             let mut late = MatchState {
                 global: true,
                 ..Default::default()
             };
-            record_match(&mut late, key, 300, 15u8.into());
+            record_match(&mut late, key, 300, &15u8.into());
             let (a, b) = if reverse {
                 (late, early)
             } else {
@@ -917,7 +960,7 @@ mod target_match_tests {
                 &mut first,
                 (p(2), WatchTarget::Subaccount(n)),
                 100,
-                1u8.into(),
+                &1u8.into(),
             );
         }
         let mut out = BTreeMap::from([(p(1), first)]);
@@ -927,14 +970,14 @@ mod target_match_tests {
                 local.get_mut(&p(1)).unwrap(),
                 (p(2), WatchTarget::Subaccount(n)),
                 200,
-                2u8.into(),
+                &2u8.into(),
             );
         }
         record_match(
             local.get_mut(&p(1)).unwrap(),
             (p(2), WatchTarget::Subaccount(7)),
             300,
-            99u8.into(),
+            &99u8.into(),
         );
         merge(&mut out, local);
         assert_eq!(out[&p(1)].subs.len(), 256);
@@ -978,8 +1021,8 @@ mod target_match_tests {
                 ..Default::default()
             };
             if n != 4 {
-                record_match(&mut s, (p(n), WatchTarget::Subaccount(7)), 0, 100u8.into());
-                record_match(&mut s, (p(9), WatchTarget::Subaccount(7)), 1, 101u8.into());
+                record_match(&mut s, (p(n), WatchTarget::Subaccount(7)), 0, &100u8.into());
+                record_match(&mut s, (p(9), WatchTarget::Subaccount(7)), 1, &101u8.into());
             }
             matches.insert(p(n), s);
         }
@@ -1013,7 +1056,7 @@ mod target_match_tests {
             &mut external,
             (p(3), WatchTarget::Subaccount(7)),
             0,
-            1u8.into(),
+            &1u8.into(),
         );
         let mut seen = vec![];
         dispatch_matches(
@@ -1050,12 +1093,12 @@ mod target_match_tests {
                         WatchTarget::Subaccount(n),
                     ),
                     1000 - n,
-                    Nat::from(n),
+                    &Nat::from(n),
                 )
             }
-            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 3, huge.clone());
-            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 1, 1u8.into());
-            record_match(&mut s, (p(3), WatchTarget::NeuronNonce(0)), 0, 1u8.into());
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 3, &huge.clone());
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 1, &1u8.into());
+            record_match(&mut s, (p(3), WatchTarget::NeuronNonce(0)), 0, &1u8.into());
             let mut attempts = 0;
             dispatch_matches(BTreeMap::from([(p(1), s)]), |_, n| {
                 attempts += 1;
@@ -1085,9 +1128,14 @@ mod target_match_tests {
                 &mut s,
                 (subject, WatchTarget::NeuronNonce(1)),
                 u64::MAX,
-                huge.clone(),
+                &huge.clone(),
             );
-            record_match(&mut s, (subject, WatchTarget::Subaccount(7)), 0, 1u8.into())
+            record_match(
+                &mut s,
+                (subject, WatchTarget::Subaccount(7)),
+                0,
+                &1u8.into(),
+            )
         }
         assert_eq!(s.subs.len(), 4);
         assert_eq!(
@@ -1107,11 +1155,11 @@ mod target_match_tests {
                 &mut s,
                 (p(1), WatchTarget::Subaccount(n)),
                 n + 100,
-                Nat::from(n),
+                &Nat::from(n),
             )
         }
         let key = (p(1), WatchTarget::Subaccount(7));
-        record_match(&mut s, key, 0, 999u16.into());
+        record_match(&mut s, key, 0, &999u16.into());
         assert_eq!(s.subs.len(), 256);
         assert_eq!(s.subs[&key].first_block_index, 0);
         assert_eq!(s.subs[&key].max_amount, Nat::from(999u16));

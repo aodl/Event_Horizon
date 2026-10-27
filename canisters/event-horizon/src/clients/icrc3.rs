@@ -17,12 +17,12 @@ pub struct SupportedStandard {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LedgerEvent {
+pub enum LedgerEvent<'a> {
     Transfer {
         from: Account,
         to: Account,
-        amount: Nat,
-        memo: Option<Vec<u8>>,
+        amount: &'a Nat,
+        memo: Option<&'a [u8]>,
     },
     Other,
 }
@@ -72,7 +72,7 @@ fn account(value: Option<&ICRC3Value>) -> Result<Account, String> {
 }
 
 /// Decodes only the shallow fields Event Horizon needs; unknown values are never traversed.
-pub fn decode_block(block: &ICRC3Value) -> Result<LedgerEvent, String> {
+pub fn decode_block(block: &ICRC3Value) -> Result<LedgerEvent<'_>, String> {
     let block = map(block).ok_or("block is not a map")?;
     let btype = match block.get("btype") {
         None => None,
@@ -94,12 +94,12 @@ pub fn decode_block(block: &ICRC3Value) -> Result<LedgerEvent, String> {
     let from = account(tx.get("from"))?;
     let to = account(tx.get("to"))?;
     let amount = match tx.get("amt") {
-        Some(ICRC3Value::Nat(n)) => n.clone(),
+        Some(ICRC3Value::Nat(n)) => n,
         _ => return Err("transfer amt is not Nat".into()),
     };
     let memo = match tx.get("memo") {
         None => None,
-        Some(ICRC3Value::Blob(bytes)) => Some(bytes.to_vec()),
+        Some(ICRC3Value::Blob(bytes)) => Some(bytes.as_ref()),
         Some(_) => return Err("transfer memo is not Blob".into()),
     };
     Ok(LedgerEvent::Transfer {
@@ -228,7 +228,32 @@ mod tests {
         else {
             panic!("expected transfer")
         };
-        (from, to, amount, memo)
+        (from, to, amount.clone(), memo.map(<[u8]>::to_vec))
+    }
+
+    #[test]
+    fn decoded_amount_and_large_memo_borrow_the_validated_page() {
+        let huge = Nat(Nat::from(1u8).0 << 32768usize);
+        let mut block = transfer(text_btype("1xfer"), None, huge);
+        tx_mut(&mut block).insert("memo".into(), ICRC3Value::Blob(vec![3; 65536].into()));
+        let LedgerEvent::Transfer {
+            amount,
+            memo: Some(memo),
+            ..
+        } = decode_block(&block).unwrap()
+        else {
+            panic!("transfer");
+        };
+        let tx = map(map(&block).unwrap().get("tx").unwrap()).unwrap();
+        let ICRC3Value::Nat(stored) = &tx["amt"] else {
+            panic!("Nat");
+        };
+        let ICRC3Value::Blob(bytes) = &tx["memo"] else {
+            panic!("Blob");
+        };
+        assert!(std::ptr::eq(amount, stored));
+        assert_eq!(memo.as_ptr(), bytes.as_ptr());
+        assert_eq!(memo.len(), 65536);
     }
 
     fn tx_mut(block: &mut ICRC3Value) -> &mut BTreeMap<String, ICRC3Value> {
