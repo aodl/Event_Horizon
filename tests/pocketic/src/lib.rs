@@ -7793,4 +7793,5 @@ mod tests {
         assert_eq!(request("/app.bundle.js")?.status_code, 200);
         Ok(())
     }
+    include!("cycle_optimisation.rs");
 }

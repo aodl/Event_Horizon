@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Focused serial debug-path comparison. Canonical production measurements are separate.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+output="${1:?usage: measure-cycle-optimisation OUTPUT.csv [full]}"
+cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon --features debug_api
+export EH_OPT_CANDIDATE="$ROOT/target/wasm32-unknown-unknown/release/event_horizon.wasm"
+export EH_OPT_OUTPUT="$output"
+if [[ "${2:-}" == full ]]; then export EH_OPT_FULL=1; fi
+export POCKET_IC_MUTE_SERVER=1 DFX_IDENTITY=codex_local
+cargo test --locked -p event-horizon-pocketic --lib tests::cycle_optimisation::paired_fixed_work -- --exact --ignored --nocapture --test-threads=1
