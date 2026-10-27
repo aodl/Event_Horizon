@@ -56,7 +56,7 @@ fn dispatch_matches(
     }
 }
 struct SharedGlobalOrder {
-    existing: BTreeSet<Principal>,
+    existing: Option<BTreeSet<Principal>>,
     admitted_at: BTreeMap<Principal, u64>,
     last_live: Option<u64>,
 }
@@ -657,7 +657,7 @@ async fn legacy_page(
     requested: Range<u64>,
     context: &mut AdmissionContext,
     out: &mut BTreeMap<Principal, MatchState>,
-    shared_globals: Option<&mut SharedGlobalOrder>,
+    mut shared_globals: Option<&mut SharedGlobalOrder>,
 ) -> Result<(u64, bool), String> {
     if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive live blocks".into());
@@ -706,6 +706,14 @@ async fn legacy_page(
         // The admitting Faucet transfer is still earlier than the new relation:
         // even watchers of this canister's default account start at later blocks.
         if matches!(s, Stream::Shared) {
+            // No admission writer has run yet. Snapshot once at the first live
+            // block, before observing or admitting that block; archive-only and
+            // empty scans never enumerate globals.
+            if let Some(order) = shared_globals.as_deref_mut() {
+                order
+                    .existing
+                    .get_or_insert_with(|| state::global_subscribers().into_iter().collect());
+            }
             observe_icp(id, &b.transaction.operation, &mut pending, out);
             page_last_live = Some(id);
         }
@@ -715,7 +723,12 @@ async fn legacy_page(
             {
                 if let PreparedAdmission::Global(subscriber) = &admission {
                     if let Some(order) = shared_globals.as_deref() {
-                        if !order.existing.contains(subscriber) {
+                        if !order
+                            .existing
+                            .as_ref()
+                            .expect("live snapshot")
+                            .contains(subscriber)
+                        {
                             page_global_admissions.entry(*subscriber).or_insert(id);
                         }
                     }
@@ -768,7 +781,7 @@ async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
     // Snapshot once per shared scan. Admissions take effect only for later blocks,
     // without walking the complete global registry for every transaction.
     let mut shared_globals = matches!(s, Stream::Shared).then(|| SharedGlobalOrder {
-        existing: state::global_subscribers().into_iter().collect(),
+        existing: None,
         admitted_at: BTreeMap::new(),
         last_live: None,
     });
@@ -809,7 +822,7 @@ async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
     }
     if let Some(order) = shared_globals {
         if let Some(last_live) = order.last_live {
-            for subscriber in order.existing {
+            for subscriber in order.existing.unwrap_or_default() {
                 out.entry(subscriber).or_default().global = true;
             }
             for (subscriber, admitted_at) in order.admitted_at {
@@ -881,7 +894,6 @@ pub async fn run_poll() {
             }
         }
     } else {
-        let globals = state::global_subscribers();
         let (mut out, activity) = match scan_icrc(r.observed_ledger).await {
             Ok(scan) => {
                 logging::observed_ledger_recovered();
@@ -891,6 +903,14 @@ pub async fn run_poll() {
                 failure(Stream::Observed, &e);
                 (BTreeMap::new(), false)
             }
+        };
+        // The guarded poll lane is the only production global-membership
+        // writer. Other lanes update aliases/pricing/funding, never globals.
+        // Snapshot after successful observation, before the admission stream.
+        let globals = if activity {
+            state::global_subscribers()
+        } else {
+            Vec::new()
         };
         match scan_legacy(Stream::Admission, profile.decimals).await {
             Ok(_) => logging::icp_admission_ledger_recovered(),

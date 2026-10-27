@@ -173,3 +173,102 @@ fn equal_transfers_walk_1024_watchers_once_and_empty_sets_keep_no_nat() {
     assert!(empty.record_high.is_none());
     assert_eq!(empty.walked, 0);
 }
+
+#[test]
+fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
+    for count in [0, 256, 1024] {
+        std::thread::spawn(move || {
+            fn ready<F: std::future::Future>(f: F) -> F::Output {
+                let mut f = std::pin::pin!(f);
+                match f
+                    .as_mut()
+                    .poll(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+                {
+                    std::task::Poll::Ready(v) => v,
+                    std::task::Poll::Pending => {
+                        panic!("unexpected external call in no-memo fixture")
+                    }
+                }
+            }
+            state::modify_metadata(|m| {
+                m.admission_bootstrapped = true;
+                m.observed_bootstrapped = true;
+            });
+            for n in 0..count {
+                state::put_global_subscriber(p(n + 10));
+            }
+            let mut order = SharedGlobalOrder {
+                existing: None,
+                admitted_at: BTreeMap::new(),
+                last_live: None,
+            };
+            let mut context = AdmissionContext {
+                runtime: config::RuntimeConfig::production(p(8), None),
+                own_id: p(9),
+                decimals: 8,
+                accounts: None,
+            };
+            let mut out = BTreeMap::new();
+            let empty = icp_ledger::QueryBlocksResponse {
+                chain_length: 0,
+                blocks: vec![],
+                first_block_index: u64::MAX,
+                archived_blocks: vec![],
+            };
+            assert_eq!(
+                ready(legacy_page(
+                    empty,
+                    Stream::Shared,
+                    0,
+                    0..0,
+                    &mut context,
+                    &mut out,
+                    Some(&mut order)
+                ))
+                .unwrap(),
+                (0, false)
+            );
+            assert_eq!(state::test_global_visits(), 0);
+            assert!(order.existing.is_none());
+            for index in 0..2 {
+                let response = icp_ledger::QueryBlocksResponse {
+                    chain_length: index + 1,
+                    first_block_index: index,
+                    archived_blocks: vec![],
+                    blocks: vec![icp_ledger::Block {
+                        parent_hash: None,
+                        timestamp: icp_ledger::TimeStamp { timestamp_nanos: 0 },
+                        transaction: icp_ledger::Transaction {
+                            memo: 0,
+                            icrc1_memo: None,
+                            operation: None,
+                            created_at_time: icp_ledger::TimeStamp { timestamp_nanos: 0 },
+                        },
+                    }],
+                };
+                assert_eq!(
+                    ready(legacy_page(
+                        response,
+                        Stream::Shared,
+                        index + 1,
+                        index..index + 1,
+                        &mut context,
+                        &mut out,
+                        Some(&mut order)
+                    ))
+                    .unwrap(),
+                    (index + 1, true)
+                );
+                assert_eq!(state::test_global_visits(), count);
+                assert_eq!(state::global_subscription_count(), count);
+                assert_eq!(
+                    state::test_global_visits(),
+                    count,
+                    "count must not enumerate"
+                );
+            }
+        })
+        .join()
+        .unwrap();
+    }
+}

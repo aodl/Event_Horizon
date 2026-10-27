@@ -440,10 +440,21 @@ pub fn put_global_subscriber(principal: candid::Principal) {
     });
 }
 
+#[cfg(test)]
+thread_local! { static TEST_GLOBAL_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
+#[cfg(test)]
+pub(crate) fn test_global_visits() -> u64 {
+    TEST_GLOBAL_VISITS.with(std::cell::Cell::get)
+}
+
 pub fn global_subscribers() -> Vec<candid::Principal> {
     with_global_subscribers(|map| {
         map.iter()
-            .map(|entry| candid::Principal::from_slice(&entry.key().0))
+            .map(|entry| {
+                #[cfg(test)]
+                TEST_GLOBAL_VISITS.with(|n| n.set(n.get() + 1));
+                candid::Principal::from_slice(&entry.key().0)
+            })
             .collect()
     })
 }
@@ -453,7 +464,6 @@ pub fn has_global_subscriber(principal: candid::Principal) -> bool {
     with_global_subscribers(|map| map.contains_key(&PrincipalKey::from(principal)))
 }
 
-#[cfg(feature = "debug_api")]
 pub fn global_subscription_count() -> u64 {
     with_global_subscribers(|map| map.len())
 }

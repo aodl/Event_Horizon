@@ -344,9 +344,9 @@ assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
 assert 'SubscriptionDeclaration::Range' in polling
 assert 'BTreeMap<Principal, MatchState>' in polling
-assert polling.count('state::global_subscribers()') == 2
 legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async fn scan_legacy')]
-assert 'state::global_subscribers()' not in legacy_page
+# Global eligibility/order is protected by installed-Wasm admission-in-first/last
+# block regressions, rather than forcing eager traversal at a source location.
 assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
 assert 'BTreeMap<(Principal, WatchTarget), TargetMatch>' in polling
