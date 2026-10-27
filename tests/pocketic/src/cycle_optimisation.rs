@@ -177,4 +177,60 @@ mod cycle_optimisation {
         println!("{csv}");
         Ok(())
     }
+    #[test]
+    #[ignore = "installed-Wasm cache-generation boundary"]
+    fn smaller_and_equal_transfers_after_threshold_reduction() -> Result<()> {
+        let env = Env::new()?;
+        set_aliases(
+            &env,
+            vec![
+                CanisterAlias {
+                    alias: "A".into(),
+                    canister_id: env.subscriber,
+                },
+                CanisterAlias {
+                    alias: "B".into(),
+                    canister_id: env.cmc,
+                },
+                CanisterAlias {
+                    alias: "C".into(),
+                    canister_id: env.subscriber_second,
+                },
+            ],
+            "",
+            None,
+        )?;
+        refresh_aliases(&env)?;
+        env.poll()?;
+        fund_suffix(&env, "A@B.7:1")?;
+        fund_suffix(&env, "C@B.7:1")?;
+        env.poll()?;
+        let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
+        let destination = account_id(env.cmc, numbered(7));
+        env.append(source.clone(), destination.clone(), 5_000_000, None)?;
+        fund_suffix(&env, "A@B.7:0.01")?;
+        let smaller = env.append(source.clone(), destination.clone(), 2_000_000, None)?;
+        env.poll()?;
+        env.wait_for_wakeup_pokes(env.subscriber, 1)?;
+        assert_eq!(
+            matches_for(&env, env.subscriber)?[0].first_block_index,
+            smaller
+        );
+        assert_eq!(poke_count(&env, env.subscriber_second)?, 0);
+        let first = env.append(source.clone(), destination.clone(), 2_000_000, None)?;
+        fund_suffix(&env, "C@B.7:0.01")?;
+        let equal = env.append(source, destination, 2_000_000, None)?;
+        env.poll()?;
+        env.wait_for_wakeup_pokes(env.subscriber, 2)?;
+        env.wait_for_wakeup_pokes(env.subscriber_second, 1)?;
+        assert_eq!(
+            matches_for(&env, env.subscriber)?[0].first_block_index,
+            first
+        );
+        assert_eq!(
+            matches_for(&env, env.subscriber_second)?[0].first_block_index,
+            equal
+        );
+        Ok(())
+    }
 }

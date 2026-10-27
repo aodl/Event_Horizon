@@ -65,12 +65,48 @@ enum PreparedAdmission {
     Accounts(Vec<SubjectSubscription>),
 }
 
+/// Page-local cache generation. Removing an entry invalidates both its watcher
+/// list and its amount summary; a new relation never inherits earlier activity.
+struct CachedInterests {
+    subscriptions: Vec<SubjectSubscription>,
+    record_high: Option<Nat>,
+    #[cfg(test)]
+    walked: usize,
+}
+impl CachedInterests {
+    fn new(subscriptions: Vec<SubjectSubscription>) -> Self {
+        Self {
+            subscriptions,
+            record_high: None,
+            #[cfg(test)]
+            walked: 0,
+        }
+    }
+    fn observe(&mut self, index: u64, amount: &Nat, out: &mut BTreeMap<Principal, MatchState>) {
+        if self.subscriptions.is_empty() {
+            return;
+        }
+        if self.record_high.as_ref().is_some_and(|old| amount <= old) {
+            return;
+        }
+        #[cfg(test)]
+        {
+            self.walked += self.subscriptions.len();
+        }
+        observe_matches(index, amount, self.subscriptions.iter(), out);
+        // A singleton gets no reusable high-water allocation: walking it is cheap.
+        if self.subscriptions.len() > 1 {
+            self.record_high = Some(amount.clone());
+        }
+    }
+}
+
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
     subscriptions: BTreeMap<(Principal, Principal, WatchTarget), SubjectSubscription>,
     shared_overlay: BTreeMap<([u8; 32], Principal, Principal, WatchTarget), SubjectSubscription>,
-    shared_cache: BTreeMap<[u8; 32], Vec<SubjectSubscription>>,
+    shared_cache: BTreeMap<[u8; 32], CachedInterests>,
 }
 impl PendingAdmissions {
     fn stage(&mut self, admission: PreparedAdmission, shared: bool) {
@@ -120,7 +156,7 @@ impl PendingAdmissions {
             }
         }
     }
-    fn shared_subscriptions(&mut self, account: [u8; 32]) -> &[SubjectSubscription] {
+    fn shared_subscriptions(&mut self, account: [u8; 32]) -> &mut CachedInterests {
         self.shared_cache.entry(account).or_insert_with(|| {
             let mut interested: BTreeMap<_, _> = state::interested_icp(account)
                 .into_iter()
@@ -139,7 +175,7 @@ impl PendingAdmissions {
             {
                 interested.insert(s.identity(), s.clone());
             }
-            interested.into_values().collect()
+            CachedInterests::new(interested.into_values().collect())
         })
     }
     fn publish(self) {
@@ -398,14 +434,14 @@ fn observe_matches(
 fn observe_icrc3(
     first_block_index: u64,
     e: &icrc3::LedgerEvent,
-    cache: &mut BTreeMap<(Principal, [u8; 32]), Vec<SubjectSubscription>>,
+    cache: &mut BTreeMap<(Principal, [u8; 32]), CachedInterests>,
     out: &mut BTreeMap<Principal, MatchState>,
 ) {
     if let icrc3::LedgerEvent::Transfer { to, amount, .. } = e {
         let interests = cache
             .entry((to.owner, *to.effective_subaccount()))
-            .or_insert_with(|| state::interested_icrc(*to));
-        observe_matches(first_block_index, amount, interests.iter(), out)
+            .or_insert_with(|| CachedInterests::new(state::interested_icrc(*to)));
+        interests.observe(first_block_index, amount, out)
     }
 }
 fn observe_icp(
@@ -416,12 +452,9 @@ fn observe_icp(
 ) {
     if let Some(icp_ledger::Operation::Transfer { to, amount, .. }) = op {
         if let Some(id) = account_id(to) {
-            observe_matches(
-                first_block_index,
-                &Nat::from(amount.e8s),
-                pending.shared_subscriptions(id),
-                out,
-            )
+            pending
+                .shared_subscriptions(id)
+                .observe(first_block_index, &Nat::from(amount.e8s), out)
         }
     }
 }
@@ -1339,3 +1372,7 @@ mod target_match_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "polling_differential.rs"]
+mod differential;
