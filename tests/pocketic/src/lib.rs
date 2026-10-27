@@ -41,6 +41,12 @@ mod tests {
     }
 
     fn wasm(cache: &OnceLock<Vec<u8>>, package: &str, features: Option<&str>) -> Result<Vec<u8>> {
+        if package == "event-horizon" && features == Some("debug_api") {
+            if let Some(path) = std::env::var_os("EH_TEST_BACKEND_WASM") {
+                return std::fs::read(&path)
+                    .with_context(|| format!("test backend {}", PathBuf::from(path).display()));
+            }
+        }
         if let Some(bytes) = cache.get() {
             return Ok(bytes.clone());
         }

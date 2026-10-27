@@ -40,3 +40,15 @@ B: match recording borrows Nat, cloning only insertion/new maximum; ICRC decodin
 Next commands: `cargo test --locked -p event-horizon --lib`; verify baseline self-comparison result; build A/B debug Wasm once, then run paired harness with that immutable file, serially in a quiet window. Do not claim concurrent diagnostic costs as final evidence. All C–G, production fixture, differential oracle, full matrix/profile/scheduler/release gates remain outstanding.
 
 A/B focused unit rerun: **83 passed**, including both new tests (`ab-unit-final.log`). No production adoption/performance acceptance claimed yet. Preserve the A/B artifact next before accumulator changes. Harness baseline diagnostic still active at this checkpoint; it prints the CSV only at completion.
+
+## Baseline self-comparison and accumulator checkpoint
+
+Baseline self-comparison completed successfully (12 rows, 3 independent pairs per ICP/generic row): identical cycles and effective state. Diagnostic ICP cost 115,227,735, generic 123,575,775 for 16 synthetic watchers / 32 equal transfers; no performance claim because unrelated builds ran concurrently. Raw CSV `baseline/smoke.csv`.
+
+A/B commit: `cdc555b`; immutable debug artifact `observations/cycle-optimisation/ab/event_horizon_debug.wasm` (digest alongside it). Baseline artifact remains immutable.
+
+Working C change: scan functions now own their accumulator and return `CompletedScan` only on success. Page handlers update that owned map directly; no whole-map clone/merge in production. On failure the scan returns only an error; durable page-level pending-admission/cursor publication and explicit archive progress are unchanged. Focused units running in `c-unit.log` (exec 83126). Preserve a C artifact and run failed-page/independent-stream regressions before proceeding to D. Global snapshot timing is unchanged in C.
+
+C focused acceptance: 83 backend units passed; PocketIC `live_page_cursor_is_atomic_across_a_late_malformed_block`, `distinct_stream_failures_do_not_suppress_the_other_stream`, and `admission_at_page_end_survives_next_page_failure_and_matches_on_retry` all passed against the frozen C artifact (`c/artifact.sha256`). Test loader override `EH_TEST_BACKEND_WASM` affects host fixture selection only. No production/debug export added. Individual serial cost rows remain pending a quiet measurement window.
+
+Next D: apply `/home/codexdev/eh-opt-d.py` and copy prepared independent oracle `/home/codexdev/eh-polling-differential.rs` to `canisters/event-horizon/src/polling_differential.rs`; run focused units. Oracle uses a linear retained-vector algorithm, independent threshold comparisons, deterministic seeds, page boundaries and invalidation. These preparation files are outside Git; preserve final versions in repo before relying on them.

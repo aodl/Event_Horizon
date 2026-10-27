@@ -222,6 +222,7 @@ fn u64nat(n: &Nat) -> Result<u64, String> {
 fn account_id(b: &[u8]) -> Option<[u8; 32]> {
     b.try_into().ok()
 }
+#[cfg(test)]
 fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principal, MatchState>) {
     for (p, m) in source {
         let e = target.entry(p).or_default();
@@ -544,9 +545,6 @@ async fn icrc_page(
         commit(Stream::Observed, true, at)
     }
     let blocks = icrc_live_blocks(r.blocks, at, requested_end)?;
-    // Retained poll identities must survive page-local overflow, including updates
-    // arriving after 256 new identities on a later page. Failed pages publish nothing.
-    let mut local = out.clone();
     let mut live = false;
     let mut cache = BTreeMap::new();
     for (id, block) in blocks {
@@ -554,7 +552,7 @@ async fn icrc_page(
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
         let e = icrc3::decode_block(&block)?;
-        observe_icrc3(id, &e, &mut cache, &mut local);
+        observe_icrc3(id, &e, &mut cache, out);
         live = true;
         at = at.checked_add(1).ok_or("observed cursor overflow")?;
     }
@@ -563,19 +561,24 @@ async fn icrc_page(
     }
     if live {
         commit(Stream::Observed, true, at);
-        merge(out, local)
     }
     Ok((at, live))
 }
-async fn scan_icrc(
-    ledger: Principal,
-    out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<bool, String> {
+/// Only successful scans yield their transient notifications. A failure drops the
+/// entire scan-owned accumulator; page admission/cursor commits remain independent.
+#[derive(Default)]
+struct CompletedScan {
+    matches: BTreeMap<Principal, MatchState>,
+    activity: bool,
+}
+
+async fn scan_icrc(ledger: Principal) -> Result<CompletedScan, String> {
+    let mut out = BTreeMap::new();
     let (ready, mut at) = position(&state::read_metadata(), Stream::Observed).unwrap();
     if !ready {
         let tip = u64nat(&icrc3::get_blocks(ledger, 0, 0).await?.log_length)?;
         commit(Stream::Observed, true, tip);
-        return Ok(false);
+        return Ok(CompletedScan::default());
     }
     let first_length = page_length(at, None);
     let first = icrc3::get_blocks(ledger, at, first_length).await?;
@@ -590,11 +593,14 @@ async fn scan_icrc(
                 (icrc3::get_blocks(ledger, at, length).await?, length)
             }
         };
-        let (n, live) = icrc_page(r, boundary, at, requested_length, out).await?;
+        let (n, live) = icrc_page(r, boundary, at, requested_length, &mut out).await?;
         at = n;
         activity |= live
     }
-    Ok(activity)
+    Ok(CompletedScan {
+        matches: out,
+        activity,
+    })
 }
 
 fn legacy_archived(
@@ -646,9 +652,6 @@ async fn legacy_page(
             r.first_block_index
         ));
     }
-    // Retained poll identities must survive page-local overflow, including updates
-    // arriving after 256 new identities on a later page. Failed pages publish nothing.
-    let mut local = out.clone();
     let mut pending = PendingAdmissions::default();
     let mut page_global_admissions = BTreeMap::new();
     let mut page_last_live = None;
@@ -670,7 +673,7 @@ async fn legacy_page(
         // The admitting Faucet transfer is still earlier than the new relation:
         // even watchers of this canister's default account start at later blocks.
         if matches!(s, Stream::Shared) {
-            observe_icp(id, &b.transaction.operation, &mut pending, &mut local);
+            observe_icp(id, &b.transaction.operation, &mut pending, out);
             page_last_live = Some(id);
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
@@ -709,15 +712,11 @@ async fn legacy_page(
                 order.last_live = Some(last_live);
             }
         }
-        merge(out, local)
     }
     Ok((at, live))
 }
-async fn scan_legacy(
-    s: Stream,
-    decimals: u8,
-    out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<bool, String> {
+async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
+    let mut out = BTreeMap::new();
     let r = config::runtime();
     let Some((ready, mut at)) = position(&state::read_metadata(), s) else {
         logging::shared_cursor_invariant("bootstrap flags or cursors differ");
@@ -731,7 +730,7 @@ async fn scan_legacy(
             .await?
             .chain_length;
         commit(s, true, tip);
-        return Ok(false);
+        return Ok(CompletedScan::default());
     }
     // Snapshot once per shared scan. Admissions take effect only for later blocks,
     // without walking the complete global registry for every transaction.
@@ -768,7 +767,7 @@ async fn scan_legacy(
             boundary,
             at..request_end(at, requested_length, boundary)?,
             &mut context,
-            out,
+            &mut out,
             shared_globals.as_mut(),
         )
         .await?;
@@ -787,7 +786,10 @@ async fn scan_legacy(
             }
         }
     }
-    Ok(activity)
+    Ok(CompletedScan {
+        matches: out,
+        activity,
+    })
 }
 fn failure(s: Stream, e: &str) {
     if config::is_reserve_protection(e) || e == "shared cursor invariant violated" {
@@ -809,7 +811,7 @@ pub async fn run_poll() {
         } else {
             Stream::Admission
         };
-        if let Err(e) = scan_legacy(stream, 0, &mut BTreeMap::new()).await {
+        if let Err(e) = scan_legacy(stream, 0).await {
             failure(stream, &e);
             if shared {
                 return;
@@ -834,10 +836,12 @@ pub async fn run_poll() {
             return;
         }
     };
-    let mut out = BTreeMap::new();
-    if shared {
-        match scan_legacy(Stream::Shared, profile.decimals, &mut out).await {
-            Ok(_) => logging::ledger_recovered_all(),
+    let out = if shared {
+        match scan_legacy(Stream::Shared, profile.decimals).await {
+            Ok(scan) => {
+                logging::ledger_recovered_all();
+                scan.matches
+            }
             Err(e) => {
                 failure(Stream::Shared, &e);
                 return;
@@ -845,27 +849,27 @@ pub async fn run_poll() {
         }
     } else {
         let globals = state::global_subscribers();
-        let activity = match scan_icrc(r.observed_ledger, &mut out).await {
-            Ok(a) => {
+        let (mut out, activity) = match scan_icrc(r.observed_ledger).await {
+            Ok(scan) => {
                 logging::observed_ledger_recovered();
-                a
+                (scan.matches, scan.activity)
             }
             Err(e) => {
                 failure(Stream::Observed, &e);
-                out.clear();
-                false
+                (BTreeMap::new(), false)
             }
         };
-        match scan_legacy(Stream::Admission, profile.decimals, &mut BTreeMap::new()).await {
+        match scan_legacy(Stream::Admission, profile.decimals).await {
             Ok(_) => logging::icp_admission_ledger_recovered(),
             Err(e) => failure(Stream::Admission, &e),
         }
         if activity {
             for p in globals {
-                out.entry(p).or_default().global = true
+                out.entry(p).or_default().global = true;
             }
         }
-    }
+        out
+    };
     dispatch_matches(out, subscriber::poke);
 }
 
