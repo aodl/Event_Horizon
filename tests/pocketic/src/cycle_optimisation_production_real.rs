@@ -51,7 +51,12 @@ fn production_real_fixed_work() -> Result<()> {
         wasm(cache, package, None)?;
     }
     let receiver_wasm = wasm(&SUBSCRIBER_WASM, "mock-subscriber", None)?;
-    let mut csv = String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,recipient_cycles,ledger_cycles,historian_cycles,callbacks,typed_payload_bytes,start_cursor,observed_cursor,admission_cursor,stable_bytes,wasm_heap_before,wasm_heap_after,canonical_candidate,idle_cycles_per_day\n");
+    // A global-only call reserves 42,102,481,000 cycles in this pinned
+    // environment. Ample actual liquidity covers 1,024 simultaneous calls and
+    // keeps both variants in VeryFast even before response reservations refund.
+    let initial_cycles = 80_000_000_000_000u128;
+    let window_seconds = 10;
+    let mut csv = String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,recipient_cycles,ledger_cycles,historian_cycles,callbacks,typed_payload_bytes,start_cursor,observed_cursor,admission_cursor,stable_bytes,wasm_heap_before,wasm_heap_after,canonical_candidate,idle_cycles_per_day,initial_cycles,window_seconds,polling_mode\n");
     // Predeclared representative final-production matrix. The1024 row is an
     // optional explicitly selected scale smoke; default runner selects32.
     for generic in [false, true].into_iter().filter(|g| selected_generic(*g)) {
@@ -72,7 +77,7 @@ fn production_real_fixed_work() -> Result<()> {
                     eprintln!("real production setup variant={variant} generic={generic} scenario={scenario} entries={entries}");
                     let env = Env::with_anchors(
                         seed.clone(),
-                        6_000_000_000_000,
+                        initial_cycles,
                         false,
                         generic,
                         false,
@@ -275,8 +280,9 @@ fn production_real_fixed_work() -> Result<()> {
                         .iter()
                         .map(|id| env.pic.cycle_balance(*id))
                         .collect::<Vec<_>>();
-                    // Standard mode: one due poll after600s, no hourly funding.
-                    env.pic.advance_time(std::time::Duration::from_secs(600));
+                    // VeryFast: one due poll after 10s, no hourly maintenance.
+                    env.pic
+                        .advance_time(std::time::Duration::from_secs(window_seconds));
                     let before = env.pic.cycle_balance(env.event_horizon);
                     for _ in 0..200 {
                         env.pic.tick();
@@ -412,14 +418,14 @@ fn production_real_fixed_work() -> Result<()> {
                     assert_eq!(state.subscriptions, initial.subscriptions);
                     assert_eq!(state.global_subscriptions, initial.global_subscriptions);
                     assert_eq!(state.cmc_state, initial.cmc_state);
-                    assert_eq!(state.polling_mode, PollingMode::Standard);
+                    assert_eq!(state.polling_mode, PollingMode::VeryFast);
                     let semantic = encode_one((&state, &receipts))?;
                     if let Some(ref old) = reference {
                         assert_eq!(old, &semantic, "production semantic differential");
                     } else {
                         reference = Some(semantic);
                     }
-                    csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{sender_cycles},{recipient_cycles},{ledger_cycles},{historian_cycles},{callbacks},{payload_bytes},{},{},{},{},{},{},{canonical},{}\n",initial.observed_next_block,state.observed_next_block,state.admission_next_block,status.memory_metrics.stable_memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0,status.idle_cycles_burned_per_day.0));
+                    csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{sender_cycles},{recipient_cycles},{ledger_cycles},{historian_cycles},{callbacks},{payload_bytes},{},{},{},{},{},{},{canonical},{},{initial_cycles},{window_seconds},VeryFast\n",initial.observed_next_block,state.observed_next_block,state.admission_next_block,status.memory_metrics.stable_memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0,status.idle_cycles_burned_per_day.0));
                 }
             }
         }

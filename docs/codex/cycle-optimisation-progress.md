@@ -705,3 +705,28 @@ Active original post-pin queue8926/PID1374114has stopped on that setup failure.
 Next: focused Clippy/manifest, corrected real preflights and scheduler boundary
 diagnostic serially, then final canonical two-build/population and production
 matrices/upgrade/frontend20responses. Final report/CI remain pending or blocked.
+
+## Real global preflight: actual-cost reservation diagnosed
+
+The16batch setup fixed the100round wait. The next baseline global256case failed
+the full receipt assertion:116received,140unchanged. Diagnostic extra400same-clock
+rounds left that histogram unchanged; observed/admission cursors257/257 and all256
+global memberships were present, while mode becameEconomy. This is genuine
+unchanged reserve policy: pinned65byteglobal Call.get_cost()=42,102,481,000cycles
+includes response/callback prepayment, so6Tcannot fund all256simultaneously even
+though settled messages cost far less. Existing actual-cost boundary rows retain
+that exact number. No failed/partial row is accepted. Preserve v2failed log and
+logs/real-global256-diagnostic.log; diagnostic deliberately returns failure.
+
+Removed temporary diagnostic. Correct the controlled full-delivery fixture to
+80Tactual liquidity/VeryFast/10second single-poll window for every real case,
+including optional1024scale. This covers reservations without crossing the
+VeryFast exit threshold. No production policy, reserve check, callback reservation
+or execution limit changes. CSV now records initialcycles/window/mode explicitly;
+older7case production cohort remains6T/Standard/600s.
+
+Also reject empty CSV selections in shared host helper and remove unsupported
+old production repeat-idle/bootstrap/archive case labels (never selected/accepted);
+valid debug coverage remains. Next: focused Clippy/negative selector check, new
+real preflights(global cases first), scheduler boundary diagnostic, then freeze
+final source for canonical two-build/population and3sample production matrices.

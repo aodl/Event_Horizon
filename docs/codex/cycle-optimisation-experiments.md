@@ -280,6 +280,15 @@ fixed trust anchors. Final canonical shared/fan-out/page scenarios remain requir
 The feature-only `production_real_fixed_work` fixture seeds relations through real
 ICP/Historian admissions before upgrading to each genuine production module. It
 uses fixed trust anchors, ordinary execution limits and 200+20-round settlement.
+Both variants receive80Tactual cycles, use unchanged VeryFast cadence and advance
+10seconds for one measured poll. This covers simultaneous response/callback
+reservations (42,102,481,000cycles for the65-byte global call in the pinned setup).
+The original6Tfixture legitimately skipped140of256calls under reserve policy and
+changed toEconomy; it was rejected, not an efficiency result. Seed admissions use
+16payout completed batches to respect PocketIC's100round ingress wait. Setup cost
+is excluded. The older seven-case production matrix stays6T/Standard/600seconds;
+do not mix these cohort windows. Dependency/recipient debits include their own
+declared storage interval and are not pure execution costs.
 The predeclared matrix, for both architectures and three independent pairs, is:
 32 real receivers with 256 equal/increasing transfers; 32 admitted but unmatched
 receivers with increasing transfers; 256 real global receivers; and 512 relations
@@ -316,6 +325,12 @@ frontend at `EH_OPT_FRONTEND_PROFILES/2/event_horizon_frontend.wasm`. This perfo
 20 source-asset/certification-response checks without rebuilding other compiler
 levels. Old pre-pin compiler fixtures remain bound to their original source;
 they must not be compared to newly pinned source assets.
+
+Unimplemented repeat-idle/bootstrap/archive labels were removed only from the
+old production helper's selectable list; none had accepted production results.
+Their fully implemented debug scenarios remain intact. All CSV-producing host
+fixtures reject an empty selection before writing evidence. No regression
+scenario was removed or delivery assertion relaxed.
 
 
 Scenario names are literal: `backlog` repeatedly transfers amount20 to the same

@@ -156,6 +156,18 @@ controlled alias publication and a price epoch between Historian awaits; thresho
 reduction and later-page overflow updates. No financial field is normalized away:
 the fixture controls the supplied balance to exercise the same sampled minimum.
 Physical B-tree allocation history may differ after avoided writes.
+The controlled Historian-delay fixture uses a test-only update wrapper around the
+same pure response because replicated queries cannot await. Normal mocks and all
+production measurements retain the query endpoint; no production call is changed.
+
+The new real-global fixture exposed two rejected baseline setups:256sequential
+Historian checks exceeded PocketIC's100round ingress wait, then6Tliquidity funded
+only116of256global calls because each65bytecall reserves42,102,481,000cycles.
+Extra400rounds did not deliver the unattempted140; the unchanged scheduler moved
+toEconomy under transient reservations. Seed batches are now16; full-delivery
+real cases use equal80Tfunding/VeryFast/10second windows, explicitly recorded in
+CSV. All receiver assertions and production reserve/callback rules remain intact.
+The original7production cases retain6T/Standard/600s; these are separate cohorts.
 
 Verified81baseline→candidate upgrades pass both architectures with representative
 pending notify/transfer states, aliases, cursors, self/external/global relations

@@ -43,6 +43,10 @@ mod cycle_optimisation {
         }
     }
     fn save_complete(path_variable: &str, csv: &str) -> Result<()> {
+        assert!(
+            csv.lines().skip(1).any(|line| !line.is_empty()),
+            "no completed scenario rows; check the selected case"
+        );
         if let Some(path) = std::env::var_os(path_variable) {
             let path = PathBuf::from(path);
             assert!(
@@ -907,15 +911,6 @@ mod cycle_optimisation {
                 ("idle", 0, 0),
                 ("idle", 0, 256),
                 ("idle", 0, 1024),
-                ("repeat_idle", 0, 0),
-                ("repeat_idle", 0, 256),
-                ("repeat_idle", 0, 1024),
-                ("bootstrap", 1, 0),
-                ("bootstrap", 1, 256),
-                ("bootstrap", 1, 1024),
-                ("archive_only", 512, 0),
-                ("archive_only", 512, 256),
-                ("archive_only", 512, 1024),
                 ("new_range", 1, 256),
                 ("specific", 256, 256),
             ] {
