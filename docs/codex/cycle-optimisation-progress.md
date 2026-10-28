@@ -375,3 +375,20 @@ While generic archive-only fixed-work rows run, add `ab-admissions` publication 
 ## Attribution receipts/resumption hardened before first sample
 
 Both queued/tracked attribution scripts now bind all six shadow artifacts, host fixture/harness, lock, frozenmocks, rustc and PocketIC digests. Resume verifies CSV/metric/log hashes for accepted cases and rejects changed inputs or unaccepted output; retry preserves an earlier failure transcript. One optional output-directory argument supports a separate investigated cohort. No sample count, case, command, source runtime or scope instrumentation changed; script has not started measuring yet. Main fixed-work harness remains frozen. Post-gate handoff still requires a clean committed tree.
+
+
+## Full final-v2 fixed-work matrix accepted
+
+All279pairs/558rows passed:45ICP+48generic groups, each3samples. All overall
+candidate rows improve; smallest1.2871% (genericirrelevantmemo), largest36.7097%
+(ICP64pageirrelevantbacklog). Everygroup's observed range iszero. Stableallocation
+100,728,832both; maximumallocatedlinearmemory3,735,552both (notliveheap/peakclaim).
+RawCSV, per-group summary, inputs and279shard/logdigest receipts are nowtracked
+under `docs/codex/cycle-optimisation-data/fixed-work*`. Baseline/candidate artifacts
+remain uninstrumented shrunkdebugz/2; productionpath/mainnet costs notclaimed.
+
+Exec7772/PID759516 advanced to publication66pairs; small12/scheduler36/component384/
+attribution56pairs remain queued. Exec97871/PID820596 stillwaitsfor allmeasurements
+before runningfullgates. Runtime/profile/harness unchanged. Keep sourceclean when
+handoff starts. Finalcanonicalproduction extension, pins/builds/CI/security and
+finalreport remainpending; draftplans include productionfidelity limits.

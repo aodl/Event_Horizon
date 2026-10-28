@@ -18,3 +18,16 @@ assetbytes perprofile. Status query statistics contain aggregation information
 loss (13reported calls for20known requests); raw estimates are not exact
 per-request instruction counts. Installation costs are single-sample screening
 values. See ../cycle-optimisation-experiments.md for commands and limitations.
+
+
+The final-v2 uninstrumented fixed-work matrix is complete: 93 groups × three
+independent pairs (279 pairs/558 raw rows). `fixed-work.csv` retains all fields,
+`fixed-work-summary.csv` gives medians/ranges for each group, and the input/receipt
+JSON binds artifacts, host harness, mocks, lock/tool versions and raw-log digests.
+All overall candidate rows improve; ICP reductions range1.6429–36.7097%, generic
+1.2871–34.8588%. Zero observed ranges reflect deterministic PocketIC fixtures,
+not mainnet uncertainty. Stable allocation is100,728,832bytes for both; largest
+allocated Wasm linear memory is3,735,552bytes in either variant. Per-change
+regressions and publication/scheduler/canonical data are separate and stillpending.
+These are configured-debug fixed-work costs with declared settlement intervals,
+not canonical production or daily-burn measurements. See experiment definitions.
