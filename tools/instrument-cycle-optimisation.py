@@ -27,7 +27,12 @@ manifest.write_text(manifest.read_text().replace("debug_api = []", "debug_api = 
 lib = src / "lib.rs"
 lib.write_text(lib.read_text() + '\n#[cfg(feature="optimisation_metrics")]\nmod optimisation_metrics;\n')
 template = root / "tools/cycle-optimisation-instrumentation.rs"
-(src / "optimisation_metrics.rs").write_bytes(template.read_bytes())
+probe_template = root / "tools/cycle-optimisation-reserve-probe.rs"
+probe = probe_template.read_text()
+sender_source = (src / "clients/subscriber.rs").read_text()
+probe_call = ("let mut cache=args.warm_global_cache.then(|| encoded.clone());\n    let accepted=crate::clients::subscriber::poke(args.subscriber,args.notification,&mut cache);" if "global_cache: &mut Option<Vec<u8>>" in sender_source else "let _warm=args.warm_global_cache;\n    let accepted=crate::clients::subscriber::poke(args.subscriber,args.notification);")
+probe = probe.replace("// SEND_PROBE",probe_call)
+(src / "optimisation_metrics.rs").write_text(template.read_text()+"\n"+probe)
 
 def span(file, function, phase):
     path = src / file
@@ -93,6 +98,7 @@ aliases.write_text(body)
 receipt = {
     "source_revision": source,
     "instrumentation_template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),
+    "reserve_probe_template_sha256": hashlib.sha256(probe_template.read_bytes()).hexdigest(),
     "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
     "instrumented": True,
     "canonical": False,

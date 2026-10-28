@@ -100,6 +100,7 @@ mod cycle_optimisation {
                 ("archive_only", 512, 0),
                 ("archive_only", 512, 256),
                 ("archive_only", 512, 1024),
+                ("global", 1, 0),
                 ("global", 1, 1),
                 ("global", 1, 256),
                 ("global", 1, 1024),
@@ -138,7 +139,7 @@ mod cycle_optimisation {
         } else {
             vec![("equal", 32, 16)]
         };
-        let mut csv = String::from("variant,sample,generic,scenario,blocks,watchers,sender_cycles,immediate_sender_cycles,stable_bytes,total_bytes,attempts,accepted,cursor,simulated_nanos,legacy_calls,icrc3_calls,ledger_cycles,historian_cycles,cmc_cycles,recipient_cycles,typed_payload_bytes,start_cursor,wasm_heap_before,wasm_heap_after,completed_polls,processed_blocks,fixture_phase\n");
+        let mut csv = String::from("variant,sample,generic,scenario,blocks,watchers,sender_cycles,immediate_sender_cycles,stable_bytes,total_bytes,attempts,accepted,cursor,simulated_nanos,legacy_calls,icrc3_calls,ledger_cycles,historian_cycles,cmc_cycles,recipient_cycles,typed_payload_bytes,start_cursor,wasm_heap_before,wasm_heap_after,completed_polls,processed_blocks,fixture_phase,sender_balance_before,sender_balance_after\n");
         for generic in [false, true].into_iter().filter(|g| selected_generic(*g)) {
             for &(scenario, blocks, watchers) in &scenarios {
                 if !selected_scenario(scenario, blocks, watchers)
@@ -512,7 +513,7 @@ mod cycle_optimisation {
                             end.as_nanos_since_unix_epoch() - start.as_nanos_since_unix_epoch();
                         let ledger_cost =
                             dependency_used[0] + if generic { dependency_used[1] } else { 0 };
-                        csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{watchers},{used},{immediate},{},{},{expected},{expected},{blocks},{elapsed},{},{},{ledger_cost},{},{},{},{payload_bytes},{cursor_before},{},{},{completed_polls},{},{}\n",
+                        csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{watchers},{used},{immediate},{},{},{expected},{expected},{blocks},{elapsed},{},{},{ledger_cost},{},{},{},{payload_bytes},{cursor_before},{},{},{completed_polls},{},{},{cycles},{settled}\n",
                             status.memory_metrics.stable_memory_size.0,status.memory_size.0,calls.0,calls.1,dependency_used[2],dependency_used[3],dependency_used[4],memory_before,status.memory_metrics.wasm_memory_size.0,if matches!(scenario,"bootstrap"|"archive_only") {0}else{blocks},if scenario=="bootstrap" {"first_bootstrap"}else{"bootstrapped"}));
                     }
                 }
@@ -1121,5 +1122,6 @@ mod cycle_optimisation {
     include!("cycle_optimisation_small.rs");
     include!("cycle_optimisation_scheduler.rs");
     include!("cycle_optimisation_frontend.rs");
+    include!("cycle_optimisation_reserve.rs");
     include!("cycle_optimisation_production_upgrade.rs");
 }

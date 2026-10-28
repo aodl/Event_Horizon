@@ -150,3 +150,31 @@ its overflow was a fixture failure and produced no accepted CSV.
 
 Ordinary no-interested-account traffic also covers1/2/16/64pages for recalibrating
 cost models without attributing specific-dispatch fees to raw block processing.
+
+
+The fixed-time fixture additionally has a full24-hour Standard window using
+600-second clock steps and20settlement rounds perstep at unchanged clock. This
+models negligible message latency within eachstep. It requires144completed polls,
+24funding runs, onepricing run and a complete dailyalias refresh. Traffic is four
+separately received blocks for the real-receiver case;1,024globals stay idle. Actual
+window debit and settled window-plus-explicit-debug-control/drain cost remain
+separate; no incoming funding is credited inside either window. All modes use a
+fixed120-round final drain plus tenquiescent rounds. These day measurements are
+separate from660-second latency-conditioned Standard/Continuous fixtures.
+
+Fixed-work CSVs retain actual sender balances before/after the settled interval.
+`tools/prepare-cycle-optimisation-model.py` converts complete three-sample rows to
+the **existing** cadence model, with fresh per-architecture/registry-size costs and
+current policy only. Its zero-traffic, no-incoming-funding projections cover the
+ordinary-polling component; hourly/daily maintenance coefficients remain unavailable
+there and must not be presented as zero total cost. Actual whole-day scheduler
+burn is reported separately. Continuous latency sensitivity is an assumption,
+not a measured mainnet poll rate or full-system runway guarantee.
+
+The generated instrumentation archive also has a test-only sender-reserve wrapper.
+It compares actual typed/raw CDKget_cost, burns only fresh PocketIC fixture cycles
+to reserve+actualcost-1/equal/+1, then calls the exact sender implementation. The
+host check requires actual authenticated receiver decoding/digest on accepted
+sends, including maximum arbitrary-precision records and cold/warm global bytes.
+No production export, liquidity override, retry, execution/decoder limit or stable
+region is introduced. These shadow artifacts must never be used as releases.

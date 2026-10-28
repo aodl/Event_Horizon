@@ -239,3 +239,30 @@ Profile2 chosen provisionally over3:3 has marginal wins in idle/equal/genericord
 Tracked raw screening CSVs/size/input receipts under `docs/codex/cycle-optimisation-data/`; runtime sourceofartifacts00c0d63, harness8802517. Cargo profile changez→2 is the only new production-source setting at this step. Pin is intentionally stillreviewedoldbackend until actual canonicalbuild; localprofile2hashf93cd9... is experimental, not final release evidence. All locks/toolchain/baseimage/otherflags remainunchanged.
 
 No build/benchmark remains active afterexec97387 completes. Next: finish focused host daily-scheduler/model-input/reserve-wrapper support from ignoreddrafts, test it; then freeze support/manifest and run serial finalthree-sample/full/per-component/attribution matrices. Drafts are NOT yet applied: scheduler_daily(two tuple/format checks needed), prepare-model(adapter needs rawsenderbefore/afterCSVfields +global0case), sender-reserve-probe +hosttest(generated shadowonly). Final release/CI/securitygate remainspending/unexcluded; no deployment.
+
+
+## Final measurement support / full-day acceptance
+
+Runtime/profile checkpoint9e304e1; currentworking changes are host-only fixtures,
+input adapter and generated shadow-wrapper tools. Full-day Standard idle1024ICP
+probe **passed**,53.00s (`daily-standard-probe.log`/CSV):144polls,24funding runs,
+onepricing run, complete dailyaliasrefresh, no blocks/callbacks/lag, same6Tactual
+initial funding and Standard tier for86400seconds. Rawwindow8,095,062,841→
+7,140,789,347; settledwindow+explicitdebugdrain8,150,526,460→7,196,338,722.
+This is oneprobe, not a final three-sample headline. Actual daily saving~11.7%
+is smaller than34%fixedempty-poll saving because storage/maintenance/timer costs
+remain. 600-second steps/20same-clock rounds represent negligible message latency;
+660-second Continuous fixtures keep the separate one-second-round assumption.
+
+Fixed-work CSVs now retain actual senderbefore/afterbalances, and global0single
+activity provides a fresh zero-recipient fanout control. Model adapter uses these
+actual measured values, never stale example coefficients, and clearly labels its
+ordinary-polling-only projections/unknownmaintenance rather than claiming full
+runway. Generated reserve wrapper/hosttest are prepared but NOT yet built/run;
+shadow templates add no rootproduction feature/module/export. Check boundary
+method generation andactualcost/equality before accepting. Mainfinalmatrix is
+NOT yet started. Nextcommit support/manifest afterClippy; build baselinez,
+candidatez and candidate2 production+debugshadows in distinct targetdirs; run
+near-reserve shards and finaluninstthree-sample/component/scheduler/metrics
+matrices serially. Preserve failed/incomplete diagnostics. Final canonical
+backendpin/frontend/repro/fullregression/security/CI remainpending; no deployment.
