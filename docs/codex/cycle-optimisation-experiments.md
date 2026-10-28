@@ -211,3 +211,48 @@ production graph changed. Financial comparisons supply the same liquid balance
 at the funding decision: 150T is below both actual debug-setter samples, so the
 unchanged surplus observation records the same minimum. Every stored financial
 field remains part of the comparison; final balances are not asserted equal.
+
+
+### Reproducing individual changes and attribution
+
+The focused matrices are retained in executable form:
+`python3 tools/run-cycle-optimisation-components.py` and
+`python3 tools/run-cycle-optimisation-attribution.py`, from the repository root.
+They use the documented `observations/cycle-optimisation/` artifact layout, normal
+frozen mocks and official PocketIC15. Build every input before starting either
+serial runner. The component runner uses three independent pairs per row; the
+attribution runner uses one deterministic instrumented pair and cannot establish
+headline cycle savings.
+
+| Artifact directory | Source commit | Build/transform |
+| --- | --- | --- |
+| baseline fixture | `81c5a0d` | pinned release z, debug_api, no shrink |
+| ab | `cdc555b` | same |
+| c | `cc5ce45` | same |
+| d | `5ddbbc9` | same |
+| e | `da43560` | same |
+| f | `7cc440e` | same |
+| g | `7425e22` | same |
+| i | `57b967b` | same |
+| j | `00c0d63` | same |
+
+Create a separate clean worktree for each revision, set a distinct
+`CARGO_TARGET_DIR`, then run
+`cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon --features debug_api`.
+Copy its raw module once to `ARTIFACT_DIRECTORY/event_horizon_debug.wasm` and hash
+it; do not reuse a target directory across relocated source archives. These local
+prototypes isolate source changes and are separate from the final-shrunk compiler
+screen and final canonical production artifacts. The two ICRC key-capacity
+comparisons use i→j; their complete raw rows are retained separately.
+
+The final uninstrumented matrix uses baseline/candidate shrunk companions from
+`tools/screen-cycle-optimisation-profiles.py`, profiles z and2 respectively, plus
+frozen mock binaries. For shadows, generate independent baseline and candidate
+archives with `tools/instrument-cycle-optimisation.py`; build baseline-z,
+candidate-z and candidate-2 using pinned flags and distinct target directories.
+For each source/profile preserve both production `optimisation_metrics` and debug
+`debug_api,optimisation_metrics` builds, shrink with0.9.7, and name them
+`final-shadows/VARIANT/event_horizon_production.wasm` and
+`final-shadows/VARIANT/event_horizon_debug.wasm`. The attribution script's cases
+and synchronous scope definitions are tracked, and artifact/input digests in the
+data receipts identify the actual modules measured.
