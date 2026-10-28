@@ -582,3 +582,26 @@ Raw/summary/input/logreceipts trackedas`component-g*`. Sourceunaltered.
 Queueexec7772 nowIcorrection24pairs,then56instrumentedattribution. Postexec97871
 waits. Canonicalrealextension, native model, fullgates and actualpin/build/repro/
 CI/security/finalreport remainpending; no otherbuild/benchmark untilqueue ends.
+
+
+## All uninstrumented components complete / attribution active
+
+All384componentpairs passed functionally. Icorrection24pairs/48rows (8groups) G→I
+z/raw: repeatedselfsavesICP47,616,133(2.5841%),generic43,912,457(2.3771%);
+externalsaves66,489,475(3.6106%)/63,662,160(3.4456%). Thisrecovers G's knownnoop
+lookup regression. Newrangecost+77,748(0.07503%)ICP/+77,031(0.06555%)generic;
+genericthreshold+38,178(0.00212%), ICPthresholdsaves18,904(0.00105%). Clean/dirty
+bookkeeping has a smallnewentrycost; retainforcorrect noop/improvement lifecycle.
+Raw/summary/input/logreceipts trackedas`component-i*`. Native1derive/0writes proof
+and effective-state snapshots remain separate. Jcapacityold3sampleproof isunder
+`observations/cycle-optimisation/j/capacity-{unique,range}/`; stillneedsrawdata
+retention/model-report integration, not a new productionchange.
+
+Exec7772/PID759516 now56instrumentedattribution pairs (one deterministic sample
+perrow, notheadlines), baseline-z vs candidate-z/2 withsame scopes on genuine
+production anchors andconfigureddebug paths. Read`logs/final-v2-attribution.log`
+and`attribution/inputs.json`/passedmarkers. No build/benchmark concurrently.
+Afterallpass exec97871/PID820596runsfullsourcegates automatically; keep treeclean.
+Allfourcombinedmodes393pairs+components384=777benchmarkpairs, **not** regressionsuite
+count. Fullregression/security/canonicalrealextension/pins/twobuild/CI/finalreport
+remainpending. Source/runtime/profile stillJ/2; do not claim releasecomplete.

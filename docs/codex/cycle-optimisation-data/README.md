@@ -136,3 +136,13 @@ isolated cyclewin forglobalpublication even though native stable-write counts
 fall; they are an explicit small stable-I/O trade-off, not a claimed saving.
 WholeG measurements do not isolate everylookup from otherpublicationcodegen.
 Final Icorrection and combinedrows must be assessed separately.
+
+
+`component-i*` measures the final known-noop cache/borrowedindex correction G→I
+atz/raw (8groups/24pairs). Functional rows pass. Repeatedself/external declarations
+improve2.3771–3.6106%, recovering G's redundant lookup cost. Newranges regress
+0.0750%ICP/0.0655%generic, and genericthresholdrow0.0021%, reflecting required
+clean/dirty bookkeeping; keep these tinytrade-offs explicit. Native proof counts
+256knownnoops→1keyderivation/0writes, without dropping an earlier improvement.
+J's separate exact-capacity correction and finalcompiler effects are not added
+arithmetically to these percentages.
