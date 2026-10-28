@@ -463,3 +463,20 @@ productionworkaround/assertionweakening. Finalcombinedincreasing improves7.05%.
 Raw/summary/input/logreceipts tracked as`component-ab*`; additivepercentclaims
 forseparateprototype stages prohibited. Admission-specificA/B stage isactive;
 C/D/E/F/G/Icorrection and finalmetrics stillqueued. Runtime/profile unchanged.
+
+
+## A/B admission attribution complete
+
+All30pairs/60rows passed (10groups); raw/summary/input/logreceipts tracked as
+`component-ab-admissions*`. EarlyA/B range costs regress: ICPnewrange+159,948
+(0.136672%),fullwidth+159,946(0.136874%);genericnewrange+403,583(0.338117%),
+fullwidth+58,318(0.048668%). Each range is one payout: contextsetup isn'tamortised;
+relation-key reuse/publication optimisation arrives laterG/I and capacityfixJ.
+This explains why theearlyprototype doesn'tdeliver thefinalrangegain, without
+claiming exactinstruction attribution. Repeatedself/external/threshold rows improve
+0.44–0.47%. Finalcombinednewranges improve~36–39%, so retain usefulcontext/borrowing
+changes with explicitintermediate tradeoffs. No runtimeworkaround or testweakening.
+
+Exec7772 nowrunsC(48pairs):AB→scan-ownedaccumulator,1/2/16/64pages growing/full
+andirrelevanttrailing. D81/E48/F36/G66/I24 thenattribution56remain. Postexec97871
+waiting. No otherbuild/benchmark; currentruntime/profile/host inputs unchanged.

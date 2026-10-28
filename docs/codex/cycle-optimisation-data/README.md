@@ -70,3 +70,12 @@ plausible inference, not a proved instruction-by-instruction cause. Retain the
 small explicit worst-case trade-off with equal/shared and arbitraryprecision wins;
 the finalshrunk/profile2 combined increasing row improves7.05%. Do not add gains
 across these separate prototypes or describe allindividualrows as improvements.
+
+
+`component-ab-admissions*` adds10groups/30pairs/60rows atsamez/raw. Allfunctional
+comparisons pass. EarlyA/B new/fullwidthranges regress0.1367/0.1369%ICP and
+0.3381/0.0487%generic; duplicate/threshold rows improve0.44–0.47%. Onepayout
+cannot amortise scan-context setup, and thisprototype predates relation-key reuse
+and the capacity correction; this is a code-path explanation, not exactinstruction
+attribution. Finalcombined ranges improve36–39%. Intermediate regressions remain
+visible; no separate-percentages are added together.
