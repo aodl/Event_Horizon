@@ -1,5 +1,33 @@
 # Cycle optimisation — resumable progress
 
+## Current release-closure checkpoint
+
+Validated recipe/source d13d1138e2fde4af18bd0d3f51f777470037f93f passes fmt,
+strict all-feature Clippy,146Rust+138frontend+128PocketIC=412tests, source manifest,
+production audits and two independent uncached Docker builds. Canonical population
+is complete. Backend f93cd920…8970 is unchanged; frontend210d4de6…41c8 uses full
+workspace z, while backend stays2. Pin remainsf93. Production Rust, Candid,
+stable encodings, financial and cadence policy are unchanged.
+
+The branch is published at d13d113; PR creation still returns403. Upstream advisory
+metadata is unchanged and OSV stillfails solely GHSA-qwgh-2vcv-g2f7 forblock-buffer
+0.10.4; audit/deny/npm pass, no exclusion added. Independent source review and191
+panic cases support the ready correction request. No upstream submission or
+operator approval is claimed.
+
+See [release closure](cycle-optimisation-release-closure.md), raw data/receipts and
+[PR handoff](cycle-optimisation-pr-handoff.md). Final evidence commit is docs/data/
+manifest only. Its post-commit verification runs from ignored
+observations/release-closure/final-evidence-checks.py; inspect evidence-final-status.json
+and resume.json before starting another process. It verifies the diff, repeats
+unit/static/manifest/security, populates canonical outputs and compares all four
+to retained d13 outputs. No full backend performance rerun is needed for identical
+bytes. Security and PR/CI are external release conditions; no deployment.
+
+Earlier checkpoints below are historical, not current active-process pointers.
+
+## Historical optimisation checkpoint at 9528da7
+
 ## Current checkpoint
 
 Implementation, compiler choice, local behavioural validation and canonical

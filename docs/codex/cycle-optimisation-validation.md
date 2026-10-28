@@ -5,6 +5,10 @@ required PR/CI evidence. The branch is now published; see the
 [release-closure follow-up](cycle-optimisation-release-closure.md). The implementation is complete; the local
 validation outcomes below distinguish completed checks from those blockers.
 
+This report preserves the original workspace2 frontend and its artifact identities
+as historical evidence. The follow-up selects frontend z and records the new
+canonical frontend hash; backend bytes and prior performance evidence are unchanged.
+
 ## Source and artifacts
 
 Baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`, independently preserved and

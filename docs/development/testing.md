@@ -302,3 +302,7 @@ and [resumable progress](../codex/cycle-optimisation-progress.md) for current st
 Benchmarks require the host-only `optimisation_benchmarks` feature; ordinary
 regression discovery retains the baseline-upgrade and cache-invalidation tests.
 Production trust anchors and application exports are unchanged.
+
+The [release-closure report](../codex/cycle-optimisation-release-closure.md) records
+current hybrid compiler selection, complete final-source regression/reproducibility
+checks, all-public-asset comparisons, advisory correction evidence and PR/CI status.

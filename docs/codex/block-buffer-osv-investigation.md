@@ -23,5 +23,11 @@ made for this finding. No external issue/PR was published. Security release
 acceptance remains blocked until authoritative scanner data is corrected or an
 explicitly reviewed resolution is available. A fresh scan at validated source `7cfa8b3`, using workflow-pinned cargo-audit
 0.22.1 and OSV 2.3.8, reproduces this sole unfiltered finding; audit/deny/npm pass.
-Candidate remote CI is unverified because publication is unavailable. Raw scan and JSON are in the normal observations
+The branch is now published at d13d113. Remote CI remains unverified because
+PR creation returned403 and no relevant PR run was found; see the
+[release-closure follow-up](cycle-optimisation-release-closure.md). Raw scan and JSON are in the normal observations
 area; reproduce with `./tools/scripts/security-scan` and the linked public data.
+
+Independent closure review,191native caught-panic cases, fresh machine metadata
+and a precise ready correction request are preserved in the follow-up. No
+authoritative correction or activated exception is claimed.

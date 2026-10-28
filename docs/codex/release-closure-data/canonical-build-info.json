@@ -1,0 +1,23 @@
+{
+  "inputs": {
+    "Cargo.lock": "10e6dbf405589221d60e9f51bfb661f14aa400797eb74d412b3b01025ad066ed",
+    "SPEC.md": "3bb2b0aebbd934bb076585b4e6294512fd7efca75d87aa25b85ffd51c705fce3",
+    "package-lock.json": "0a88d9fab2ea28f211a14a4eee3cddfd5d0cee4040ec7f3ab9d7fd1d58397063",
+    "rust-toolchain.toml": "081815e5d42fd28c23c77fc1bba2c7c2fee495281ef9c1e04dc7091c56000679",
+    "tools/scripts/build-release": "24b9b0b2b7a765f691dbaec1a735d14ec79e599a6552cbec921b05d9bf6f8342"
+  },
+  "profiles": {
+    "backend": "2",
+    "frontend": "z",
+    "frontend_target": "target/frontend-size",
+    "package_set": "event-horizon,event-horizon-frontend"
+  },
+  "source_date_epoch": "1700000000",
+  "toolchain": {
+    "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "ic-wasm": "ic-wasm 0.9.7",
+    "node": "v18.20.4",
+    "npm": "9.2.0",
+    "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  }
+}
