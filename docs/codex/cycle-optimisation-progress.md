@@ -6,15 +6,18 @@ Evidence root: `observations/cycle-optimisation/` (ignored raw artifacts/logs).
 
 ## Status — current checkpoint
 
-- Baseline81c5a0d independently built/preserved; runtime I is committed as `57b967b`. A–G are implemented with focused equivalence tests.
-- All36 I pilot pairs passed (three samples/group), including empty/bootstrap/archive, equal/increasing and unique destinations; exact spreads/results at the end. These remain debug-path pilot evidence.
-- Working J fixes only ICRC key buffer capacity (same bytes/encoding) and adds small-real-receiver/scheduler fixtures plus shadow attribution support. Small1/16 mixed self/external/neuron probe passed after correcting fixture self-map count (external relations proved by actual hints). Standard scheduler probe passed; Continuous probe/all-featureClippy/full backend units active in exec10344. Inspect newest appended checkpoint and logs.
-- Security gate still FAILED on OSV block-buffer0.10.4 metadata mismatch, freshly confirmed from public API; no exception/dependency refresh. Final scan/remote CI still required.
-- Compiler screening/selection, remaining individual/full performance matrices, production/shadow attribution, scheduler evaluation, final regressions/frontend pin/canonical two-build validation remain pending. No release-completion claim or deployment.
+- Runtime J/profile2 is fixed (`9e304e1`); final measurement harness `8876833`. No production source changes after profile selection.
+- Independent81c5a0d canonical/debug artifacts preserved. A–G implemented;93backendunits/oracle, strictClippy, focused failure/invalidation/alias/price checks and reviewed debug+genuine-production baseline upgrades passed. Full release gates still pending.
+- All48single-sample compiler screen pairs passed;2 selected. Fresh typed/raw actual-cost reserve boundaries passed (global cold/warm,1×257,256×4097,64×32769); rejected256×32769 wrapper evidence retained, no production limits changed.
+- **Active exec43215:** serial finalthree-sample debug→publication→small→scheduler pipeline. Main debug56pairs passed at lastcheckpoint, through ICPidle/bootstrap/archive/global/mixed/earlyordinary groups. Read current log/active-process.json, not this stale pair count. Do not edit harness/mocks/runner or run builds/benchmarks concurrently.
+- Final component/attribution/canonical-production measurements, fullgates and final source/backendpin/frontend/two-build evidence remainpending. Source-script hashes/data receipts enforce resumability; no interrupted/failed row counts as a pass.
+- Security gate FAILED on fresh OSV block-buffer0.10.4 downstream metadata mismatch. No exceptions/dependency refresh. Final scan/remoteCI remainrequired; no security-clean/release-completion claim or deployment.
 
 ## Resume
 
-Inspect `git status --short`, `git log -5 --oneline`, process list and newest checkpoint at the end first. Frozen I and J debug artifacts are separate. Exec10344 serially runs corrected mixed probe, Continuous scheduler probe, strict all-featureClippy and full backend units; stdout is in `observations/cycle-optimisation/logs/j-*`. Check each log (independent commands continue after failures). Once they pass, stage source, regenerate+verify manifest and commit before profile experiments. Never replace baseline bytes or count rejected setup/settlement diagnostics as accepted measurements. Do not run builds/benchmarks concurrently with a paired run. Current compiler profile remains z; no winner selected. Final release gates/security/CI are outstanding.
+Inspect `git status --short`, `git log -5 --oneline`, processes and newest appended checkpoint. Activepipelineexec43215 logs: `observations/cycle-optimisation/logs/final-{debug,publication,small,scheduler}-matrix.log`; outputs `observations/cycle-optimisation/final/{debug,publication,small,scheduler}`. Baseline `profiles-baseline/z/event_horizon_debug.wasm`, candidate `profiles-candidate/2/event_horizon_debug.wasm`, explicitPocketIC15 and frozen normalzmocks. Runnerdefaultcommands/modes execute allcases with3samples, freshprocessperpair, reject failed/incomplete shards and changed inputs. Resume identical command only after investigating any failure. Code source/artifacts immutable during run; progress-note/data-only edits do not alter harness identity.
+
+Afterpipeline: summarise completeCSVrows; run preserved per-component matrices and final-shadows metrics comparisons serially. Then finish independent state-table differential proof, fullregression/security and actual canonicalbackend/pin/frontend/two-build/CI gates. Draft `observations/cycle-optimisation/drafts/cycle_optimisation_state.rs` is NOT applied: hostSDK reader of logical contents IDs0–11 and extra baseline/candidate tests, requiring native-only `ic-stable-structures` dependency. It strengthens complete state comparison without adding production queries; review/compile/fix after currentpipeline. Existing snapshots use debugstate/real callback coverage; do not claim draft passed. No production edits are planned. Read failures/limitations below before accepting evidence.
 
 ## Contract checkpoints
 
@@ -307,3 +310,25 @@ final fullthree-sample debug/publication/small/scheduler and preserved per-compo
 matrices serially; instructionattribution comparisons use explicit shadowpaths.
 Final fullgates, actual canonicalbackend/frontendpin/twobuilds, freshsecurity and
 CI remainpending. SecurityOSVmismatch remainsfailed/unexcluded. No deployment.
+
+
+## Active final matrix checkpoint
+
+Harness8876833 freeze passed fmt/strictClippy/static/manifest. Serialpipelineexec43215
+started full three-sample debug→publication→small→scheduler modes, explicit frozen
+baselinez/candidate2 andnormalzmocks/PocketIC15. Output paths and process pointer
+in `observations/cycle-optimisation/active-process.json`. Atcheckpoint56pairs passed,
+all ICPidle/bootstrap/archive/global/mixed and initialordinary: global1024median
+5,744,359,860→5,555,701,382(3.284%); idle1024 19,489,546→12,873,139(33.948%);
+eightempty155,865,315→102,997,932(33.919%). These subsetgroups have3samples;
+wholematrix acceptance remainspending. Do not interrupt to run concurrent builds.
+
+Adverse Dthree-sample/actualreserve boundary rawtables and shadow source/artifact
+receipts are now tracked under `cycle-optimisation-data/`. Source rootprogram
+unchanged. Continue metrics/per-component data after pipeline. Prepared ignored
+host-only complete-stable-state reader draft is not yet applied/tested; it will
+compare logical keys/Candidvalues through the existing pinned stableSDK on copied
+PocketIC memory (allIDs0–11), ignoring permitted physical B-tree history changes.
+This adds no production method/feature/schema. Needs compile/differential acceptance
+before final gates. The task remains incomplete until remaining validation and
+security/CI blockers are addressed/reported accurately. No deployment.
