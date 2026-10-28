@@ -1,0 +1,14 @@
+{
+  "source": "9528da787f9e8a4d5df2d297401564d04adb41b6",
+  "selected": "backend2/frontendworkspace-z; same package set in both builds",
+  "workspace_z_frontend_sha256": "210d4de6587a19228801f1d97264cb87d0c8d1117632ecb6f7051829b3b441c8",
+  "note": "Local screening, not final canonical evidence. Frontend-only z differs because workspace feature unification changes dependencies. Both graphs rebuilt with z for selected frontend; backend from original2 build.",
+  "results": {
+    "2-test.log": "99a977cdb01f36bf96068e21f97118869ec0989d73161af748d7da63bb21f582",
+    "z-test.log": "8e1dc962035a79399b73513f94008026919b34ee5d89d9f1cc897b11ef47280f",
+    "package-z-test.log": "54fd84af661aceaa532b93e97d598ff030abd0952020a8b07ab31227ea4ade2a",
+    "workspace-z-test.log": "c6c706ae7ae64a85f5c0eb18ae6f5a59a1732927098d118bf1470618d33b268d",
+    "security.log": "011efe8ef272db4fb2188a5add69d37eefe23a2b069f2f09b0f64845345294f0",
+    "panic-probe.log": "c861f893b84ab4b52bc8b8e5fedd1e6554a261e41eaf9f9998aef87b27d1666f"
+  }
+}

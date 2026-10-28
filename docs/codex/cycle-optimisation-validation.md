@@ -1,7 +1,8 @@
 # Cycle optimisation validation
 
 Release acceptance is **blocked** by the unsuppressed OSV metadata finding and
-unavailable GitHub publication access. The implementation is complete; the local
+required PR/CI evidence. The branch is now published; see the
+[release-closure follow-up](cycle-optimisation-release-closure.md). The implementation is complete; the local
 validation outcomes below distinguish completed checks from those blockers.
 
 ## Source and artifacts
@@ -202,8 +203,10 @@ but OSV 2.3.8 fails on GHSA-qwgh-2vcv-g2f7/block-buffer 0.10.4. The maintainer's
 affected range begins 0.11.0; the locked implementation uses a separate cursor.
 This supports a metadata discrepancy, not a security-gate waiver; see the
 [investigation](block-buffer-osv-investigation.md). No new exclusion or dependency
-refresh was introduced. Git push lacks HTTPS credentials; connected branch
-creation returns 403. No candidate CI was triggered or passed. After publication,
+refresh was introduced. In the original session, Git push lacked HTTPS credentials and connected branch
+creation returned 403. The branch has since been published at 9528da7; this
+historical failure does not describe its current visibility. PR/CI closure is
+recorded in the follow-up. No candidate CI success is claimed here. After publication,
 verify that exact commit in [Dependency Security](https://github.com/aodl/Event_Horizon/actions/workflows/dependency-security.yml).
 
 APIs, stable IDs/encodings, memo/evidence rules, notification/Index contract,

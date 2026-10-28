@@ -375,3 +375,8 @@ prefix on the same commands. This bounds glibc host arenas, not Wasm memory or I
 execution limits. Every raw CSV field except sample matches the earlier default-host
 global sample. The transport cause remains unconfirmed; no source performance gain
 is attributed to this native environment change.
+
+
+See [release closure](cycle-optimisation-release-closure.md) for the same-source
+package override/full-z controls and selected hybrid recipe. Earlier workspace2
+measurements remain valid historical evidence; no prior result is overwritten.

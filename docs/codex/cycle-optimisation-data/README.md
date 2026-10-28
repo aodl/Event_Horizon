@@ -203,3 +203,8 @@ repeated at the same clock costs6,622,279/6,593,314. The cold/boundary differenc
 is consistent with periodic memory billing, not proved to an exact replica step.
 Preserve both raw and settled-plus-control metrics; neither establishes a mainnet
 daily saving. The simple setter changes only the existing debug override Cell.
+
+
+The branch is now published at9528da7. [Release closure](../cycle-optimisation-release-closure.md)
+tracks newer compiler/security/PR work separately; original publication failures
+are historical. New raw compiler controls live in `../release-closure-data/`.

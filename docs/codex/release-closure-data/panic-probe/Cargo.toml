@@ -1,0 +1,7 @@
+[package]
+name = "block-buffer-panic-probe"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+block-buffer = "=0.10.4"
