@@ -124,13 +124,17 @@ fn production_real_fixed_work() -> Result<()> {
                                 icrc1_memo: Some(memo),
                             });
                             receivers.push(id);
-                            if payouts.len() == 256 {
+                            // Fixture-only admission batches keep baseline setup
+                            // below PocketIC's 100-round ingress wait. Production
+                            // work is measured only after all setup settles.
+                            if payouts.len() == 16 {
                                 update::<_, u64>(
                                     &env.pic,
                                     env.ledger,
                                     "debug_append_transfers",
                                     std::mem::take(&mut payouts),
                                 )?;
+                                env.poll()?;
                             }
                         }
                         if !payouts.is_empty() {
@@ -140,8 +144,8 @@ fn production_real_fixed_work() -> Result<()> {
                                 "debug_append_transfers",
                                 payouts,
                             )?;
+                            env.poll()?;
                         }
-                        env.poll()?;
                         receivers
                     };
                     // Settle seed admissions and their genuine receiver calls.

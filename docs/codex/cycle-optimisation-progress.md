@@ -675,3 +675,33 @@ also returned403 Resource not accessible by integration. No remote branch/PR or
 candidate CI was created. This is an integration permission limitation, not a
 passing or failed final-source CI result. Continue all local gates; preserve
 publication command and final local source for an authorised subsequent push.
+
+## Full source gates passed; fixture ingress wait corrected
+
+Frozen d003486 full pipeline passed146Rust+138frontend+128PocketIC=412, with zero
+assertion failures, including maximum callbacks, Index, both reviewed81production
+upgrades, historical44d83c0 and complete stable snapshots. Fmt/strict Clippy pass.
+Fresh security returned1only at OSV GHSA-qwgh-2vcv-g2f7/block-buffer0.10.4;
+audit/deny/npm pass with the existing four exceptions. No new exception. Exact
+commands/durations/log digests are observations/cycle-optimisation/prepin-gates-state.json.
+
+Root fast-forwarded to f6ed02fc59ec848557c84dd7ecc5470c10db9992 on local branch
+codex/cycle-optimisation-81c5a0d, adding only host/evidence and frontend pin changes;
+backend/profile/locks identical to d003486. Post-pin fmt, strict all-feature
+workspace Clippy and test_unit(146+138) pass. All four supported model-wrapper
+reruns match prior model results except their copied input path.
+
+Real production preflight equal/increasing/unmatched32 passed exact receipts,
+state and cursors. Global256 failed in the unchanged baseline's unmeasured seed
+poll:256sequential Historian checks exceeded PocketIC update_call's100round wait,
+not an IC instruction assertion. Preserve logs/postpin-real-false-real_global-1-256.log
+and failed postpin-state.json. Split only seed admissions into16payout completed
+batches; no production code, measured workload or execution limit changes. Earlier
+three preflight pairs are not headline samples. Rerun full extra fixture matrix
+with new input receipts after this correction; final three-sample canonical data
+will use only the corrected fixture.
+
+Active original post-pin queue8926/PID1374114has stopped on that setup failure.
+Next: focused Clippy/manifest, corrected real preflights and scheduler boundary
+diagnostic serially, then final canonical two-build/population and production
+matrices/upgrade/frontend20responses. Final report/CI remain pending or blocked.
