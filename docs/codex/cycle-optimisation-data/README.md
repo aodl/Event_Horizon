@@ -116,3 +116,12 @@ Allrows pass and improve. Idle1024globals saves6,254,664cycles/32.1074%ICP and
 andarchive-only savings preservezerowakes. Native traversal counters independently
 prove zeroglobal visits onempty pages and directmapcount. Eligibility/order tests
 covernewadmissions; no cross-pollregistry mirror is added.
+
+
+`component-f*` isolates global-only encoding reuse, E→F atz/raw (12groups/36pairs).
+Allfunctional rows pass. Global1024 saves3.1916%ICP/3.2523%generic;global256
+3.1365%/3.1877%;mixed1.5621%/1.6276%. Single-global savings only0.043–0.049%.
+Four specific-only controls regress0.0053–0.0057%, about329cycles/recipient from
+an additionalglobal-only selection path (exactinstructioncause notisolated).
+Retain thissmallbranchcost for eliminated repeated encodings; messagecost/call
+count/payload/reservepolicy unchanged. Native typed/raw exactbyte proof is separate.

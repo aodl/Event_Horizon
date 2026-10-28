@@ -542,3 +542,20 @@ Queueexec7772 nowF36(global1/256/1024,mixed,specificcontrols),thenG66/I24 and
 attribution56. Postexec97871stillwaits. Runtime/profile/measuredinputs frozen.
 No otherbuild/benchmark. Modelsneedexecution andfinalcanonicalrealcoverage,
 fullgates, actualbackendpin/frontend/two-build/CI/security/report remainpending.
+
+
+## F component complete / G active
+
+All36F pairs/72rows pass(12groups) E→F z/raw. Global1024ICP5,744,720,711→
+5,561,372,615(183,348,096saved,3.1916%);generic5,753,365,525→5,566,249,907
+(187,115,618,3.2523%). Mixedsaves1.5621%/1.6276%;global1only0.043–0.049%.
+Four specific-only controls regress:1024recipients337,013cycles(~329each),
+256recipients84,341(~329each),overall0.0053–0.0057%. Additionalcache-selection
+path explainsboundedoverhead, no preciseopcodeattribution. Exacttyped/rawbytes,
+individualactualcostchecks andonewaysemantics retained. Raw/summary/input/log
+receipts trackedas`component-f*`. No percentageadditiontothefinalcombination.
+
+Queueexec7772 nowG66publicationpairs,thenIcorrection24 andattribution56. Post
+exec97871waitsforallstages. Rootruntime/profile/harness/mocks frozen; sourceclean.
+Fullgates, modelrun, canonicalrealfixtureextension/pins/artifacts/repro/CI/security/
+finalreport stillpending. Currentproduction backendhash remains unmeasuredcanonically.
