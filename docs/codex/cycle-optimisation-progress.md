@@ -424,3 +424,25 @@ component384+attribution56pairs. Postexec97871 waits. Preserveimmutableinputs;
 no otherbuild/benchmark. Fixed-time results mustlabeldebugconfiguration and
 separate rawwindow vs settledpluscontroltail, with latencyassumptions explicit.
 Productionruntime unchanged; finalreleasegates and canonical pairing stillpending.
+
+
+## Final-v2 scheduler complete / components active
+
+All36scheduler pairs/72rows passed (12groups,3samples), equalpoll/callback/endinglag
+counts. DayStandard144polls+24funding+1pricing+dailyaliases each. Settledday costs:
+ICPoneglobal+specific real:7,267,150,471→7,220,963,326(0.6356%); ICPidle1024:
+8,150,526,460→7,196,338,722(11.7071%). Genericreal8,155,472,324→8,090,902,211
+(0.7917%);genericidle1024:8,843,234,714→8,066,762,262(8.7804%). Actualwindow
+vswindow+debugcontrol/drain separate inrawCSV/summary. Continuous660sreal664polls
+(extraingress opportunities), idle660; do not call themidentical1Hzphysicalrates.
+Complete raw/summary/input/logreceipts nowtracked as`scheduler*`.
+
+Allfinal-v2 fourmodes accepted393pairs(total,notunitregressioncount). Exec7772 now
+runs384componentpairs, then56instrumentedpairs. Postexec97871/PID820596stillwaits
+forallmeasurements beforefullgates. Modeladapter ranpurelyoffline: freshinputs
+under`observations/cycle-optimisation/models/{baseline,candidate}-{0,1024}globals/`.
+Nativeexisting-model execution stillpending AFTERmeasurements, no stalecoefficients.
+Readmodels' explicitdebug/ordinarypolling/maintenanceunavailable limitations. Next
+command perdir afterallbuild/testserialization allows: `./tools/scripts/calibrate-cadence model --input DIR/measurements.json --config DIR/model-config.json --output DIR --seed 20261028`.
+No newproductionedit; canonicalrealcoverage/pins/artifacts/repro/CI/security/report
+remainpending. Root source muststayclean whenhandoff begins.

@@ -46,3 +46,15 @@ separately installed authenticated full-record self/external/neuron receivers.
 All exactpayload/caller/count comparisons pass. Reductions1.8248/5.9426%ICP and
 1.8769/5.4003%generic; allthree samples agree. Configuration isdebug, notcanonical
 production. Sender/recipient costs remain separate in the larger matrix.
+
+
+`scheduler*` retains12groups/36pairs/72rows of actual unchanged configured-debug
+scheduler windows. Allgroups pass3pairs, with equal polls/callbacks/endinglag.
+The24hour Standard rows require144polls,24funding runs,onepricing anddailyaliasrefresh.
+Settledwindow+explicitcontrol/drain savings: one realglobal+specific subscriber
+0.6356%ICP/0.7917%generic;1024idleglobals11.7071%/8.7804%. These differ from
+fixed-work savings. Rawwindow debits remain separate. Continuous660second real
+fixtures complete664polls (fourtrafficingress opportunities), idlefixtures660;
+bothvariants agree. One explicitround/second plusingress, or600secondsteps with
+20rounds/step forday, are latencyassumptions. Debugruntimecosts omit production
+principal parsing; no canonicaldailyburn/mainnetrunway claim. Models remainpending.
