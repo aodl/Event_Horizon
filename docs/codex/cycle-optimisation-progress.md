@@ -647,3 +647,20 @@ model-wrapper reruns; actual canonical backend build and frontend pin; committed
 source pairing/two uncached Docker builds/population; final canonical production
 matrix and81production upgrade; final report/source manifest; branch/PR and final
 security CI. Security metadata blocker has no exception or suppression. No deploy.
+
+## Initial canonical backend and frontend pin
+
+Supported docker-build passed from clean committed source
+afec92cad49dfa7df4d6d2a795d50a91447c46a4, with binary export audits and artifact
+manifest. Actual backend f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970
+matches the independent local selected-profile build. Initial frontend01fa3cc...
+still contained the old backend pin and is not the final pairing. Preserved four
+artifacts/log/provenance under root observations/cycle-optimisation/canonical-initial.
+Updated instances.js, associated static pin and locked app.bundle.js from that
+actual canonical backend hash, without altering baseline/historical hashes.
+
+Extra feature-only host fixture passed cargo check, fmt and strict feature Clippy
+in this separate worktree; it remains unexecuted pending the serial measurement
+window after root full gates. Root source d003486 remains clean and test_all is
+active (no failed assertions so far). Two-build final pairing, final canonical
+production matrices/upgrade, final security/CI/report remain outstanding.

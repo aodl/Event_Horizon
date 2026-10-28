@@ -16,7 +16,12 @@ Runtime changes conclude at `00c0d63840508414b39b91535631298ee75759ee`; profile
 selection at `9e304e1`. Later commits add tests/evidence only until the frontend
 pin pairing. The frozen measurement host is `8c65325`; complete source gates run
 at `d003486781551b35ce8985b44622297bd8fa343e`. Final source/pairing SHA and artifact
-hashes remain pending. This report identifies immutable validated revisions rather
+frontend hashes remain pending. The initial canonical build at afec92cad49dfa7df4d6d2a795d50a91447c46a4
+produced backend `f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970`,
+matching the independent selected-profile build. Its changed hash follows the
+implemented backend optimisations and compiler selection. The frontend pin and
+locked bundle now use that actual hash; final two-build pairing remains pending.
+This report identifies immutable validated revisions rather
 than including its own commit hash.
 
 Selected release recipe: workspace `opt-level=2`, Rust1.94.1, unchanged LTO,
@@ -171,6 +176,11 @@ this is not a production limit, and full256×32769receiver coverage is retained.
 | Canonical source pairing/backend pin | Pending actual canonical backend hash |
 | Two uncached independent builds/population | Pending |
 | Final-commit GitHub security CI | Unverified; baseline success is not final CI |
+
+Source-location assertions that forced eager global traversal were replaced by
+installed-Wasm first/last-block eligibility tests. Typed/raw sender syntax checks
+are supported by exact one-record byte/decode tests, standard/Index receiver
+regressions and retained actual-cost/oneway/export checks.
 
 Fresh OSV reports GHSA-qwgh-2vcv-g2f7 for block-buffer0.10.4, while the maintainer
 affected range starts0.11.0 and the locked implementation uses a separate cursor.
