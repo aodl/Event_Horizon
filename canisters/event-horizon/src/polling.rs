@@ -104,8 +104,10 @@ impl CachedInterests {
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
-    subscriptions:
-        BTreeMap<(Principal, Principal, WatchTarget), (state::RelationKey, SubjectSubscription)>,
+    subscriptions: BTreeMap<
+        (Principal, Principal, WatchTarget),
+        (state::RelationKey, SubjectSubscription, bool),
+    >,
     shared_overlay: BTreeMap<([u8; 32], Principal, Principal, WatchTarget), SubjectSubscription>,
     shared_cache: BTreeMap<[u8; 32], CachedInterests>,
 }
@@ -118,7 +120,8 @@ impl PendingAdmissions {
             PreparedAdmission::Accounts(subscriptions) => {
                 for candidate in subscriptions {
                     let identity = candidate.identity();
-                    let key = if let Some((key, old)) = self.subscriptions.get(&identity) {
+                    let key = if let Some((key, old, _changed)) = self.subscriptions.get(&identity)
+                    {
                         if old.subscription.minimum_units <= candidate.subscription.minimum_units {
                             continue;
                         }
@@ -128,12 +131,16 @@ impl PendingAdmissions {
                             .relations
                             .get_or_insert_with(|| state::relation_context(&context.runtime));
                         let key = state::relation_key(&candidate, inputs);
-                        if state::relation_at(&key).is_some_and(|old| {
-                            old.identity() == identity
+                        if let Some(old) = state::relation_at(&key) {
+                            if old.identity() == identity
                                 && old.subscription.minimum_units
                                     <= candidate.subscription.minimum_units
-                        }) {
-                            continue;
+                            {
+                                // Retain the known effective value for this page,
+                                // without staging a write or invalidating watchers.
+                                self.subscriptions.insert(identity, (key, old, false));
+                                continue;
+                            }
                         }
                         key
                     };
@@ -145,7 +152,7 @@ impl PendingAdmissions {
                             candidate.clone(),
                         );
                     }
-                    self.subscriptions.insert(identity, (key, candidate));
+                    self.subscriptions.insert(identity, (key, candidate, true));
                 }
             }
         }
@@ -173,8 +180,10 @@ impl PendingAdmissions {
         })
     }
     fn publish(self) {
-        for (key, s) in self.subscriptions.into_values() {
-            state::put_relation_at(key, s)
+        for (key, s, changed) in self.subscriptions.into_values() {
+            if changed {
+                state::put_relation_at(key, s)
+            }
         }
         for p in self.globals {
             state::put_global_subscriber(p)
@@ -195,7 +204,7 @@ pub fn debug_set_abort_after_staged_admission(enabled: bool) {
 fn debug_abort_after_staged_admission() -> bool {
     #[cfg(feature = "debug_api")]
     {
-        return DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(std::cell::Cell::get);
+        DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(std::cell::Cell::get)
     }
     #[cfg(not(feature = "debug_api"))]
     false
@@ -247,7 +256,7 @@ fn name(s: Stream) -> &'static str {
     }
 }
 fn u64nat(n: &Nat) -> Result<u64, String> {
-    u64::try_from(n.0.clone()).map_err(|_| "Nat exceeds u64".into())
+    u64::try_from(&n.0).map_err(|_| "Nat exceeds u64".into())
 }
 fn account_id(b: &[u8]) -> Option<[u8; 32]> {
     b.try_into().ok()
@@ -936,6 +945,18 @@ mod target_match_tests {
 
     fn p(n: u8) -> Principal {
         Principal::from_slice(&[n, 1])
+    }
+    #[test]
+    fn nat_cursor_conversion_preserves_full_width_and_overflow_errors() {
+        for value in [0, (1u64 << 53) + 1, u64::MAX] {
+            let amount = Nat::from(value);
+            assert_eq!(u64nat(&amount), Ok(value));
+            assert_eq!(amount, Nat::from(value));
+        }
+        for bits in [65usize, 32769] {
+            let amount = Nat(Nat::from(1u8).0 << (bits - 1));
+            assert_eq!(u64nat(&amount), Err("Nat exceeds u64".into()));
+        }
     }
     #[test]
     fn immutable_admission_accounts_are_lazy_and_reused() {

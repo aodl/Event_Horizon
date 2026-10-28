@@ -747,10 +747,18 @@ impl RelationKey {
         }
     }
 }
+#[cfg(test)]
+thread_local! {static TEST_KEY_DERIVATIONS: std::cell::Cell<u64> = const {std::cell::Cell::new(0)};}
+#[cfg(test)]
+pub(crate) fn test_key_derivations() -> u64 {
+    TEST_KEY_DERIVATIONS.get()
+}
 pub(crate) fn relation_key(
     s: &crate::subscription::SubjectSubscription,
     context: RelationContext,
 ) -> RelationKey {
+    #[cfg(test)]
+    TEST_KEY_DERIVATIONS.set(TEST_KEY_DERIVATIONS.get() + 1);
     let account = s.account(context.governance).expect("verified governance");
     let account = if context.shared {
         AccountKey::icp(account_identifier_bytes(

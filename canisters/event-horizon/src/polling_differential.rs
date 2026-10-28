@@ -107,6 +107,17 @@ fn record_high_matches_independent_randomized_oracle() {
                 w.subscription.minimum_units = 0u8.into();
                 caches.remove(&destination);
             }
+            if step % 23 == 0 {
+                // Newly admitted effective identity must not inherit a prior
+                // destination high-water, including under a different subscriber.
+                let mut added = relation(300 + step as u64, destination as u64 + 10, rng % 2000);
+                added.subscription.subscriber = p(2 + (destination % 2) as u64);
+                if step % 2 == 0 {
+                    added.subscription.target = WatchTarget::NeuronNonce(300 + step as u64);
+                }
+                watchers[destination].push(added);
+                caches.remove(&destination);
+            }
             let amount = match step % 9 {
                 0 => 0u8.into(),
                 1 => 1u8.into(),
@@ -337,6 +348,67 @@ fn duplicate_stage_keeps_pending_improvement_and_cache_generation() {
                 .minimum_units,
             candid::Nat::from(20u8)
         );
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn unchanged_stable_declarations_reuse_one_key_and_do_not_publish_or_invalidate() {
+    std::thread::spawn(|| {
+        let ledger = config::RuntimeConfig::production(p(8), None).icp_ledger;
+        state::initialize_instance_config(crate::instance::InstanceConfig {
+            observed_ledger: ledger,
+            observed_profile: None,
+            sns_root: None,
+            surplus_canister: None,
+        });
+        let make = |minimum| {
+            SubjectSubscription::self_subject(Subscription {
+                subscriber: p(1),
+                target: WatchTarget::Subaccount(7),
+                minimum_units: Nat::from(minimum),
+            })
+        };
+        state::put_relation(make(100u64));
+        state::put_relation(SubjectSubscription {
+            subject: p(1),
+            subscription: Subscription {
+                subscriber: p(2),
+                target: WatchTarget::Subaccount(7),
+                minimum_units: 0u8.into(),
+            },
+        });
+        let account = account_identifier_bytes(p(1), crate::account::numbered_subaccount(7));
+        let mut pending = PendingAdmissions::default();
+        pending
+            .shared_subscriptions(account)
+            .observe(0, &150u16.into(), &mut BTreeMap::new());
+        let mut context = AdmissionContext {
+            runtime: config::RuntimeConfig::production(ledger, None),
+            own_id: p(9),
+            decimals: 8,
+            accounts: None,
+            relations: None,
+        };
+        let derivations = state::test_key_derivations();
+        let writes = state::test_stable_writes();
+        for i in 0..256 {
+            pending.stage(
+                PreparedAdmission::Accounts(vec![make(100u64 + i % 2)]),
+                &mut context,
+            );
+        }
+        assert_eq!(state::test_key_derivations() - derivations, 1);
+        assert_eq!(pending.subscriptions.len(), 1);
+        assert!(!pending.subscriptions.values().next().unwrap().2);
+        assert!(pending.shared_overlay.is_empty());
+        assert_eq!(
+            pending.shared_cache[&account].record_high,
+            Some(150u16.into())
+        );
+        pending.publish();
+        assert_eq!(state::test_stable_writes(), writes);
     })
     .join()
     .unwrap();

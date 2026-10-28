@@ -53,5 +53,14 @@ for level in args.profiles:
         subprocess.run([str(shrink),str(raw),"-o",str(final),"shrink"],check=True)
         subprocess.run(["python3",str(source/"tools/audit-wasm.py"),str(final),"--"+kind],cwd=source,check=True)
         rows.append(dict(profile=level,artifact=name,raw_bytes=raw.stat().st_size,shrunk_bytes=final.stat().st_size,sha256=sha(final)))
+    # Debug-path screening uses the same source/profile/transform. Its configured
+    # runtime differs from production; genuine production smoke rows stay separate.
+    with (folder/"debug-build.log").open("w") as log:
+        subprocess.run(["cargo","build","--locked","--target","wasm32-unknown-unknown","--release","-p","event-horizon","--features","debug_api"],cwd=source,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
+    raw=folder/"event_horizon_debug.raw.wasm"
+    raw.write_bytes((output/"target/wasm32-unknown-unknown/release/event_horizon.wasm").read_bytes())
+    final=folder/"event_horizon_debug.wasm"
+    subprocess.run([str(shrink),str(raw),"-o",str(final),"shrink"],check=True)
+    rows.append(dict(profile=level,artifact="event_horizon_debug",raw_bytes=raw.stat().st_size,shrunk_bytes=final.stat().st_size,sha256=sha(final)))
     (output/"sizes.json").write_text(json.dumps(rows,indent=2)+"\n")
 print(output/"sizes.json")

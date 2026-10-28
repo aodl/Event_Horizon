@@ -31,10 +31,15 @@ python3 tools/summarize-cycle-optimisation.py \
 ```
 
 Use `--case equal:256:1024 --generic false` for a focused comparison; still three
-samples. The default matrix includes idle/global 0/1/256/1,024 recipients, shared
+samples. The default matrix includes idle/global 0/1/256/1,024 recipients, first bootstrap,
+eight repeated empty polls, archive-only cursor progress, and shared
 account amounts (equal/increasing/decreasing/alternating), unique destinations and
-1/2/16/64-page backlogs. Additional admission/alias/huge-amount evidence is required
-before final acceptance; this default alone does not satisfy the full task matrix.
+1/2/16/64-page backlogs. Publication mode separately measures no-op/new admissions, monotonic reductions,
+full-width ranges and unchanged/additive 2/4,096-entry alias tables. Generic huge
+amounts are separate rows. The 32,769-bit ×1,024-recipient baseline exceeded normal
+40B message instructions and is preserved as a failed boundary; its accepted
+stress envelope is 16 recipients, with no production limit change. Small mixed
+watcher and scheduler evaluations remain separate acceptance work.
 Input receipts retain source, harness, artifact and lock identities; raw pair logs
 and CSVs remain usable after an interrupted run. `complete.csv` is produced only
 when every requested shard passes. These are fixed-work costs, not daily-burn
@@ -73,3 +78,27 @@ Final reporting must distinguish fixed-work savings from unchanged-scheduler
 fixed-time/funding measurements and recalibrated model projections. Continuous
 mode can buy more polls with lower cost. No short fixture establishes mainnet
 latency, daily burn or runway guarantees.
+
+
+Freeze normal `z` mock Wasm once before compiler comparisons; provide its directory
+with runner `--mocks DIRECTORY`. The host fixture loader uses those exact bytes for
+all paired/compiler runs, except the explicitly requested controlled-await mock
+wrapper. Inputs retain every mock binary/source digest and PocketIC binary digest.
+Use official PocketIC 15.0.0 (`POCKET_IC_BIN`); this session's executable SHA-256 is
+`29472ea4433b30a280676c4e22e369d79d5ba6ee1b4d48bab32ebe7d0ad2b4bb`, downloaded from
+`https://github.com/dfinity/pocketic/releases/download/15.0.0/pocket-ic-x86_64-linux.gz`.
+Normal execution limits are retained; fixture topology/configuration is logged.
+
+Raw heap-before/after fields are allocated Wasm linear memory, a module-lifetime
+allocation high-water, rather than live heap. Setup allocation is reported before
+the cost interval. Stable allocation and total memory remain separate columns.
+Bootstrap/archive cursor progress is distinct from `processed_blocks`; repeated
+empty rows explicitly count eight completed polls. No failed/incomplete scenario
+becomes an accepted row. Alias-query mock state is discarded: positive alias call
+counts come only from caller-side instrumented shadows. Uninstrumented publication
+rows leave `alias_calls` unavailable and derive `validated_alias_pages` from a
+successful complete snapshot plus its timestamp/revision digest checks. Alias
+measurements use a same-variant argument-free debug upgrade to clear scheduled
+timers, advance to the next eligible day, and settle setup/storage costs first.
+Publication attribution shadows use `debug_api,optimisation_metrics`; their debug
+configuration is separate from production-only `optimisation_metrics` measurements.

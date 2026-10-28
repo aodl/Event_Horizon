@@ -50,13 +50,29 @@ for file, function, phase in [
     ("account.rs", "account_identifier_bytes", "legacy_account_hash"),
     ("polling.rs", "prepare_admission", "admission_sync"),
     ("polling.rs", "observe_matches", "watcher_matching"),
+    ("polling.rs", "u64nat", "index_conversion"),
     ("polling.rs", "stage", "admission_staging"),
     ("polling.rs", "icrc_page", "icrc_page_sync"),
     ("polling.rs", "dispatch_matches", "dispatch_sync"),
     ("state.rs", "global_subscribers", "global_enumeration"),
+    ("state.rs", "interested_icp", "legacy_watcher_lookup"),
+    ("state.rs", "interested_icrc", "icrc_watcher_lookup"),
     ("state.rs", "publish_aliases", "alias_publication"),
 ]:
     span(file, function, phase)
+# Instant invocation counts for asynchronous client functions; these are counts,
+# not instruction spans. No counter subtraction crosses await.
+for file,function,phase in [
+    ("clients/icrc3.rs","checked_call","icrc_client_invocation"),
+    ("clients/icp_ledger.rs","query_blocks","legacy_client_invocation"),
+    ("clients/historian.rs","route_is_admitted","historian_route_invocation"),
+]:
+    path=src/file
+    body=path.read_text();marker="fn "+function+"("
+    assert body.count(marker)==1,(file,function)
+    at=body.index("{",body.index(marker))+1
+    body=body[:at]+f'\n    {{ let _invocation=crate::optimisation_metrics::Span::new("{phase}"); }}\n'+body[at:]
+    path.write_text(body)
 # These functions implement the same logical publication boundary in the two versions.
 state = (src / "state.rs").read_text()
 span("state.rs", "put_relation_at" if "fn put_relation_at(" in state else "put_relation", "relation_publication")
@@ -65,6 +81,14 @@ text = polling.read_text()
 old = "let mut local = out.clone();"
 text = text.replace(old, 'let mut local = { let _copy = crate::optimisation_metrics::Span::new("accumulator_copy"); out.clone() };')
 polling.write_text(text)
+# Count actual caller-side alias requests; replicated query-local mock state is
+# discarded. This tiny scope ends before await, and is not instruction attribution.
+aliases=src/"aliases.rs"
+body=aliases.read_text()
+marker="        let response = call"
+assert body.count(marker)==1
+body=body.replace(marker,'        { let _request = crate::optimisation_metrics::Span::new("alias_request"); }\n'+marker)
+aliases.write_text(body)
 receipt = {
     "source_revision": source,
     "instrumentation_template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),

@@ -47,6 +47,14 @@ mod tests {
                     .with_context(|| format!("test backend {}", PathBuf::from(path).display()));
             }
         }
+        if package.starts_with("mock-") && features != Some("interleaving_gate") {
+            if let Some(directory) = std::env::var_os("EH_OPT_MOCK_DIR") {
+                let path =
+                    PathBuf::from(directory).join(format!("{}.wasm", package.replace('-', "_")));
+                return std::fs::read(&path)
+                    .with_context(|| format!("frozen fixture {}", path.display()));
+            }
+        }
         if let Some(bytes) = cache.get() {
             return Ok(bytes.clone());
         }
@@ -501,6 +509,25 @@ mod tests {
             sns: bool,
             fixed: bool,
         ) -> Result<Self> {
+            Self::with_anchors_at(
+                event_horizon_wasm,
+                event_horizon_cycles,
+                surplus_enabled,
+                separate_observed,
+                sns,
+                fixed,
+                None,
+            )
+        }
+        fn with_anchors_at(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+            surplus_enabled: bool,
+            separate_observed: bool,
+            sns: bool,
+            fixed: bool,
+            initial_time: Option<pocket_ic::Time>,
+        ) -> Result<Self> {
             // Compile fixtures before starting the server: a cold/rebuilt Wasm
             // can exceed PocketIC's idle TTL, independently of IC execution.
             // Warm both ledgers before a mixed-architecture test creates any instance.
@@ -521,6 +548,11 @@ mod tests {
                 builder.with_nns_subnet().with_initial_time(
                     pocket_ic::Time::from_nanos_since_unix_epoch(1_700_000_000_000_000_000),
                 )
+            } else {
+                builder
+            };
+            let builder = if let Some(time) = initial_time {
+                builder.with_initial_time(time)
             } else {
                 builder
             };
