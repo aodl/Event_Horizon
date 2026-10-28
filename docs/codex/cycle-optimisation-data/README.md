@@ -79,3 +79,11 @@ cannot amortise scan-context setup, and thisprototype predates relation-key reus
 and the capacity correction; this is a code-path explanation, not exactinstruction
 attribution. Finalcombined ranges improve36–39%. Intermediate regressions remain
 visible; no separate-percentages are added together.
+
+
+`component-c*` isolates scan-owned accumulation, AB→C atz/raw (16groups/48pairs).
+Everyrow passes and improves: growing-map savings3.3630%ICP/2.5790%generic at
+64pages,5.3352%/4.3277%atonepage. Theonepage gain includes avoiding merge-back;
+longscans also eliminate repeated full-map copies. Irrelevant16-recipient backlog
+savings are0.0466–0.2110%. Failedscan discard/pagecommit proof is separate from
+these successful-cost rows. No independent per-page256-cap was introduced.

@@ -480,3 +480,18 @@ changes with explicitintermediate tradeoffs. No runtimeworkaround or testweakeni
 Exec7772 nowrunsC(48pairs):AB→scan-ownedaccumulator,1/2/16/64pages growing/full
 andirrelevanttrailing. D81/E48/F36/G66/I24 thenattribution56remain. Postexec97871
 waiting. No otherbuild/benchmark; currentruntime/profile/host inputs unchanged.
+
+
+## C component complete / D active
+
+All48C pairs/96rows passed(16groups), allpositive atz/raw AB→C. Growing64pages:
+ICP4,915,799,979→4,750,480,735(165,319,244saved,3.3630%);generic7,023,716,835→
+6,842,574,295(181,142,540saved,2.5790%). Onepage growing saves5.3352%/4.3277%
+fromavoidedmerge-back. Irrelevant16recipient backlogs save0.0466–0.2110%; keep
+smallerrows visible. Raw/summary/inputs/logreceipts tracked as`component-c*`.
+Ownership/discard-on-error proof and page-level durablecommits remain unchanged;
+no per-pagehintcap. Actual copy counts awaitinstrumented attribution.
+
+Queueexec7772 nowD81pairs(includesnewstrong-settlement inc/uniqueadverse rows),
+thenE48/F36/G66/I24/attribution56. Postexec97871 waits. Immutableinputs unchanged;
+no concurrentbuilds. Canonicalrealfixtures and finalreleasegates remainpending.
