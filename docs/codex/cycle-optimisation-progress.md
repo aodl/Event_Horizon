@@ -392,3 +392,18 @@ attribution56pairs remain queued. Exec97871/PID820596 stillwaitsfor allmeasureme
 before runningfullgates. Runtime/profile/harness unchanged. Keep sourceclean when
 handoff starts. Finalcanonicalproduction extension, pins/builds/CI/security and
 finalreport remainpending; draftplans include productionfidelity limits.
+
+
+## Final-v2 publication complete
+
+All66publication pairs/132rows passed (22groups,3samples). No overall candidate
+regression: reductions2.3849–39.4538%ICP,2.3794–36.1586%generic. NormalICPnewrange
+117,032,509→70,858,713cycles; unchanged4096alias table827,871,139→524,753,817.
+Alias additions add exactlyonebinding, nothalf/newentiretable; retain thislabel.
+Full tablevalidation and all Hist routecalls remain required. Complete rawCSV,
+summary, input andshard/log receipts aretracked as `publication*` indata directory.
+
+Queueexec7772 advanced tosmall12pairs; scheduler36/component384/attribution56
+remain, thenwaitingexec97871 runs normalfullgates. Do not modifymeasured host
+inputs or run anotherbuild/benchmark. RuntimeJ/profile2 unchanged. Canonicalreal
+receiver extension and finalpins/builds/CI/security/report are stillpending.

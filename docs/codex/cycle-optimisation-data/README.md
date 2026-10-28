@@ -31,3 +31,11 @@ allocated Wasm linear memory is3,735,552bytes in either variant. Per-change
 regressions and publication/scheduler/canonical data are separate and stillpending.
 These are configured-debug fixed-work costs with declared settlement intervals,
 not canonical production or daily-burn measurements. See experiment definitions.
+
+
+`publication*` retains the complete22-group/66-pair/132-row publication matrix,
+with three independent pairs each. All overall candidate rows improve; reductions
+are2.3849–39.4538%ICP and2.3794–36.1586%generic. Alias additions mean one newly
+published binding in the stated2/4,096-binding complete table, with fullvalidation.
+No-op Hist verification is preserved. These combined source+compiler results are
+separate from the pending per-change attribution and canonical production rows.
