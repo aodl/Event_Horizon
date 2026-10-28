@@ -1,24 +1,58 @@
 # Cycle optimisation data
 
-Compiler screening source: runtime00c0d63; host harness8802517. Inputs/digests
-and raw pre/post-shrink sizes are retained here. These48complete independent
-paired scenarios use **one screening sample per row**. They are not the final
-three-sample headline matrix, canonical release hashes or daily-burn evidence.
-The frontend still carries the old reviewed backend pin during compiler-only
-screening. Final pin and canonical artifacts are separate release gates.
+The immutable final canonical source is
+`7cfa8b354fa9621786a09b13c9a6dff498872b19`; the independent baseline is
+`81c5a0d72ff188f5ee9f412deb20566a12307642`. See the
+[validation report](../cycle-optimisation-validation.md) for release blockers and
+[reproduction guide](../cycle-optimisation-experiments.md) for commands and fixtures.
 
-Profile2 is selected provisionally over3: increasing/unique workloads slightly
-favour2;3 has small wins elsewhere, while adding1.27%backend/1.54%frontend
-size over2. Against z, profile2 adds29.03%backend/6.71%frontendbytes.
-All production export audits and48paired behaviour assertions passed. Full
-behaviour/performance/reproducibility acceptance against2 is still required.
+## Final canonical evidence
 
-Frontend queries verified20complete/ranged certified responses against source
-assetbytes perprofile. Status query statistics contain aggregation information
-loss (13reported calls for20known requests); raw estimates are not exact
-per-request instruction counts. Installation costs are single-sample screening
-values. See ../cycle-optimisation-experiments.md for commands and limitations.
+`canonical-validation.json` records two independent uncached supported Docker
+builds and populated-artifact equality, exact hashes/sizes, source manifest and
+command/log digests. `canonical-build-info.json` and
+`canonical-release-artifacts.sha256` retain the build metadata. No local compiler
+experiment substitutes for this evidence.
 
+`canonical-production*` contains 42 standard pairs, while
+`canonical-production-real*` contains 30 real-receiver pairs: three independent
+samples per group, with raw before/after balances, excluded setup credits, inputs,
+summary medians/ranges and accepted-shard/log receipts. The former uses 6T,
+Standard and 600 seconds; the latter 80T, VeryFast and 10 seconds. Both run genuine
+production modules at unchanged trust anchors. Compare within each cohort.
+Failed or incomplete scenarios cannot produce accepted rows.
+
+`canonical-shadow-*` retains eight one-sample diagnostic pairs, synchronous
+operation/instruction metrics and the matched uninstrumented-median overhead.
+These generated modules are separate from production artifacts. Nested instruction
+spans overlap; no counter subtraction crosses an await. The diagnostic costs do
+not replace uninstrumented headline measurements.
+
+`canonical-checks.json` retains final command/log receipts, including two genuine
+81-baseline production upgrades and 20 certified frontend response checks.
+`canonical-frontend.csv` records that final frontend fixture.
+`canonical-environment-failures.json` preserves four PocketIC HTTP
+transport failures and identical-input passing reruns. Native stderr and host RSS
+were captured in separate diagnostic attempts; no transport cause was established. Failed attempts are
+not accepted measurements or failed behavioural assertions.
+`receipt.json` binds the final evidence files. Large raw logs remain in the ignored
+observations directory; their SHA-256 receipts are tracked here.
+
+`historical-sanity.*` explains the reproduced approximately 5.958/7.834B ICP
+immediate shared-account costs and separate-ledger global fan-out baseline.
+Immediate and settled storage-window debits are distinct. Historical values are
+sanity references, never substitutes for measured comparisons.
+
+## Earlier component and configured-debug evidence
+
+Compiler screening uses runtime `00c0d63` and host `8802517`. All 48 independent
+z/s/2/3 pairs pass, with one screening sample per row. Profile 2 is selected:
+increasing/unique cases slightly favour it over 3, whose other small wins cost an
+additional 1.27% backend / 1.54% frontend bytes. Against refactored z, profile 2
+adds 29.03% / 6.71%. Screening frontends carry the earlier backend pin; final
+canonical pin/artifacts above are separate. Twenty HTTP checks per profile pass;
+status query statistics report 13 calls for 20 known requests, so those estimates
+do not establish exact per-request instruction savings.
 
 The final-v2 uninstrumented fixed-work matrix is complete: 93 groups × three
 independent pairs (279 pairs/558 raw rows). `fixed-work.csv` retains all fields,
@@ -27,8 +61,7 @@ JSON binds artifacts, host harness, mocks, lock/tool versions and raw-log digest
 All overall candidate rows improve; ICP reductions range1.6429–36.7097%, generic
 1.2871–34.8588%. Zero observed ranges reflect deterministic PocketIC fixtures,
 not mainnet uncertainty. Stable allocation is100,728,832bytes for both; largest
-allocated Wasm linear memory is3,735,552bytes in either variant. Per-change
-regressions and publication/scheduler/canonical data are separate and stillpending.
+allocated Wasm linear memory is3,735,552bytes in either variant. Per-change regressions and publication/scheduler/canonical data are separate.
 These are configured-debug fixed-work costs with declared settlement intervals,
 not canonical production or daily-burn measurements. See experiment definitions.
 
@@ -38,7 +71,7 @@ with three independent pairs each. All overall candidate rows improve; reduction
 are2.3849–39.4538%ICP and2.3794–36.1586%generic. Alias additions mean one newly
 published binding in the stated2/4,096-binding complete table, with fullvalidation.
 No-op Hist verification is preserved. These combined source+compiler results are
-separate from the pending per-change attribution and canonical production rows.
+separate from the component attribution and canonical production rows.
 
 
 `small-receivers*` retains all4groups/12pairs/24rows at1/16relations, with
@@ -57,7 +90,7 @@ fixed-work savings. Rawwindow debits remain separate. Continuous660second real
 fixtures complete664polls (fourtrafficingress opportunities), idlefixtures660;
 bothvariants agree. One explicitround/second plusingress, or600secondsteps with
 20rounds/step forday, are latencyassumptions. Debugruntimecosts omit production
-principal parsing; no canonicaldailyburn/mainnetrunway claim. Models remainpending.
+principal parsing; no canonical daily-burn or mainnet-runway claim. Fresh models are retained separately.
 
 
 `component-ab*` isolates the combined immutable-context/borrowing prototype at

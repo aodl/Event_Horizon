@@ -3,7 +3,7 @@
 The independent implementation baseline is `81c5a0d72ff188f5ee9f412deb20566a12307642`.
 Its debug and canonical production companions and SHA-256 provenance are under
 `tests/fixtures/`. Runtime prototypes are separate reviewable commits A/B through G;
-see [resumable progress](cycle-optimisation-progress.md). They are not yet a validated release.
+see [resumable progress](cycle-optimisation-progress.md). Release acceptance remains blocked as recorded in the validation report.
 
 Use Rust 1.94.1, the locked dependency graph, PocketIC 15.0.0 ordinary execution
 limits, and `DFX_IDENTITY=codex_local`. Run builds before measurements, and measure
@@ -273,7 +273,7 @@ production runtime's fixed-principal parsing path and are not canonical producti
 cost measurements. Existing-model forecasts use explicitly labelled debug polling
 coefficients; maintenance is unavailable there and no total mainnet runway is
 claimed. Genuine production Standard-timer comparisons separately exercise the
-fixed trust anchors. Final canonical shared/fan-out/page scenarios remain required.
+fixed trust anchors. Final canonical shared/fan-out/page results are retained in the validation data.
 
 ### Final real-receiver production matrix
 
@@ -345,3 +345,33 @@ watchedtarget7 with16watchers on everypage. `growing` admits512targets, retains
 first256, processesmostlyunwatched targetnumbers after512, and updates retained
 zero in the lastblock. `ordinary` has no watchers. These distinguish repeated
 matching, full-accumulator/irrelevant trailingpages and uninterested scan costs.
+
+
+### Evidence-only final commit
+
+The immutable validated implementation/source pairing is
+`7cfa8b354fa9621786a09b13c9a6dff498872b19`. Later final evidence changes are confined
+to `docs/` and `MANIFEST.sha256`; inspect the boundary with:
+
+```bash
+git diff --name-only 7cfa8b354fa9621786a09b13c9a6dff498872b19 HEAD
+./tools/scripts/source-manifest verify
+./tools/scripts/docker-build
+sha256sum release-artifacts/event_horizon.wasm release-artifacts/event_horizon_frontend.wasm
+```
+
+The hashes must match the final validation report. The two independent uncached
+builds at X are retained in `canonical-validation.json`; this subsequent population
+checks that evidence-only source differences do not change any of the four outputs.
+Raw local post-commit status/log digests are in
+`observations/cycle-optimisation/final-evidence-state.json`.
+
+Four large fan-out attempts encountered native PocketIC HTTP transport loss,
+without a behavioural assertion or accepted CSV. Failed logs and passing reruns
+are bound in `canonical-environment-failures.json`. The final five real-receiver
+shards, eight final shadow pairs and final upgrade/frontend fixtures use
+`MALLOC_ARENA_MAX=2` for both native processes. Reproduce these with that environment
+prefix on the same commands. This bounds glibc host arenas, not Wasm memory or IC
+execution limits. Every raw CSV field except sample matches the earlier default-host
+global sample. The transport cause remains unconfirmed; no source performance gain
+is attributed to this native environment change.

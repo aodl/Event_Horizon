@@ -21,6 +21,7 @@ metadata mismatch, rather than upgrading the entire IC/Candid dependency graph.
 No advisory exclusion, scanner override, source patch or dependency change was
 made for this finding. No external issue/PR was published. Security release
 acceptance remains blocked until authoritative scanner data is corrected or an
-explicitly reviewed resolution is available. A final fresh scan and final-commit
-remote CI are still required. Raw scan and JSON are in the normal observations
+explicitly reviewed resolution is available. A fresh scan at validated source `7cfa8b3`, using workflow-pinned cargo-audit
+0.22.1 and OSV 2.3.8, reproduces this sole unfiltered finding; audit/deny/npm pass.
+Candidate remote CI is unverified because publication is unavailable. Raw scan and JSON are in the normal observations
 area; reproduce with `./tools/scripts/security-scan` and the linked public data.

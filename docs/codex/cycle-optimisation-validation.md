@@ -1,221 +1,211 @@
 # Cycle optimisation validation
 
-Release acceptance is **pending**. Runtime source/profile are fixed; complete
-canonical pairing, final production measurements, security and CI outcomes are
-recorded below as they become available. No deployment is authorised or performed.
+Release acceptance is **blocked** by the unsuppressed OSV metadata finding and
+unavailable GitHub publication access. The implementation is complete; the local
+validation outcomes below distinguish completed checks from those blockers.
 
-## Sources and recipe
+## Source and artifacts
 
-Independent baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`, preserved in a
-clean detached worktree and independently built. Its canonical backend is
-`2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528`, frontend
+Baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`, independently preserved and
+built in a clean worktree. Its reviewed backend/frontend hashes were reproduced:
+`2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528` and
 `2658a8abc721c4f92f4af2c1ce3116bad08826c1b21aca6e18327515314754c3`.
-Checked-in debug/production companions have explicit SHA-256 provenance.
 
-Runtime changes conclude at `00c0d63840508414b39b91535631298ee75759ee`; profile
-selection at `9e304e1`. Later commits add tests/evidence only until the frontend
-pin pairing. The frozen measurement host is `8c65325`; complete source gates run
-at `d003486781551b35ce8985b44622297bd8fa343e`. Final pairing SHA and frontend hash
-remain pending. The initial canonical build at afec92cad49dfa7df4d6d2a795d50a91447c46a4
-produced backend `f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970`,
-matching the independent selected-profile build. Its changed hash follows the
-implemented backend optimisations and compiler selection. The frontend pin and
-locked bundle now use that actual hash; final two-build pairing remains pending.
-This report identifies immutable validated revisions rather
-than including its own commit hash.
+Immutable validated source: `7cfa8b354fa9621786a09b13c9a6dff498872b19`. Runtime
+changes conclude at `00c0d63`, profile selection at `9e304e1`; later source changes
+are test support, evidence and the frontend backend pin. This report's evidence
+commit follows the validated revision and changes only docs/data/manifest. The
+[reproduction guide](cycle-optimisation-experiments.md#evidence-only-final-commit)
+provides the diff and artifact checks without embedding this report's own hash.
 
-Selected release recipe: workspace `opt-level=2`, Rust1.94.1, unchanged LTO,
-codegen-units1, panic/overflow/target settings and pinned ic-wasm0.9.7 `shrink`.
-The dependency graph retains Tokio1.51.6 and all package versions. The sole lock
-change adds an existing stable-structures crate as a native test dependency;
-neither production Wasm graph gains a dependency. No security policy changed.
-
-Runtime files changed: polling/state/subscription, ICRC-3 extraction, callback
-sender and daily-health count. Config/account algorithms, financial state
-machines, cadence, Candid definitions and stable schemas are unchanged. Additional
-files are host fixtures/oracles, benchmark tools, evidence and the source manifest.
-
-## Candidate dispositions
-
-| Candidate | Implemented change; evidence and trade-off |
+| Production artifact | SHA-256 |
 |---|---|
-| A | Scan-scoped immutable trust anchors/identity/default accounts and reusable relation keys. Production ordinary256 runtime reconstructions258→2; account hashes256→0. Memo-free early rejection preserves validation and side effects. Single-range early prototype costs +0.049–0.338% before later key/publication improvements. |
-| B | Borrow Nat/memo fields and match amounts; clone only retained insertion/new maximum. Validate sender and memo types even when unused. Borrow u64 conversion and reserve exact ICRC key capacity without changing bytes. Early generic increasing prototype +0.0301%; each observation still requires a new maximum. |
-| C | One scan-owned accumulator; only successful CompletedScan can dispatch. Whole-map copies64→0 on64pages. Source-only growing64 saves3.363%ICP/2.579%generic; page admissions/cursors remain transactions. |
-| D | Page-local record high tied to effective watcher generation; no summary for empty/singleton lists. Equal256×1024 matching walks256→1, source-only cycles −21.543%ICP/−21.494%generic. Worst isolated regression +0.0425% on increasingICP; unique/singleton overhead ≤0.0381%. |
-| E | Lazy eligible global snapshot and direct stable-map count. Empty1024globals source-only −32.107%ICP/−20.150%generic; emptyregistry effect0.007–0.012%. No empty/archive wake or admission-eligibility change. |
-| F | Ordinary one-record Candid encoding reused for global-only recipients; individual direct calls and immediate actual-cost reserve checks remain. Source-only1024global −3.192%ICP/−3.252%generic; specific-only controls +0.0053–0.0057% (about329cycles/recipient). |
-| G | Suppress unchanged relation/global/alias writes; preserve staged improvements and complete alias validation/timestamps. Known-no-op cache correction recovers an early2.00–3.46% regression. Correction adds ≤0.0751% on new ranges. Global insertion alone shows no isolated cycle win (+0.0046–0.0249%); retain its bounded stable-write trade-off explicitly. |
+| Backend | `f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970` |
+| Frontend | `46d7b10673b7c37dce7ec773a0829bf104723b57b7fe2370d5838bc8df3b4a24` |
 
-All component tables retain adverse rows and exact deltas in the
-[data index](cycle-optimisation-data/README.md); percentages are never added.
-The ICRC capacity correction separately saves0.3904% on unique unwatched accounts
-and0.3606% on a new range in its explicitly labelled older cohort.
+The supported `npm run verify:reproducible-artifacts` passed two independent
+uncached Docker builds; `./tools/scripts/docker-build` then populated outputs.
+All four files (both Wasms, artifact manifest and build metadata) are byte-identical
+A = B = populated. Export/Candid audits passed. The
+[canonical receipt](cycle-optimisation-data/canonical-validation.json) binds exact
+source, tools, hashes, commands and raw-log digests.
 
-The record-high proof depends on chronological processing: amount≤a prior high
-cannot newly qualify an unchanged threshold, lower a retained first index,
-increase its maximum or open capacity. Added/easier relations invalidate the
-entire destination cache entry, starting a fresh generation after the admitting
-block. A new page resets summaries. One accumulator preserves the exact first256
-distinct(subject,target) identities and later updates after overflow.
+The frontend's registry, locked bundle and associated check pin the actual backend
+hash above. Backend size is 1,847,228 bytes; frontend 4,009,935. The changed backend
+hash follows the implemented optimisations and selected compiler profile.
 
-SharedICP snapshots globals before the first live block/admission. Generic
-observation snapshots only after successful activity, before its independent
-admission scan; the guarded poll is the only production membership writer.
-Aliases, prices, evidence, fees, balances and health retain existing logical read
-points. No stable/RefCell borrow crosses an await. Failed scans drop transient
-notifications, preserving earlier committed pages and explicit archive progress;
-generic admission failure cannot suppress successful observed notifications.
+Production changes are confined to polling, state publication, account derivation
+helpers, ICRC-3 extraction, notification sending and daily-health counting. Other
+changes are the release profile, frontend pin, test-only dependency edge, fixtures,
+benchmark tools, evidence and manifest. The
+[complete changed-path list](cycle-optimisation-data/changed-files.txt) includes
+source, fixtures and evidence. No package version changed: Tokio remains
+1.51.6 in native PocketIC tooling and absent from both production Wasm graphs.
 
-| Higher-complexity investigation | Disposition |
+## Dispositions and invariants
+
+| Candidate | Disposition |
 |---|---|
-| Covered declarations/Historian | Deferred: exact-route requests, mutable alias/price timing, failure and recovery observations are contractual. Every no-op declaration still verifies its exact memo route. No cached totals, pooling, batching or call suppression. |
-| Threshold-sorted index | Deferred: increasing qualifying amounts must still update every retained maximum; a threshold index would also need exact within-block retention order and admission invalidation. The simpler shortcut has measured gains and bounded adverse rows. Unmatched increasing production coverage is separate. |
-| Cross-page watcher cache | Deferred: repeated one-destination64pages could avoid63of64stable lookups; mostly unique growing destinations offer little reuse. No cycle saving is inferred from that operation bound. A poll-wide destination cache would lose the current bounded-page memory property and complicate admission recovery. |
-| Global heap mirror | Deferred: lazy empty polls already enumerate zero globals. Active global1024 still requires recipients; avoiding registry reads would introduce all-subscriber heap state and invalidation/upgrade paths. |
-| Stable replacement/financial batching | Not authorised; IDs0–11, encodings and durable money-moving boundaries remain unchanged. |
+| A | Implemented immutable scan context and reusable relation keys. Mutable alias, price, evidence, fee, balance and health reads retain their logical positions. |
+| B | Implemented borrowed Nat/memo extraction and matching; clone only retained insertion/new maxima. Sender/memo validation and full-width conversions remain. Exact ICRC key capacity fixes allocation without changing bytes. |
+| C | Implemented one scan-owned accumulator, returned only on successful completion. Failed scans cannot dispatch it. Page admission/cursor transactions and previously committed progress remain independent. |
+| D | Implemented page-local record highs per effective watcher generation. Added/easier relations invalidate the whole cache entry. Empty/singleton lists avoid a summary allocation. |
+| E | Implemented lazy eligible global snapshots and direct stable-map count. Shared snapshot precedes the first live block/admission; generic snapshot follows successful observation and precedes admission. |
+| F | Implemented one ordinary Candid encoding per global-only batch. Each direct call retains its immediate actual-cost reserve check, oneway semantics, ordering and failure continuation. |
+| G | Implemented unchanged-write suppression for relations/globals/aliases. Known no-ops retain effective values with dirty=false; later duplicates cannot discard staged improvements. Complete alias validation/timestamps remain. |
 
-## Fixed-work and attribution results
+Record-high correctness depends on chronological processing: a later amount no
+greater than a processed high cannot newly qualify an unchanged threshold, lower
+its first index, increase its maximum or open retention capacity. Invalidation
+starts a fresh generation after the admitting block. The single accumulator keeps
+the same first 256 identities and permits later updates after overflow. Only the
+guarded poll writes production memberships, making deferred global snapshots safe.
+No stable-map/RefCell borrow crosses an await. Deterministic ordering means sender
+attempt order; remote execution order is not guaranteed.
 
-These are **uninstrumented configured-debug** medians of three independent serial
-pairs, not canonical production costs. All three samples agree in each group;
-zero observed range does not imply zero real-world uncertainty. Ordinary execution
-limits, fixed fixtures/clock/balances and identical frozen mocks are used. Sender
-debits, recipient/dependency debits, payload bytes, requests and cursor progress
-are separate. Sending scenarios retain declared301second storage/settlement time.
+Historian call suppression is deferred because exact-route evidence, mutable
+alias/price timing and failure observations are contractual. Threshold sorting is
+deferred: qualifying increasing values still need every maximum updated, while a
+new index complicates retention/admission order. The separate unmatched-increasing
+production controls retain their full walks and zero callbacks; a sorted index
+could help those walks, but no additional saving is claimed without an independent
+index design/proof. Combined measured costs already improve on that path.
+Cross-page/global heap mirrors are deferred: repeated one-destination 64-page traffic could avoid 63 lookups, but
+unique traffic offers little reuse and lazy empty polls already enumerate zero
+globals. No cycle gain is inferred from that operation bound. Stable replacement
+and financial batching are not authorised.
 
-| ICP workload | Baseline cycles | Candidate cycles | Reduction |
-|---|---:|---:|---:|
-| Ordinary256, no interested accounts | 66,885,589 | 56,319,701 | 15.797% |
-| Equal256,1024watchers | 7,846,795,403 | 5,858,110,163 | 25.344% |
-| Increasing256,1024watchers | 7,922,889,782 | 7,362,979,938 | 7.067% |
-| Repeated watched64pages,16watchers | 5,403,239,535 | 3,419,727,870 | 36.710% |
-| Growing/overflow64pages, final retained update | 5,164,296,876 | 3,801,091,383 | 26.397% |
-| Global1024 | 5,744,359,860 | 5,555,701,382 | 3.284% |
-| Idle1024globals | 19,489,546 | 12,873,139 | 33.948% |
-| New256-target range | 117,032,509 | 70,858,713 | 39.454% |
-| Unchanged4096aliases | 827,871,139 | 524,753,817 | 36.614% |
+## Measurements and trade-offs
 
-All93main groups improve overall. Generic equal256×1024 improves25.268%,
-increasing7.050%, and32769-bit stress32×16 improves34.859%; bounded ICP amounts
-are reported separately. Four small real-receiver groups improve1.825–5.943%ICP
-and1.877–5.400%generic with full authentication/decoding. Twenty-two publication
-groups improve; alias additions mean one new binding in a complete2/4096table.
+| Workload | ICP sender cycles: baseline → candidate (reduction) | Generic sender cycles: baseline → candidate (reduction) |
+|---|---:|---:|
+| Ordinary 256 blocks | 119,843,076 → 89,725,994 (25.130%) | 124,305,728 → 112,025,529 (9.879%) |
+| Idle, 1,024 globals | 52,838,100 → 46,226,748 (12.512%) | 57,659,859 → 52,259,975 (9.365%) |
+| New 256-target range | 191,064,359 → 104,998,580 (45.045%) | 191,877,941 → 116,991,204 (39.028%) |
+| 256 global receivers | 1,442,204,173 → 1,394,388,057 (3.315%) | 1,448,866,740 → 1,400,250,401 (3.355%) |
+| 256 equal transfers, 32 receivers | 319,260,898 → 245,136,207 (23.218%) | 323,748,013 → 267,336,855 (17.424%) |
+| 256 increasing transfers, 32 receivers | 319,568,192 → 275,600,316 (13.759%) | 323,981,073 → 297,938,381 (8.038%) |
+| Increasing, 32 unmatched relations | 103,523,773 → 69,629,041 (32.741%) | 107,724,733 → 91,832,074 (14.753%) |
+| 4,096 blocks, 512 relations/overflow | 1,698,876,735 → 1,008,879,629 (40.615%) | 1,836,724,686 → 1,443,640,227 (21.401%) |
 
-Measured stable allocation is100,728,832bytes in both variants; maximum allocated
-linear memory3,735,552bytes in both. No paired main row grows allocated heap;
-21pairs use one64KiBpage less. This is not a live-object/peak-heap profiler.
-Record-high summaries add one owned Nat per cached multi-watcher destination in
-a bounded page; unique/increasing comparison/allocation overhead is disclosed.
+All 24 canonical groups pass and improve; every group has three independent
+samples. The raw CSV and medians/ranges are tracked in the data directory.
 
-The56instrumented diagnostic pairs use identical synchronous scopes, pinned
-message instruction counters and no subtraction across awaits. Source-only
-ordinary production runtime-span instructions19,969,033→153,120; range staging
-50,852,234→20,949,959; publication89,796,296→63,692,987. Nested spans overlap and
-are not added. Shadow effects range−0.2534%to+2.1888% on matched debug/publication
-rows; headline cycles come from uninstrumented builds. See
-[attribution](cycle-optimisation-data/attribution/README.md).
+These are genuine uninstrumented production modules against fixed-principal mocks,
+three independent serial samples per case and ordinary execution limits. The old
+seven-case cohort uses 6T/Standard/600 seconds; real-receiver cases use
+80T/VeryFast/10 seconds. Actual launch balances are equal after excluded fixture
+credits, which are recorded separately. Every intended real receiver authenticates
+and decodes its complete notification; incomplete scans or missing sends reject
+results. Dependency and recipient debits remain separate and include their stated
+storage interval. Request/instruction attribution unavailable in canonical modules
+is supplied by identical test-only shadows, not a production profiling API.
 
-## Compiler and scheduler
+Configured-debug data remains separately labelled: equal 256×1,024 improves
+25.344% ICP/25.268% generic; increasing improves 7.067%/7.050%; repeated watched
+64-page ICP traffic improves 36.710%. All 93 main groups and 22 publication groups
+improve overall. Generic 32,769-bit stress is separate from bounded ICP amounts.
+The historical shared-account immediate baselines reproduce 5.958/7.834B; settled
+rows add the declared 301-second interval. Historical global fan-out used the
+separate-ledger architecture, so its approximately 5.742B is not an ICP-only row.
 
-All48predeclared z/s/2/3screening pairs pass after the pinned shrink transform.
-Profile2 beats z in intended workloads;3has marginal/mixed gains and larger files.
-Screened backend bytes z1,431,613→2=1,847,228 (+29.03%); frontend3,757,901→4,009,935
-(+6.71%). Frontend installation rises11.7%, reported idle cost0.55%, allocated
-heap unchanged. All20certified responses/profile match source assets. Query
-statistics reported13for20known requests; no exact query-instruction claim is
-made. Final canonical sizes/hashes are recorded separately after pinning.
+Individual source effects, adverse rows and raw receipts are in the
+[data index](cycle-optimisation-data/README.md). A/B's generic increasing prototype
+regresses 0.0301%; D's worst isolated regression is 0.0425% on increasing ICP;
+F's specific-only path adds about 329 cycles/recipient. Early G no-op regressions
+of 2.00–3.46% are corrected by the known-no-op cache, which adds at most 0.0751%
+on new ranges. Global insertion suppression shows no isolated cycle win and is
+retained as a small, rare-declaration stable-write trade-off. Percentages are not
+added across prototypes.
 
-Actual unchanged-scheduler configured-debug runs use one round/second over660s,
-or600second steps with20rounds for24h. They omit production principal parsing;
-these are not canonical/mainnet daily-burn measurements. Both variants complete
-the same polls/callbacks with zero ending lag. Continuous660s completes664polls
-with four traffic ingress opportunities,660without; no physical throughput gain
-can be inferred at that fixture granularity. Full-day Standard completes144polls,
-24funding runs, onepricing run and dailyaliasrefresh in both variants.
+Synchronous source-only production probes reduce ordinary runtime construction
+258→2 and account hashes 256→0; range construction 515→2 and hashes 1,026→258.
+Equal 256×1,024 matching walks 256→1, not a 256-fold total-cycle saving. Accumulator
+copies fall 64→0. Counters never span awaits; nested spans overlap. Shadow effects
+are quantified separately and never substituted for uninstrumented costs.
+The eight final matched-host production shadow diagnostics differ from their
+uninstrumented medians by -0.0128% to +2.3637%; these one-sample diagnostics
+are retained separately, without applying a correction factor to headline costs.
 
-The raw ICP one-receiver day debit rises0.0363%; retain that adverse observation.
-Post-window control/drain accounting instead falls0.6356%ICP/0.7917%generic with
-one real global+specific receiver,11.7071%/8.7804%with1024idleglobals. All lanes
-were already idle. The first closing ingress costs55,440,266/6,635,620cycles;
-repeating the identical pure setter at the same clock costs6,622,279/6,593,314.
-No later drain work is charged. The cold/boundary difference is consistent with
-periodic allocation billing, but its exact replica operation is not traced. Do
-not treat the raw debit or settled-plus-control percentage as an unconditional
-daily saving. Larger code increases the reported storage idle rate by11,639,228
-cycles/day. Both metrics and the diagnostic are retained separately; fixed-work
-savings are not daily savings.
+Measured main-suite stable allocation remains 100,728,832 bytes and maximum
+allocated linear memory 3,735,552 in both variants; no row grows allocated heap.
+This is not a live-object profiler. Context keys add bounded per-page pending
+storage; record-high summaries add one owned Nat per multi-watcher destination.
+No cross-poll cache or stable region is added.
 
-Fresh existing-model projections cover idle ordinary polling only: no invented
-maintenance/storage coefficients, no traffic/incoming funding, current policy,
-explicit1/2/5/10sContinuous completion assumptions. At110T/1s, zero-global first
-downgrade moves3,780,616→3,883,961seconds,1024global2,565,478→3,884,057. Cheaper
-polls can extend faster service. See[model inputs/results](cycle-optimisation-data/models/README.md);
-no total-system runway or mainnet guarantee follows.
+The final profile is workspace opt-level 2 with unchanged Rust 1.94.1, LTO,
+codegen-units=1, panic/overflow/target settings and pinned ic-wasm 0.9.7 shrink.
+All 48 z/s/2/3 screening pairs pass; 3 has marginal/mixed gains and larger files.
+Against refactored z, 2 increases backend/frontend bytes 29.03%/6.71%. Frontend
+screening installation cost rises 11.7%, reported idle cost 0.55%, allocated heap
+unchanged; asset bytes match. Query statistics counted 13 of 20 known calls,
+so no exact query-instruction claim is made.
 
-## Behavioural and release gates
+## Fixed time, equivalence and gates
 
-Focused equivalence passes: independent linear32×512random traces; exact complete
-stable logical contents ofIDs0–11 at three checkpoints on both architectures;
-controlled alias publication and a price epoch between Historian awaits; threshold
-reduction and later-page overflow updates. No financial field is normalized away:
-the fixture controls the supplied balance to exercise the same sampled minimum.
-Physical B-tree allocation history may differ after avoided writes.
-The controlled Historian-delay fixture uses a test-only update wrapper around the
-same pure response because replicated queries cannot await. Normal mocks and all
-production measurements retain the query endpoint; no production call is changed.
+Actual configured-debug scheduler fixtures keep the existing policy: 144 polls,
+24 funding runs, one pricing run and daily alias refresh over a Standard day;
+equal callbacks and zero ending lag. Continuous 660-second fixtures complete
+664 polls with four traffic ingress opportunities, 660 without, in both variants.
+One round/second or 600-second steps/20 rounds are explicit latency assumptions;
+these are not canonical production daily-burn measurements.
 
-The new real-global fixture exposed two rejected baseline setups:256sequential
-Historian checks exceeded PocketIC's100round ingress wait, then6Tliquidity funded
-only116of256global calls because each65bytecall reserves42,102,481,000cycles.
-Extra400rounds did not deliver the140reserve-skipped sends; the unchanged scheduler moved
-toEconomy under transient reservations. Seed batches are now16; full-delivery
-real cases use equal80Tfunding/VeryFast/10second windows, explicitly recorded in
-CSV. All receiver assertions and production reserve/callback rules remain intact.
-The original7production cases retain6T/Standard/600s; these are separate cohorts.
+The raw ICP one-receiver day debit rises 0.0363%; post-closure accounting falls
+0.6356%. All lanes were idle; first closing ingress costs 55.44M/6.64M, while the
+same setter repeated at the same clock costs 6.62M/6.59M, with no later drain work.
+This is consistent with periodic billing/cold state, not traced to an exact replica
+operation. Both metrics are retained without claiming unconditional daily savings.
+Larger code raises reported idle billing by about 11.64M/day in that fixture.
+Fresh idle-only model projections omit unavailable maintenance/storage costs;
+explicit 1/2/5/10-second completion assumptions show longer Continuous residence,
+not a mainnet runway guarantee. See [model evidence](cycle-optimisation-data/models/README.md).
 
-Verified81baseline→candidate upgrades pass both architectures with representative
-pending notify/transfer states, aliases, cursors, self/external/global relations
-and lowered thresholds, then exercise/upgrade again with exactly one surplus
-transfer. Genuine baseline production modules are used as well as debug state
-fixtures. The historical44d83c0regression remains. Final canonical reruns remain
-pending. Actual-cost reserve±1/equal probes pass cold/warm global and large payload
-cases. A baseline wrapper exceeded40Bwhile doing three encodings plus decode;
-this is not a production limit, and full256×32769receiver coverage is retained.
+Independent 32×512 randomized traces, complete logical stable IDs 0–11 at three
+checkpoints, controlled alias/price interleavings, threshold reductions and
+later-page overflow updates pass. No financial field is normalized away. The
+Historian delay test uses an explicit test-only update wrapper because replicated
+queries cannot await; normal production fixtures retain the query endpoint.
+Reviewed 81 baseline upgrades preserve relations, aliases, cursors and pending
+notify/transfer states, then exercise/upgrade again with exactly one surplus
+transfer. Historical 44d83c0 coverage remains.
 
-| Gate | Current evidence |
+| Gate | Result |
 |---|---|
-| fmt; strict workspace/all-targets Clippy | Pass at d003486 |
-| test_unit | Pass146Rust+138frontend=284 |
-| test_all / maximum callback / Index | Pass:128PocketIC;146Rust+138frontend+128=412total |
-| Manifest/static/Candid/export | Source checks pass; final canonical binary audits pending |
-| Fresh security | Fresh d003486 scan fails only OSV below; audit/deny/npm pass. Exact workflow-pinned audit rerun pending |
-| Canonical source pairing/backend pin | Actual canonical backend obtained; pin/bundle/static checks and138frontend tests pass; final pairing pending |
-| Two uncached independent builds/population | Pending |
-| Final-commit GitHub security CI | Unverified: HTTPS credentials unavailable; connected GitHub branch creation returns403 |
+| fmt / strict workspace, all-targets Clippy | Pass; repeated with all features at validated source |
+| test_unit | Pass: 146 Rust + 138 frontend |
+| test_all | Pass: 128 PocketIC; total 412, including maximum callback and zero-argument Index regressions |
+| Independent state/interleaving/upgrade comparisons | Pass; complete stable IDs 0–11 and historical 44d coverage retained |
+| Final canonical production | Pass: 72 uninstrumented pairs, eight shadow diagnostics, two baseline-production upgrade scenarios |
+| Final canonical frontend | Pass: 20 certified HTTP response checks; backend pin equals actual backend hash |
+| Manifest/static/Candid/production exports | Pass; no debug or benchmark export in production |
+| Two-build reproducibility / population | Pass: all four outputs equal from frozen committed source |
+| Fresh exact-policy security | Audit/deny/npm pass; OSV blocked as below |
+| Candidate GitHub security CI | Unverified; source cannot be published with available credentials/integration permissions |
 
-Source-location assertions that forced eager global traversal were replaced by
-installed-Wasm first/last-block eligibility tests. Typed/raw sender syntax checks
-are supported by exact one-record byte/decode tests, standard/Index receiver
-regressions and retained actual-cost/oneway/export checks.
+Four PocketIC HTTP `IncompleteMessage` errors stopped fan-out shards;
+none produced an accepted row. Reruns preserved the service inputs and passed. Failed and successful
+log digests are retained separately; no production retry or assertion changed.
+The remaining native test processes use `MALLOC_ARENA_MAX=2` on both sides, a
+[glibc host allocator bound](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)
+that changes no Wasm allocator, IC metering, clocks or call budgets. All raw fields
+except sample match the earlier default-host global sample exactly. The transport
+cause remains unconfirmed; this is an environment mitigation, not a source win.
 
-Publication attempts did not create a remote review branch: noninteractive Git
-push fails for missing HTTPS credentials; connected GitHub create-branch returns
-`403 Resource not accessible by integration`. Repository metadata advertising push
-permission does not grant this integration Git-reference writes. No final-commit
-workflow was triggered or passed. After access is supplied, publish the local
-review branch and inspect [Dependency Security](https://github.com/aodl/Event_Horizon/actions/workflows/dependency-security.yml)
-for that exact commit. The historical baseline success is not candidate evidence.
+Two rejected preflights are preserved: 256 sequential seed admissions exceeded
+PocketIC's 100-round ingress wait; 6T then reserve-skipped 140/256 sends because a
+65-byte call needs 42.102B available including reservations. Sixteen-item seed
+batches and equal 80T actual launch liquidity resolve those fixture assumptions.
+No production limit, reservation, assertion, retry or service rule was weakened.
 
-Fresh OSV reports GHSA-qwgh-2vcv-g2f7 for block-buffer0.10.4, while the maintainer
-affected range starts0.11.0 and the locked implementation uses a separate cursor.
-The discrepancy is investigated in[the security report](block-buffer-osv-investigation.md).
-No exclusion, allowlist entry or broad dependency update was introduced. Overall
-security acceptance remains blocked unless the actual final scan/CI succeeds or
-the authoritative metadata is resolved.
+The fresh exact-policy scan passes cargo-audit 0.22.1, cargo-deny and npm audit,
+but OSV 2.3.8 fails on GHSA-qwgh-2vcv-g2f7/block-buffer 0.10.4. The maintainer's
+affected range begins 0.11.0; the locked implementation uses a separate cursor.
+This supports a metadata discrepancy, not a security-gate waiver; see the
+[investigation](block-buffer-osv-investigation.md). No new exclusion or dependency
+refresh was introduced. Git push lacks HTTPS credentials; connected branch
+creation returns 403. No candidate CI was triggered or passed. After publication,
+verify that exact commit in [Dependency Security](https://github.com/aodl/Event_Horizon/actions/workflows/dependency-security.yml).
 
-All public interfaces, stable IDs/encodings, exact memo/endowment evidence,
-notification/Index contract, admission/cursor/error ordering, cadence and financial
-policy are preserved. No deployment, reinstall, controller change, funds movement
-or write to another project was performed. Remaining release gates above are
-outstanding; this report does not claim completed release acceptance.
+APIs, stable IDs/encodings, memo/evidence rules, notification/Index contract,
+page commits, financial safeguards and cadence policy are unchanged. No mainnet
+or real-funds action, reinstall, controller change or other-project write occurred.

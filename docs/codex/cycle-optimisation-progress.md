@@ -1,26 +1,47 @@
 # Cycle optimisation — resumable progress
 
-Baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`; clean tree, no existing build/benchmark processes at start (2026-10-27).
-Independent detached worktree: `/home/codexdev/src/Event_Horizon-baseline-81c5a0d`.
-Evidence root: `observations/cycle-optimisation/` (ignored raw artifacts/logs).
+## Current checkpoint
 
-## Status — current checkpoint
+Implementation, compiler choice, local behavioural validation and canonical
+measurements are complete. Release acceptance is **blocked** by the unsuppressed
+OSV metadata finding and unavailable GitHub publication access. No deployment.
+See [the validation report](cycle-optimisation-validation.md).
 
-- Runtime J/profile 2 remains fixed (`9e304e1`, runtime source `00c0d63`); host harness `8c65325`. Latest complete data checkpoint `423a4ac`. No production edit since profile selection.
-- All four final-v2 modes passed: fixed-work279pairs, publication66, small real receivers12, scheduler36 =393benchmark pairs. This is **not** the regression-suite count. Raw CSV/summary/input/log receipts are tracked in `cycle-optimisation-data/`. All overall candidate rows improve; isolated component trade-offs remain a separate investigation.
-- **Active exec7772/PID759516:** component384pairs, then56instrumented attribution pairs. Read `active-process-v2.json`, `logs/final-v2-components.log` and `logs/component-*.log`. Scripts bind unchanged artifacts/mocks/host inputs; do not edit them mid-run or run another build/benchmark.
-- **Waiting exec97871/PID820596:** `run-prepin-gates.py` starts exact fmt/Clippy/xtaskunit/xtaskall/security only after every measurement stage passes and source is clean. State `prepin-gates-state.json`; it aborts on any failure. Keep tracked source clean while gates run; draft analysis under ignored observations.
-- Focused correctness:93backend units/oracle, strict Clippy/static/manifest; complete logical stable IDs0–11 differential botharchitectures; controlled alias/price awaits; debug and genuine81baseline production upgrades (including2M−1/equal2M boundary) passed. Final full regressions still pending. Native SDK dev-edge is the sole lockfile diff; no versions or production graph changed.
-- Baseline independent worktree and canonical backend279270.../frontend2658a8... hashes reverified; immutable artifacts intact. All48compiler screening pairs passed;2 selected. Reserve actual-cost probes passed; no production limits weakened.
-- Fresh model input files generated under `models/{baseline,candidate}-{0,1024}globals/`; native existing-model execution still pending after measurement/build serialization. They are debug ordinary-polling projections with unavailable maintenance, not mainnet runway.
-- Canonical real-receiver hot/fan-out/page extension, actual canonical backend/pin/frontend source pairing, two uncached builds, export audits/final canonical measurements, final report and remote CI remainpending. Read ignored draft `canonical-production-extra-plan.md`; existing productionhelper's unused bootstrap/repeat/archive names were not tested and lack setup.
-- Security prototype FAILED OSV on block-buffer0.10.4 metadata conflicting with the maintainer range. No new exception/dependency refresh. Final fresh scan/remote CI remainrequired; no release-completion/security-green claim or deployment.
+- Independent baseline: `81c5a0d72ff188f5ee9f412deb20566a12307642`; preserved clean
+  worktree `/home/codexdev/src/Event_Horizon-baseline-81c5a0d` and verified artifacts.
+- Immutable validated source: `7cfa8b354fa9621786a09b13c9a6dff498872b19`.
+  Runtime ends at `00c0d63`; workspace profile 2 selected at `9e304e1`.
+- Source X passed two independent uncached canonical builds and population with
+  identical four-file outputs. Backend `f93cd920…8970`, frontend `46d7b106…4a24`;
+  frontend pin/bundle/check use the actual backend hash.
+- Full gates: 146 Rust + 138 frontend + 128 PocketIC = 412 passed. Final source
+  repeated fmt, strict all-feature Clippy, unit and manifest checks. Final canonical
+  72 paired measurements, eight shadows, two upgrades and 20 frontend checks pass.
+- Complete configured-debug, component, attribution, compiler and scheduler/model
+  evidence is tracked under `cycle-optimisation-data/`. Raw logs/artifacts remain
+  in `observations/cycle-optimisation/`; no incomplete pair is accepted.
+- Four final PocketIC transport failures passed reruns with unchanged service inputs. The failed
+  log and rerun receipts are preserved separately. No assertion was weakened.
+- Exact-policy fresh audit/deny/npm pass; OSV fails only GHSA-qwgh-2vcv-g2f7 for
+  block-buffer 0.10.4. No new exclusion or dependency refresh. Tokio stays 1.51.6.
+- Publication failed: noninteractive Git lacks HTTPS credentials; connected branch
+  creation returns 403. Validated source lookup returns 422/no commit. No remote
+  candidate workflow exists; security CI is unverified.
 
-## Resume
+This evidence-only checkpoint follows X and changes only docs/data/manifest.
+After committing it, `observations/cycle-optimisation/run-final-evidence-checks.py`
+verifies that exact diff, repeats fmt/unit/manifest, runs the supported Docker
+population command and compares all four outputs to X. Its resumable status,
+source SHA, process and log digests are in `final-evidence-state.json`; inspect that
+before starting any build. `resume-current.json` is the immediate process pointer.
 
-Inspect HEAD/tree/processes and active pointers. Current queued commands are in ignored `run-final-v2.py` and `run-prepin-gates.py`; tracked focused component/attribution runners reproduce their inputs. All four final-v2 complete files are accepted. Do not resume old `final/` partial data:261oldpairs were provisional under the failed40+10settlement check; stronger200+20cohort supersedes them.
-
-After current components/attribution: interpret every trade-off and instrumentation overhead; execute the existing model with freshinputs. Auto fullgates may already be active—inspect before running any build. Then finish feature-only canonical real-receiver fixtures, affected quality checks, canonical backend/pin/frontend builds and commits, actual two-build/population evidence and final source CI. Preserve all failures/logs; no skipped delivery or failed scan counts as a win. Draft finalreport remains incomplete. Runtime/profile remains fixed unless evidence proves a genuine correction necessary.
+Reproduction commands are in [the experiment guide](cycle-optimisation-experiments.md).
+To finish release acceptance after access/authoritative metadata resolution:
+run `./tools/scripts/security-scan` with workflow-pinned tools, publish the local
+`codex/cycle-optimisation-81c5a0d` review branch using the normal authorised workflow,
+and inspect Dependency Security for that exact commit. Do not add an exclusion to
+obtain green; do not deploy. Earlier notes below are historical checkpoints, not
+current pending work or active process pointers.
 
 ## Contract checkpoints
 
