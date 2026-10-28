@@ -104,6 +104,7 @@ mod cycle_optimisation {
                 ("global", 1, 1),
                 ("global", 1, 256),
                 ("global", 1, 1024),
+                ("mixed", 1, 1024),
                 ("ordinary", 256, 0),
                 ("ordinary", 512, 0),
                 ("ordinary", 4096, 0),
@@ -177,7 +178,13 @@ mod cycle_optimisation {
                         } else if scenario == "unique_watched" {
                             env.seed_subscribers("specific", watchers)?;
                         } else {
-                            for start in (0..watchers).step_by(128) {
+                            let specific_watchers = if scenario == "mixed" {
+                                env.seed_subscribers("global", watchers / 2)?;
+                                watchers / 2
+                            } else {
+                                watchers
+                            };
+                            for start in (0..specific_watchers).step_by(128) {
                                 update::<_, ()>(
                                     &env.pic,
                                     env.event_horizon,
@@ -185,7 +192,7 @@ mod cycle_optimisation {
                                     Seed {
                                         subject: env.subscriber,
                                         start,
-                                        count: (watchers - start).min(128),
+                                        count: (specific_watchers - start).min(128),
                                     },
                                 )?;
                             }
@@ -447,6 +454,23 @@ mod cycle_optimisation {
                         };
                         let payload_bytes = if let Some(ref n) = observed_notification {
                             encode_one(n)?.len() as u64
+                        } else if scenario == "mixed" {
+                            let global = encode_one(PokeNotification {
+                                global_activity: true,
+                                matches: vec![],
+                            })?
+                            .len() as u64;
+                            let specific = encode_one(PokeNotification {
+                                global_activity: false,
+                                matches: vec![PokeMatch {
+                                    subject: env.subscriber,
+                                    target: WatchTarget::Subaccount(7),
+                                    first_block_index: cursor_before,
+                                    max_amount: largest.clone(),
+                                }],
+                            })?
+                            .len() as u64;
+                            global * (watchers / 2) + specific * (watchers / 2)
                         } else if scenario == "unique_watched" {
                             (0..blocks)
                                 .map(|i| {

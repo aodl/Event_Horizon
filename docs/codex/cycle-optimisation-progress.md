@@ -266,3 +266,44 @@ candidatez and candidate2 production+debugshadows in distinct targetdirs; run
 near-reserve shards and finaluninstthree-sample/component/scheduler/metrics
 matrices serially. Preserve failed/incomplete diagnostics. Final canonical
 backendpin/frontend/repro/fullregression/security/CI remainpending; no deployment.
+
+## Reserve boundary and adverse-case acceptance / final matrix next
+
+Runtime/profile unchanged4cd89c8 (production codeJ/profile2). All six fresh shadow
+builds succeeded, distinct target directories, full source/tool/artifact receipts in
+`final-shadows/{baseline-z,candidate-z,candidate-2}/`. These contain extra counters
+and probe exports and are NOT releases. Genuine uninstrumented comparators remain
+`profiles-baseline/z/` and `profiles-candidate/2/`; frozen normal mocks unchanged.
+
+Actual sender reserve checks **passed** for globalcold/warm,1×257bit,
+256×4097bit and64×32769bit envelopes on baseline/candidate. Typed/raw CDKcosts
+identical; actual suppliedliquidity at reserve+cost-1 rejects, equality/+1 accepts,
+remainingliquidity is precisely1T/+1 immediately after acceptance. Actual standard
+receiver authenticates sender and verifies full decoded payload digest. RawCSV/logs
+in `reserve-boundaries/`; successful shard durations83.92s(global),74.12s(64large).
+The initial256×32769 wrapper exceeded baseline ordinary40B instructions before
+producing accepted evidence (`reserve-256-32769.log`, source4cd89c8). It performs
+three encodings plus decoding, so this is NOT proof of a production-sender limit.
+The accepted policy-probe envelope uses64large hints; full256×32769 ordinary
+receiver-decoding regression is unchanged. No limit, decoder setting, hint or
+production path was reduced. Keep this explicit measurement limitation in report.
+
+D's isolated C→D adverse workload pairs all passed three samples, exact zero
+observed spread (`components/d-unique/complete.csv`): ICPincreasing+3,358,969cycles
+(+0.04247%), genericincreasing-1,062,955(-0.01339%); uniqueunwatchedICP+24,819
+(+0.03802%), generic+9,927(+0.00996%). Allocatedlinearheap unchanged in all four
+rows. Extra summary bookkeeping/oneclone for increasing multiwatchers explains
+small overhead; retain simple bounded page-local design for hot equal/decreasing
+workloads rather than adding pointer/allocation machinery for<0.05%regressions.
+Document these real regressions, not as noise or hidden in combined totals.
+
+Mixeddispatch probe **passed** both architectures37.70s:512global-only and512
+specific recipients,1024attempts/accepts, identical cursors/state/calls/payloadbytes;
+ICP5,856,829,558→5,684,855,651, generic5,865,916,041→5,692,512,726. Oneprobe,
+not final median. Added mixedcase to final/per-component matrices. All mainfixture
+code now compiled; onlyhostbench envelope/fixture changes since4cd, no runtime
+edits. Next strictClippy/static/manifest/commit to freeze finalharness, then run
+final fullthree-sample debug/publication/small/scheduler and preserved per-component
+matrices serially; instructionattribution comparisons use explicit shadowpaths.
+Final fullgates, actual canonicalbackend/frontendpin/twobuilds, freshsecurity and
+CI remainpending. SecurityOSVmismatch remainsfailed/unexcluded. No deployment.

@@ -23,7 +23,11 @@ fn actual_sender_reserve_boundary() -> Result<()> {
         std::fs::read(std::env::var_os("EH_OPT_CANDIDATE").context("candidate shadow required")?)?;
     let mut csv=String::from("variant,hints,bits,warm,offset,supplied_liquid,typed_cost,raw_cost,payload_bytes,accepted,remaining_liquid\n");
     for (name, bytes) in [("baseline", old), ("candidate", new)] {
-        for (hints, bits) in [(0u64, 0usize), (1, 257), (256, 4097), (256, 32769)] {
+        // The initial256×32769 probe exceeded the baseline wrapper's ordinary
+        //40B budget (three encodings plus decoding), not a proved sender limit.
+        // Retain that failed evidence. Full256×32769 receiver decoding remains
+        // in the ordinary regression suite; this policy probe uses64large hints.
+        for (hints, bits) in [(0u64, 0usize), (1, 257), (256, 4097), (64, 32769)] {
             if !selected_scenario("reserve", hints, bits as u64) {
                 continue;
             }

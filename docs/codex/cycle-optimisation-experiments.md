@@ -178,3 +178,17 @@ host check requires actual authenticated receiver decoding/digest on accepted
 sends, including maximum arbitrary-precision records and cold/warm global bytes.
 No production export, liquidity override, retry, execution/decoder limit or stable
 region is introduced. These shadow artifacts must never be used as releases.
+
+The largest close-reserve wrapper attempt256×32769 hit baseline's ordinary40B
+message budget while decoding and encoding the same value three times. It
+produced no accepted CSV and does not establish a production sender limit.
+The bounded policy probe uses64×32769 and256×4097; all supplied-balance/cost
+boundaries and receiver digests pass. The original full256×32769 receiver
+regression stays unchanged. No execution/decoder limit or production hint count
+was changed. Source4cd89c8 reproduces the rejected wrapper envelope.
+
+The `mixed:1:1024` fixed-work case seeds512global-only and512specific synthetic
+recipients under disjoint identities. It requires1024attempts and accepted sends,
+records exact aggregate ordinary typed payload bytes, and exercises shared global
+encoding alongside distinct specific encodings. Separate real mixed-record/Index
+and scheduler fixtures verify actual receiver contents and authentication.

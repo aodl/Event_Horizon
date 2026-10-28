@@ -33,7 +33,7 @@ cases = args.case or (["small_mixed:1:1","small_mixed:16:16"] if args.mode == "s
     "new_range:1:256","fullwidth_range:1:256","alias_unchanged:0:2","alias_unchanged:0:4096",
     "alias_additions:0:2","alias_additions:0:4096"] if args.mode == "publication" else [
     "idle:0:0", "idle:0:256", "idle:0:1024", "repeat_idle:0:0", "repeat_idle:0:256", "repeat_idle:0:1024",
-    "bootstrap:1:0", "bootstrap:1:256", "bootstrap:1:1024", "archive_only:512:0", "archive_only:512:256", "archive_only:512:1024", "global:1:0", "global:1:1", "global:1:256", "global:1:1024",
+    "bootstrap:1:0", "bootstrap:1:256", "bootstrap:1:1024", "archive_only:512:0", "archive_only:512:256", "archive_only:512:1024", "global:1:0", "global:1:1", "global:1:256", "global:1:1024", "mixed:1:1024",
     "ordinary:256:0", "ordinary:512:0", "ordinary:4096:0", "ordinary:16384:0", "irrelevant_memo:256:0", "wrong_source:256:0", "wrong_destination:256:0",
     "equal:256:1", "equal:256:16", "equal:1:1024", "equal:32:1024", "equal:256:1024", "increasing:256:1024",
     "decreasing:256:1024", "alternating:256:1024", "random:256:1024", "zero:256:1024",
