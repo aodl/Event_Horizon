@@ -126,3 +126,27 @@ measure synchronous page/matching/dispatch phases and actual invocation counts.
 Global count/write/encoding operation proofs remain native-only counters. Original
 release overflow-check policy is the unchanged Cargo release default (no explicit
 override), not an enabled overflow-check flag.
+
+Two normal integration scenarios now also run the verified canonical81c5a0d
+production backend before upgrading to a candidate production module against
+fixed trust anchors. Test-only baseline debug seeding/inspection surrounds the
+production interval. They cover self/external/global relations, lower thresholds,
+permanent aliases, both cursors, pricing, both pending CMC phases with a frozen
+surplus, two optimised matching/upgrade passes, and exactly one final surplus.
+`EH_TEST_PRODUCTION_WASM` optionally selects final canonical bytes for the rerun.
+The original debug81baseline upgrade and44d83c0 historical tests remain.
+
+Frontend compiler screening installs each genuine shrunk production frontend,
+verifies20 certified HTTP responses against embedded source bytes, and records
+installation/certification debit, allocated memory and status idle burn. Status
+query statistics are **reported estimates**, not exact per-request counters:
+current [IC abstract behavior](https://docs.internetcomputer.org/references/ic-interface-spec/abstract-behavior/)
+specifies aggregation delay and information loss. This fixture reports13calls for
+20known successful requests even after several epochs; do not divide those
+instruction estimates by20 or claim exact query savings. Response certificate
+proof sizes can differ; static asset bytes are checked exactly. The initial
+frontend probe used nominal added funding rather than the actual initial balance;
+its overflow was a fixture failure and produced no accepted CSV.
+
+Ordinary no-interested-account traffic also covers1/2/16/64pages for recalibrating
+cost models without attributing specific-dispatch fees to raw block processing.

@@ -104,6 +104,9 @@ mod cycle_optimisation {
                 ("global", 1, 256),
                 ("global", 1, 1024),
                 ("ordinary", 256, 0),
+                ("ordinary", 512, 0),
+                ("ordinary", 4096, 0),
+                ("ordinary", 16384, 0),
                 ("equal", 256, 1),
                 ("equal", 256, 16),
                 ("equal", 1, 1024),
@@ -1117,4 +1120,6 @@ mod cycle_optimisation {
     include!("cycle_optimisation_publication.rs");
     include!("cycle_optimisation_small.rs");
     include!("cycle_optimisation_scheduler.rs");
+    include!("cycle_optimisation_frontend.rs");
+    include!("cycle_optimisation_production_upgrade.rs");
 }
