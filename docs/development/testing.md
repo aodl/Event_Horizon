@@ -62,7 +62,7 @@ on ICP, ICRC-3 and SNS, including the combined 256-match cap. Production has
 one notification protocol and no alternate method.
 
 A separate, test-only `mock-index-poke` compiles an authenticated genuine
-`poke : () -> ()` receiving method. The current inventory has 134 Rust unit tests, 138 frontend tests and 121
+`poke : () -> ()` receiving method. The current inventory has 146 Rust unit tests, 138 frontend tests and 128
 isolated PocketIC scenarios. The three Index-specific scenarios cover
 canonical ICP global wakes, generic ICRC-3 global wakes with ICP-only admission,
 and real specific/global mixed envelopes through the 256-match cap. They reuse

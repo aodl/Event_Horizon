@@ -134,12 +134,17 @@ with four traffic ingress opportunities,660without; no physical throughput gain
 can be inferred at that fixture granularity. Full-day Standard completes144polls,
 24funding runs, onepricing run and dailyaliasrefresh in both variants.
 
-Settled day plus explicit control/drain improves0.6356%ICP/0.7917%generic with
-one real global+specific receiver,11.7071%/8.7804%with1024idleglobals. The raw ICP
-one-receiver window instead rises0.0363%; its outstanding-tail investigation is
-pending. Larger code increases the reported storage idle rate in that fixture by
-11,639,228cycles/day. Raw debit, settled consumption and storage rate are retained
-separately; fixed-work savings are not daily savings.
+The raw ICP one-receiver day debit rises0.0363%; retain that adverse observation.
+Post-window control/drain accounting instead falls0.6356%ICP/0.7917%generic with
+one real global+specific receiver,11.7071%/8.7804%with1024idleglobals. All lanes
+were already idle. The first closing ingress costs55,440,266/6,635,620cycles;
+repeating the identical pure setter at the same clock costs6,622,279/6,593,314.
+No later drain work is charged. The cold/boundary difference is consistent with
+periodic allocation billing, but its exact replica operation is not traced. Do
+not treat the raw debit or settled-plus-control percentage as an unconditional
+daily saving. Larger code increases the reported storage idle rate by11,639,228
+cycles/day. Both metrics and the diagnostic are retained separately; fixed-work
+savings are not daily savings.
 
 Fresh existing-model projections cover idle ordinary polling only: no invented
 maintenance/storage coefficients, no traffic/incoming funding, current policy,
@@ -163,7 +168,7 @@ production measurements retain the query endpoint; no production call is changed
 The new real-global fixture exposed two rejected baseline setups:256sequential
 Historian checks exceeded PocketIC's100round ingress wait, then6Tliquidity funded
 only116of256global calls because each65bytecall reserves42,102,481,000cycles.
-Extra400rounds did not deliver the unattempted140; the unchanged scheduler moved
+Extra400rounds did not deliver the140reserve-skipped sends; the unchanged scheduler moved
 toEconomy under transient reservations. Seed batches are now16; full-delivery
 real cases use equal80Tfunding/VeryFast/10second windows, explicitly recorded in
 CSV. All receiver assertions and production reserve/callback rules remain intact.
@@ -182,9 +187,9 @@ this is not a production limit, and full256×32769receiver coverage is retained.
 |---|---|
 | fmt; strict workspace/all-targets Clippy | Pass at d003486 |
 | test_unit | Pass146Rust+138frontend=284 |
-| test_all / maximum callback / Index | Running; exact final totals pending |
+| test_all / maximum callback / Index | Pass:128PocketIC;146Rust+138frontend+128=412total |
 | Manifest/static/Candid/export | Source checks pass; final canonical binary audits pending |
-| Fresh security | Final run pending; prior audit/deny/npm pass, OSV failed below |
+| Fresh security | Fresh d003486 scan fails only OSV below; audit/deny/npm pass. Exact workflow-pinned audit rerun pending |
 | Canonical source pairing/backend pin | Actual canonical backend obtained; pin/bundle/static checks and138frontend tests pass; final pairing pending |
 | Two uncached independent builds/population | Pending |
 | Final-commit GitHub security CI | Unverified: HTTPS credentials unavailable; connected GitHub branch creation returns403 |

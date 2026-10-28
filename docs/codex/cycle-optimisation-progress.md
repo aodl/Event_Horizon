@@ -769,3 +769,28 @@ allocation billing or cold entry costs; don't assert a pure opcode cause. Repeat
 the same pure setter at the same clock after all measured fields are captured to
 separate warm control cost. Raw+0.0363%ICPday row remains visible; report both
 window debit and settled+control, without equating either to a mainnet guarantee.
+
+## Final source freeze preparation
+
+Repeated control diagnostic passes at f1f333864a7d3502edad983c2c3f7c1d9a94852d:
+baseline warm6,622,279cycles, candidate6,593,314; first55,440,266/6,635,620;
+later drain0both. All lanes idle before closing. This is consistent with deferred
+periodic billing/cold-state cost; exact replica operation remains unattributed.
+Keep raw adverse0.0363%ICPday and post-closure metrics; no unconditional daily
+savings claim. Diagnostic CSV/JSON and preflight/gate/failure receipts are tracked.
+
+Runtime, profile, pins and host workload logic are now fixed. The next commit
+freezes the canonical source input. Next commands: fmt/strict all-feature Clippy/
+test_unit/manifest; exact workflow-pinned security tools (cargo-audit0.22.1 is
+installing under ignored pinned-security, session34944); fresh scan; two independent
+uncached npm run verify:reproducible-artifacts then docker-build. No paired
+measurements may overlap builds. Follow with42production and30real three-sample
+pairs on actual canonical backend, final canonical81upgrade2tests and frontend
+20requests. Production-shadow overhead can be rejoined with matching final host
+liquidity in8diagnostic pairs. Keep source clean/HEAD fixed throughout canonical
+measurement guard. Final report/data changes afterward are evidence-only and must
+account for their diff; record immutable validated source rather than self-hashes.
+
+Security OSV metadata and GitHub publication403/credentials remain external release
+blocks. No mainnet, controller, reinstall or real funds action. Exact live stages
+and paths remain observations/cycle-optimisation/resume-current.json.

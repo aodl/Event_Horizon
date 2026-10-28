@@ -1,0 +1,89 @@
+{
+  "pid": 820596,
+  "source": "d003486781551b35ce8985b44622297bd8fa343e",
+  "status": "failed",
+  "stage": "security",
+  "results": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "returncode": 0,
+      "seconds": 0.4501800537109375,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 11.40926718711853,
+      "log_sha256": "d6c8805a16f98f51d9e51a6c35ca0543b71cfd135c5b2f7db65f56f4835544f1"
+    },
+    {
+      "name": "unit",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_unit"
+      ],
+      "returncode": 0,
+      "seconds": 207.05044794082642,
+      "log_sha256": "0a7c641c75bdd67f4119b8049f8138a04630a2e7a364015e5fc57a3a1d0fc83e"
+    },
+    {
+      "name": "all",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_all"
+      ],
+      "returncode": 0,
+      "seconds": 2421.157972574234,
+      "log_sha256": "42ac1007fb4a4a8bcadb0e4de2f789e8fd4b88c084cfa3a8239293f7396692ae"
+    },
+    {
+      "name": "security",
+      "command": [
+        "./tools/scripts/security-scan"
+      ],
+      "returncode": 1,
+      "seconds": 8.67871618270874,
+      "log_sha256": "75b5ae3a448b5e3f2632622da062b7031651f27592f8d8ea956b2503e0d1197a"
+    }
+  ],
+  "test_counts": {
+    "rust": 146,
+    "frontend": 138,
+    "pocketic": 128,
+    "total": 412
+  },
+  "security": {
+    "overall": "failed",
+    "cargo_audit": "passed with existing4approvedwarnings; host0.22.2 in this run",
+    "cargo_deny": "passed",
+    "npm_audit_omit_dev": "passed0",
+    "osv": "failed GHSA-qwgh-2vcv-g2f7/block-buffer0.10.4 only; freshonline2.3.8/existing4filters",
+    "new_exclusions": false
+  },
+  "scope": "Frozen source gates; later changes are frontend pin, host fixtures and evidence; final affected gates recorded separately"
+}

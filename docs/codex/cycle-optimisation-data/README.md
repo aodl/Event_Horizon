@@ -155,3 +155,18 @@ no memoryallocation-high-water increase. These are explicitly the00c0d63 older
 harness cohort: no sends/timeadvance and immediate=settled in both, so no delayed
 301second accounting claim. The newrangeIcost117,599,231 agrees with the stronger
 cohort. Do not blend differentcohorts or add percentages; finalJ/2matrix is separate.
+
+`source-gates.json` records the full412-test pass at d003486 and the fresh OSV
+failure without a new exception. `production-real-preflight*` contains ten
+one-sample fixture comparisons at53ca069; these are not final canonical headlines.
+`launch-*-preflight.csv` verifies identical actual launch balances after excluded
+setup/upgrade credits, with exact sender balance subtraction. Initial global
+fixture failures and their dispositions have digests in `preflight-failure-receipts.json`.
+
+`scheduler-boundary-diagnostic.*` reproduces the ICP day raw-debit increase0.0363%
+and isolates the tail. All three lanes are idle; there is no later drain work.
+First closing ingress costs55,440,266baseline/6,635,620candidate; the same setter
+repeated at the same clock costs6,622,279/6,593,314. The cold/boundary difference
+is consistent with periodic memory billing, not proved to an exact replica step.
+Preserve both raw and settled-plus-control metrics; neither establishes a mainnet
+daily saving. The simple setter changes only the existing debug override Cell.
