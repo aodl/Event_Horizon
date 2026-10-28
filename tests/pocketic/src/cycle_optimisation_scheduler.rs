@@ -192,17 +192,31 @@ fn scheduler_fixed_time() -> Result<()> {
                         // existing debug control and settle reservations. Report all
                         // extra completed polls/control cost; never hide the tail in
                         // a fixed-work saving or call raw debit settled consumption.
+                        let before_control = env.pic.cycle_balance(env.event_horizon);
                         update::<_, ()>(
                             &env.pic,
                             env.event_horizon,
                             "debug_set_scheduler_liquid_cycles_override",
                             Some(0u128),
                         )?;
+                        let after_control = env.pic.cycle_balance(env.event_horizon);
+                        if std::env::var_os("EH_OPT_DIAG_LANES").is_some() {
+                            eprintln!(
+                                "stop-control variant={variant} ingress_debit={}",
+                                before_control - after_control
+                            );
+                        }
                         for _ in 0..200 {
                             env.pic.tick();
                         }
                         assert!(!env.scheduler_lane_state("poll")?[0]);
                         let after = env.pic.cycle_balance(env.event_horizon);
+                        if std::env::var_os("EH_OPT_DIAG_LANES").is_some() {
+                            eprintln!(
+                                "stop-control variant={variant} later_drain_debit={}",
+                                after_control - after
+                            );
+                        }
                         for _ in 0..20 {
                             env.pic.tick();
                         }

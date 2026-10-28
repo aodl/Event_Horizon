@@ -903,7 +903,8 @@ mod cycle_optimisation {
         ] {
             wasm(cache, package, None)?;
         }
-        let mut csv=String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,stable_bytes,total_bytes,received,canonical_candidate,instrumented,wasm_heap_before,wasm_heap_after\n");
+        let initial_cycles = 6_000_000_000_000u128;
+        let mut csv=String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,stable_bytes,total_bytes,received,canonical_candidate,instrumented,wasm_heap_before,wasm_heap_after,sender_balance_before,sender_balance_after,excluded_fixture_credit\n");
         for generic in [false, true].into_iter().filter(|g| selected_generic(*g)) {
             for (scenario, blocks, entries) in [
                 ("ordinary", 256, 0),
@@ -923,7 +924,7 @@ mod cycle_optimisation {
                         eprintln!("production phase=setup variant={variant} generic={generic} scenario={scenario} sample={sample}");
                         let env = Env::with_anchors(
                             seed.clone(),
-                            6_000_000_000_000,
+                            initial_cycles,
                             false,
                             generic,
                             false,
@@ -1022,9 +1023,14 @@ mod cycle_optimisation {
                             .memory_metrics
                             .wasm_memory_size
                             .0;
+                        let fixture_credit = initial_cycles
+                            .checked_sub(env.pic.cycle_balance(env.event_horizon))
+                            .context("fixture unexpectedly gained cycles")?;
+                        env.pic.add_cycles(env.event_horizon, fixture_credit);
                         // Standard's next poll is due after 600 s. No hourly funding or daily pricing is due.
                         env.pic.advance_time(std::time::Duration::from_secs(600));
                         let before = env.pic.cycle_balance(env.event_horizon);
+                        assert_eq!(before, initial_cycles);
                         for _ in 0..200 {
                             env.pic.tick();
                         }
@@ -1136,7 +1142,7 @@ mod cycle_optimisation {
                         } else {
                             reference = Some(semantic);
                         }
-                        csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{used},{},{},{received},{canonical},{instrumented},{},{}\n",status.memory_metrics.stable_memory_size.0,status.memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0));
+                        csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{used},{},{},{received},{canonical},{instrumented},{},{},{before},{settled},{fixture_credit}\n",status.memory_metrics.stable_memory_size.0,status.memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0));
                     }
                 }
             }

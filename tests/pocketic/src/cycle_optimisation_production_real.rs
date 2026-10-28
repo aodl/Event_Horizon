@@ -56,7 +56,7 @@ fn production_real_fixed_work() -> Result<()> {
     // keeps both variants in VeryFast even before response reservations refund.
     let initial_cycles = 80_000_000_000_000u128;
     let window_seconds = 10;
-    let mut csv = String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,recipient_cycles,ledger_cycles,historian_cycles,callbacks,typed_payload_bytes,start_cursor,observed_cursor,admission_cursor,stable_bytes,wasm_heap_before,wasm_heap_after,canonical_candidate,idle_cycles_per_day,initial_cycles,window_seconds,polling_mode\n");
+    let mut csv = String::from("variant,sample,generic,scenario,blocks,entries,sender_cycles,recipient_cycles,ledger_cycles,historian_cycles,callbacks,typed_payload_bytes,start_cursor,observed_cursor,admission_cursor,stable_bytes,wasm_heap_before,wasm_heap_after,canonical_candidate,idle_cycles_per_day,initial_cycles,window_seconds,polling_mode,sender_balance_before,sender_balance_after,excluded_fixture_credit\n");
     // Predeclared representative final-production matrix. The1024 row is an
     // optional explicitly selected scale smoke; default runner selects32.
     for generic in [false, true].into_iter().filter(|g| selected_generic(*g)) {
@@ -280,10 +280,17 @@ fn production_real_fixed_work() -> Result<()> {
                         .iter()
                         .map(|id| env.pic.cycle_balance(*id))
                         .collect::<Vec<_>>();
+                    // Restore identical actual launch liquidity after excluded
+                    // seeding, installation and management-status charges.
+                    let fixture_credit = initial_cycles
+                        .checked_sub(env.pic.cycle_balance(env.event_horizon))
+                        .context("fixture unexpectedly gained cycles")?;
+                    env.pic.add_cycles(env.event_horizon, fixture_credit);
                     // VeryFast: one due poll after 10s, no hourly maintenance.
                     env.pic
                         .advance_time(std::time::Duration::from_secs(window_seconds));
                     let before = env.pic.cycle_balance(env.event_horizon);
+                    assert_eq!(before, initial_cycles);
                     for _ in 0..200 {
                         env.pic.tick();
                     }
@@ -425,7 +432,7 @@ fn production_real_fixed_work() -> Result<()> {
                     } else {
                         reference = Some(semantic);
                     }
-                    csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{sender_cycles},{recipient_cycles},{ledger_cycles},{historian_cycles},{callbacks},{payload_bytes},{},{},{},{},{},{},{canonical},{},{initial_cycles},{window_seconds},VeryFast\n",initial.observed_next_block,state.observed_next_block,state.admission_next_block,status.memory_metrics.stable_memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0,status.idle_cycles_burned_per_day.0));
+                    csv.push_str(&format!("{variant},{sample},{generic},{scenario},{blocks},{entries},{sender_cycles},{recipient_cycles},{ledger_cycles},{historian_cycles},{callbacks},{payload_bytes},{},{},{},{},{},{},{canonical},{},{initial_cycles},{window_seconds},VeryFast,{before},{after},{fixture_credit}\n",initial.observed_next_block,state.observed_next_block,state.admission_next_block,status.memory_metrics.stable_memory_size.0,memory_before,status.memory_metrics.wasm_memory_size.0,status.idle_cycles_burned_per_day.0));
                 }
             }
         }

@@ -730,3 +730,26 @@ old production repeat-idle/bootstrap/archive case labels (never selected/accepte
 valid debug coverage remains. Next: focused Clippy/negative selector check, new
 real preflights(global cases first), scheduler boundary diagnostic, then freeze
 final source for canonical two-build/population and3sample production matrices.
+
+## All real preflights pass; final launch balance control
+
+All10corrected real-production preflight pairs and the daily boundary diagnostic
+pass at53ca069078e1b372ec2e9457b34901f91e678f76. Both architectures deliver every
+one of256global records and exact32receiver/overflow outputs; all cursors/state
+match. Preflights are one sample, not headline evidence. Inputs/log digests/CSV
+are observations/cycle-optimisation/preflight-real-v3. Empty-case negative test
+correctly fails without producing evidence. No production code changed.
+
+Final host measurements now restore identical actual launch balances after
+excluded seed/upgrade/management-status costs, and record before/after balances
+and excluded fixture credits. Values remain6T/Standard/600s for the original7
+production cases and80T/VeryFast/10s for the5real cases. This improves fixture
+control; no production reservation/policy changes. Rerun focused globalICP,
+growinggeneric and genericrange checks before final source freeze.
+
+At the exact daily raw boundary both variants have all3lanes idle, equal starts
+145/25/2 and no busy attempts. Thus the rawICP+0.0363%row cannot be attributed to
+unfinished funding/pricing lanes. Add direct measurements before/after the debug
+stop ingress and later drain, then report control overhead separately. Earlier
+settled+control savings are not automatically daily-burn savings. Preserve both
+metrics and all adverserows; no scheduler or latency change is authorised.

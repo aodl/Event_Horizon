@@ -332,6 +332,13 @@ Their fully implemented debug scenarios remain intact. All CSV-producing host
 fixtures reject an empty selection before writing evidence. No regression
 scenario was removed or delivery assertion relaxed.
 
+Final production runs replenish actual launch liquidity after excluded setup,
+upgrade and management-status calls, asserting exactly6T/80T before the window.
+Raw rows record before/after balances and excluded fixture credits so those
+credits cannot count as lower poll consumption. The resulting final cohort is
+separate from earlier preflight/compiler rows. Management-status ingress lies
+outside capture; nonreplicated observation queries are distinct from it.
+
 
 Scenario names are literal: `backlog` repeatedly transfers amount20 to the same
 watchedtarget7 with16watchers on everypage. `growing` admits512targets, retains
