@@ -447,3 +447,19 @@ Readmodels' explicitdebug/ordinarypolling/maintenanceunavailable limitations. Ne
 command perdir afterallbuild/testserialization allows: `./tools/scripts/calibrate-cadence model --input DIR/measurements.json --config DIR/model-config.json --output DIR --seed 20261028`.
 No newproductionedit; canonicalrealcoverage/pins/artifacts/repro/CI/security/report
 remainpending. Root source muststayclean whenhandoff begins.
+
+
+## A/B component complete with explicit adverse row
+
+All51A/Bpairs/102rows passed (17groups) atoriginalz/raw. ICPordinary66,883,589→
+63,162,087(5.5641%),wrongdestination80,166,424→72,417,939(9.6655%). Equal1024×256
+saves2.2420%ICP/2.2088%generic. One repeatable regression:genericincreasing
+7,947,156,425→7,949,549,188(+2,392,763cycles,0.0301084%,zeroobservedrange).
+Allqualifying observations are newmaxima, so borrowedmatching stillclones on
+everyone; zero retained-max clone savings there. Additional reference/codegen
+cost is an inference, notexactlow-levelattribution. Retain this boundedtrade-off
+alongside the observed equal/largeNat wins and unchanged allocatedmemory; no
+productionworkaround/assertionweakening. Finalcombinedincreasing improves7.05%.
+Raw/summary/input/logreceipts tracked as`component-ab*`; additivepercentclaims
+forseparateprototype stages prohibited. Admission-specificA/B stage isactive;
+C/D/E/F/G/Icorrection and finalmetrics stillqueued. Runtime/profile unchanged.

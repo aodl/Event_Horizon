@@ -58,3 +58,15 @@ fixtures complete664polls (fourtrafficingress opportunities), idlefixtures660;
 bothvariants agree. One explicitround/second plusingress, or600secondsteps with
 20rounds/step forday, are latencyassumptions. Debugruntimecosts omit production
 principal parsing; no canonicaldailyburn/mainnetrunway claim. Models remainpending.
+
+
+`component-ab*` isolates the combined immutable-context/borrowing prototype at
+originalz/raw, baseline→cdc555b (17groups/51pairs/102rows). Every functional
+comparison passes. Generic strictlyincreasing amounts regress2,392,763cycles
+(0.0301084%,zero observedrange); allother16rows improve. On that path every
+qualifying observation still needs a newmaximum clone, so the borrow-based path
+cannot save those clones. Additional indirection/code-generation cost is a
+plausible inference, not a proved instruction-by-instruction cause. Retain the
+small explicit worst-case trade-off with equal/shared and arbitraryprecision wins;
+the finalshrunk/profile2 combined increasing row improves7.05%. Do not add gains
+across these separate prototypes or describe allindividualrows as improvements.
