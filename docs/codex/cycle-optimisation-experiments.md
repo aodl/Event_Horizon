@@ -256,3 +256,21 @@ For each source/profile preserve both production `optimisation_metrics` and debu
 `final-shadows/VARIANT/event_horizon_debug.wasm`. The attribution script's cases
 and synchronous scope definitions are tracked, and artifact/input digests in the
 data receipts identify the actual modules measured.
+
+
+Current primary [cycle-cost guidance](https://docs.internetcomputer.org/references/cycle-costs/)
+and [charging rules](https://docs.internetcomputer.org/concepts/cycles/), rechecked
+2026-10-28, distinguish uncharged non-replicated client queries from charged
+replicated execution and messaging. Observation queries do not establish a frontend
+query-cycle saving; frontend comparisons report code/storage/install costs and
+coarse instruction statistics separately. Sender inter-canister work remains in
+measured debits. Memory billing is periodic, which is why a same-clock quiescence
+check after the declared clock advance is required instead of an immediate balance.
+
+The fixed-time scheduler fixtures use configured-debug runtime records and actual
+unchanged scheduler lanes. Their telemetry/control are test-only. They omit the
+production runtime's fixed-principal parsing path and are not canonical production
+cost measurements. Existing-model forecasts use explicitly labelled debug polling
+coefficients; maintenance is unavailable there and no total mainnet runway is
+claimed. Genuine production Standard-timer comparisons separately exercise the
+fixed trust anchors. Final canonical shared/fan-out/page scenarios remain required.
