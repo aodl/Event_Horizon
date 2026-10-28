@@ -72,7 +72,8 @@ Compiler screening is predeclared before its first run: baseline `z`, candidate
 pinned `ic-wasm 0.9.7`, preserves raw/shrunk artifacts and audits production exports.
 Toolchain, locks, LTO, codegen units, panic, overflow and target settings stay fixed.
 The winner needs full behavioural/performance gates, including adverse workloads;
-no profile is selected yet. Local screening is not canonical release evidence.
+profile 2 was selected in `9e304e1` after all 48 screening pairs passed. Local
+screening is not canonical release evidence.
 
 Final reporting must distinguish fixed-work savings from unchanged-scheduler
 fixed-time/funding measurements and recalibrated model projections. Continuous
@@ -108,8 +109,8 @@ configuration is separate from production-only `optimisation_metrics` measuremen
 complete notifications at authenticated record receivers. Debug state's
 `subscriptions` counts only self-map entries; external relations are independently
 proved by actual subject-aware payloads. The real-receiver settlement trace found
-periodic301-second storage accounting applied near round50; this fixture uses120
-fixed drain rounds on both variants, then requires ten quiescent rounds. Initial
+periodic301-second storage accounting applied near round50; this fixture uses 200
+fixed drain rounds on both variants, then requires 20 quiescent rounds. Initial
 failed probes are retained and produced no accepted CSV.
 
 `scheduler` mode evaluates actual unchanged scheduler lanes for660 simulated
@@ -159,7 +160,7 @@ models negligible message latency within eachstep. It requires144completed polls
 separately received blocks for the real-receiver case;1,024globals stay idle. Actual
 window debit and settled window-plus-explicit-debug-control/drain cost remain
 separate; no incoming funding is credited inside either window. All modes use a
-fixed120-round final drain plus tenquiescent rounds. These day measurements are
+fixed 200-round final drain plus 20 quiescent rounds. These day measurements are
 separate from660-second latency-conditioned Standard/Continuous fixtures.
 
 Fixed-work CSVs retain actual sender balances before/after the settled interval.
@@ -192,3 +193,21 @@ recipients under disjoint identities. It requires1024attempts and accepted sends
 records exact aggregate ordinary typed payload bytes, and exercises shared global
 encoding alongside distinct specific encodings. Separate real mixed-record/Index
 and scheduler fixtures verify actual receiver contents and authentication.
+
+
+Final settlement correction: an unchanged generic 16-page/512-relation fixture
+repeatedly applied a 12,258,255-cycle debit near round 50 after advancing the
+clock by 301 seconds. Its old 40+10 check failed; it was never accepted as a
+complete row. A diagnostic 200+20-round run passed with a flat balance after
+round 50. Fixed-work, publication, small, production and scheduler final-drain
+checks now use 200+20. Earlier partial matrix costs remain provisional and are
+superseded by a new input receipt and complete rerun, not mixed into final medians.
+
+Two normal ignored state-differential tests read a copy of each canister's memory
+with the existing pinned `ic-stable-structures` SDK. They compare every logical
+key/value/cell in IDs 0–11 at three checkpoints, never physical B-tree page bytes.
+The SDK dependency is a native test-only edge in Cargo.lock; no package version or
+production graph changed. Financial comparisons supply the same liquid balance
+at the funding decision: 150T is below both actual debug-setter samples, so the
+unchanged surplus observation records the same minimum. Every stored financial
+field remains part of the comparison; final balances are not asserted equal.

@@ -158,7 +158,7 @@ fn publication_fixed_work() -> Result<()> {
                         env.pic.tick();
                     }
                     let settled = env.pic.cycle_balance(env.event_horizon);
-                    for _ in 0..10 {
+                    for _ in 0..20 {
                         env.pic.tick();
                     }
                     assert_eq!(
@@ -217,12 +217,14 @@ fn publication_fixed_work() -> Result<()> {
                     let expected = u64::from(case == "noop_global" && !generic);
                     if expected > 0 {
                         env.pic.advance_time(std::time::Duration::from_secs(301));
-                        for _ in 0..40 {
-                            env.pic.tick();
-                        }
+                    }
+                    // Include delayed storage debits and call refunds, at the
+                    // same clock for both artifacts, before testing quiescence.
+                    for _ in 0..200 {
+                        env.pic.tick();
                     }
                     let settled = env.pic.cycle_balance(env.event_horizon);
-                    for _ in 0..10 {
+                    for _ in 0..20 {
                         env.pic.tick();
                     }
                     assert_eq!(

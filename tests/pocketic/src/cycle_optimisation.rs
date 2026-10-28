@@ -383,12 +383,24 @@ mod cycle_optimisation {
                         // scheduler; storage accounting over this interval is included.
                         if expected > 0 {
                             env.pic.advance_time(std::time::Duration::from_secs(301));
-                            for _ in 0..40 {
+                            // Account for delayed platform refunds/accounting at
+                            // the same clock. Earlier40+10rounds proved too short
+                            // for a deterministic16page generic baseline fixture.
+                            for round in 0..200 {
                                 env.pic.tick();
+                                if std::env::var_os("EH_OPT_SETTLEMENT_TRACE").is_some()
+                                    && round % 10 == 9
+                                {
+                                    eprintln!(
+                                        "settlement {variant} round={} balance={}",
+                                        round + 1,
+                                        env.pic.cycle_balance(env.event_horizon)
+                                    );
+                                }
                             }
                         }
                         let settled = env.pic.cycle_balance(env.event_horizon);
-                        for _ in 0..10 {
+                        for _ in 0..20 {
                             env.pic.tick();
                         }
                         assert_eq!(
@@ -954,11 +966,11 @@ mod cycle_optimisation {
                                 None,
                             )
                             .map_err(|e| anyhow!("production upgrade {e:?}"))?;
-                        for _ in 0..40 {
+                        for _ in 0..200 {
                             env.pic.tick();
                         } // Settle install/upgrade scheduler lanes outside measurement.
                         let settled = env.pic.cycle_balance(env.event_horizon);
-                        for _ in 0..10 {
+                        for _ in 0..20 {
                             env.pic.tick();
                         }
                         assert_eq!(
@@ -1018,11 +1030,11 @@ mod cycle_optimisation {
                         // Standard's next poll is due after 600 s. No hourly funding or daily pricing is due.
                         env.pic.advance_time(std::time::Duration::from_secs(600));
                         let before = env.pic.cycle_balance(env.event_horizon);
-                        for _ in 0..40 {
+                        for _ in 0..200 {
                             env.pic.tick();
                         }
                         let settled = env.pic.cycle_balance(env.event_horizon);
-                        for _ in 0..10 {
+                        for _ in 0..20 {
                             env.pic.tick();
                         }
                         assert_eq!(
@@ -1148,4 +1160,5 @@ mod cycle_optimisation {
     include!("cycle_optimisation_frontend.rs");
     include!("cycle_optimisation_reserve.rs");
     include!("cycle_optimisation_production_upgrade.rs");
+    include!("cycle_optimisation_state.rs");
 }

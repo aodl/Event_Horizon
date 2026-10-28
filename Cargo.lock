@@ -436,6 +436,7 @@ dependencies = [
  "anyhow",
  "candid",
  "crc32fast",
+ "ic-stable-structures",
  "pocket-ic",
  "serde",
  "sha2",

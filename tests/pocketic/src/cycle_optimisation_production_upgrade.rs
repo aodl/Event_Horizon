@@ -150,13 +150,13 @@ fn production_baseline_upgrade_fixed_anchors(generic: bool) -> Result<()> {
                     Append {
                         from: source.clone(),
                         to: account_id(env.cmc, numbered(7)),
-                        amount_e8s: 3_000_000,
+                        amount_e8s: 1_999_999,
                         icrc1_memo: None,
                     },
                     Append {
                         from: source,
                         to: account_id(env.cmc, numbered(7)),
-                        amount_e8s: 3_000_000,
+                        amount_e8s: 2_000_000,
                         icrc1_memo: None,
                     },
                 ],
@@ -174,8 +174,8 @@ fn production_baseline_upgrade_fixed_anchors(generic: bool) -> Result<()> {
                 vec![PokeMatch {
                     subject: env.cmc,
                     target: WatchTarget::Subaccount(7),
-                    first_block_index: first,
-                    max_amount: 3_000_000u64.into()
+                    first_block_index: first + 1,
+                    max_amount: 2_000_000u64.into()
                 }]
             );
             for _ in 0..40 {

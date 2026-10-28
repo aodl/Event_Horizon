@@ -163,12 +163,12 @@ fn small_fixed_work() -> Result<()> {
                     env.pic.advance_time(std::time::Duration::from_secs(301));
                     // This real-receiver fixture's periodic storage debit is
                     // applied after round 40 (diagnostic trace: round 50). Drain
-                    // 120 fixed rounds identically, then require quiescence.
-                    for _ in 0..120 {
+                    // 200 fixed rounds identically, then require quiescence.
+                    for _ in 0..200 {
                         env.pic.tick();
                     }
                     let settled = env.pic.cycle_balance(env.event_horizon);
-                    for _ in 0..10 {
+                    for _ in 0..20 {
                         env.pic.tick();
                     }
                     assert_eq!(

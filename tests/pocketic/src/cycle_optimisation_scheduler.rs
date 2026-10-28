@@ -187,12 +187,12 @@ fn scheduler_fixed_time() -> Result<()> {
                             "debug_set_scheduler_liquid_cycles_override",
                             Some(0u128),
                         )?;
-                        for _ in 0..120 {
+                        for _ in 0..200 {
                             env.pic.tick();
                         }
                         assert!(!env.scheduler_lane_state("poll")?[0]);
                         let after = env.pic.cycle_balance(env.event_horizon);
-                        for _ in 0..10 {
+                        for _ in 0..20 {
                             env.pic.tick();
                         }
                         assert_eq!(
