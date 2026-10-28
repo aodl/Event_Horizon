@@ -605,3 +605,14 @@ Afterallpass exec97871/PID820596runsfullsourcegates automatically; keep treeclea
 Allfourcombinedmodes393pairs+components384=777benchmarkpairs, **not** regressionsuite
 count. Fullregression/security/canonicalrealextension/pins/twobuild/CI/finalreport
 remainpending. Source/runtime/profile stillJ/2; do not claim releasecomplete.
+
+
+## J capacity evidence retained
+
+Older00c0d63 sixpaired samples I→J nowtracked as`component-j-{unique,range}*` plus
+input/logdigests. Uniquegeneric256unwatched99,478,813→99,090,461(388,352saved,
+0.3904%);newrange117,599,231→117,175,138(424,093,0.3606%). No sends/timeadvance;
+immediate=settled, old41nsequiescence cohort labelled explicitly. RangeIbaseline
+matchesstronger currentcohort exactly117,599,231. Sourcekeybytes/bounds unchanged,
+nativecapacitytest proves2prefixbytes reservedwithoutreallocation. No sourceedit
+or refresh. Attribution56active,postfullgateswaiting. Native modelsstillpending.

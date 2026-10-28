@@ -146,3 +146,12 @@ clean/dirty bookkeeping; keep these tinytrade-offs explicit. Native proof counts
 256knownnoops→1keyderivation/0writes, without dropping an earlier improvement.
 J's separate exact-capacity correction and finalcompiler effects are not added
 arithmetically to these percentages.
+
+
+`component-j-{unique,range}*` retains the earlier6pairs I→J atz/raw: exact ICRC
+key-buffercapacity correction. Generic256uniqueunwatchedaccounts saves388,352
+cycles(0.3904%);new256range saves424,093(0.3606%). Threeindependent samples each,
+no memoryallocation-high-water increase. These are explicitly the00c0d63 older
+harness cohort: no sends/timeadvance and immediate=settled in both, so no delayed
+301second accounting claim. The newrangeIcost117,599,231 agrees with the stronger
+cohort. Do not blend differentcohorts or add percentages; finalJ/2matrix is separate.

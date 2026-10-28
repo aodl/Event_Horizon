@@ -1,0 +1,2 @@
+generic,scenario,blocks,entries,baseline_median,baseline_min,baseline_max,candidate_median,candidate_min,candidate_max,saved_cycles,saved_percent
+true,new_range,1,256,117599231,117599231,117599231,117175138,117175138,117175138,424093,0.3606256574926072
