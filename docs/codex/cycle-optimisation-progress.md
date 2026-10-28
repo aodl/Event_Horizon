@@ -382,7 +382,7 @@ Both queued/tracked attribution scripts now bind all six shadow artifacts, host 
 
 All279pairs/558rows passed:45ICP+48generic groups, each3samples. All overall
 candidate rows improve; smallest1.2871% (genericirrelevantmemo), largest36.7097%
-(ICP64pageirrelevantbacklog). Everygroup's observed range iszero. Stableallocation
+(ICP64pagerepeatedwatchedbacklog). Everygroup's observed range iszero. Stableallocation
 100,728,832both; maximumallocatedlinearmemory3,735,552both (notliveheap/peakclaim).
 RawCSV, per-group summary, inputs and279shard/logdigest receipts are nowtracked
 under `docs/codex/cycle-optimisation-data/fixed-work*`. Baseline/candidate artifacts
@@ -487,7 +487,7 @@ waiting. No otherbuild/benchmark; currentruntime/profile/host inputs unchanged.
 All48C pairs/96rows passed(16groups), allpositive atz/raw AB→C. Growing64pages:
 ICP4,915,799,979→4,750,480,735(165,319,244saved,3.3630%);generic7,023,716,835→
 6,842,574,295(181,142,540saved,2.5790%). Onepage growing saves5.3352%/4.3277%
-fromavoidedmerge-back. Irrelevant16recipient backlogs save0.0466–0.2110%; keep
+fromavoidedmerge-back. Repeatedwatched16recipient backlogs save0.0466–0.2110%; keep
 smallerrows visible. Raw/summary/inputs/logreceipts tracked as`component-c*`.
 Ownership/discard-on-error proof and page-level durablecommits remain unchanged;
 no per-pagehintcap. Actual copy counts awaitinstrumented attribution.
@@ -515,3 +515,15 @@ retainedhistorically. No productionalternativeorassertionweakening.
 Queueexec7772 nowE48,thenF36/G66/I24/attribution56. Postexec97871waits; no other
 build/benchmark. Freshmodelfiles areprepared, native modelnotrun. Canonicalreal
 extension, fullgates, actualpins/builds/repro/CI/security/finalreport stillpending.
+
+
+## Workload label corrected without changing fixtures
+
+I mislabeled `backlog` as irrelevant trailingtraffic in some progress prose. Code
+inspection confirms everybacklog block transfersamount20 to watchedtarget7 with
+16watchers. `growing` is the retention-overflow fixture with mostlyunwatched targets
+after512 and afinalretainedtarget0update. Corrected currentREADME/progresslabels;
+rawCSV/receipts/fixture/harness unchanged. LargestoverallICP36.7097%backloggain is
+repeatedwatchedtraffic, notuninterestedlaterpages. Actualuninterestedtraffic is
+`ordinary`; growingprovidesirrelevanttrailing-pagecostcoverage. Preserve distinction
+infinalreport andcrosspagecache analysis. Earlier numericalresults remainvalid.

@@ -274,3 +274,10 @@ cost measurements. Existing-model forecasts use explicitly labelled debug pollin
 coefficients; maintenance is unavailable there and no total mainnet runway is
 claimed. Genuine production Standard-timer comparisons separately exercise the
 fixed trust anchors. Final canonical shared/fan-out/page scenarios remain required.
+
+
+Scenario names are literal: `backlog` repeatedly transfers amount20 to the same
+watchedtarget7 with16watchers on everypage. `growing` admits512targets, retains
+first256, processesmostlyunwatched targetnumbers after512, and updates retained
+zero in the lastblock. `ordinary` has no watchers. These distinguish repeated
+matching, full-accumulator/irrelevant trailingpages and uninterested scan costs.

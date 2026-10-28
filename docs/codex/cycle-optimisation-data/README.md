@@ -84,7 +84,7 @@ visible; no separate-percentages are added together.
 `component-c*` isolates scan-owned accumulation, AB→C atz/raw (16groups/48pairs).
 Everyrow passes and improves: growing-map savings3.3630%ICP/2.5790%generic at
 64pages,5.3352%/4.3277%atonepage. Theonepage gain includes avoiding merge-back;
-longscans also eliminate repeated full-map copies. Irrelevant16-recipient backlog
+longscans also eliminate repeated full-map copies. Repeated watched16-recipient backlog
 savings are0.0466–0.2110%. Failedscan discard/pagecommit proof is separate from
 these successful-cost rows. No independent per-page256-cap was introduced.
 
@@ -100,3 +100,11 @@ slightly improves0.0134%). No allocatedlinear-memory increase occurs; oneICP32
 transfer group uses onefewer64KiBpage. Extra live summary storage remains atmost
 oneownedNat per multi-watcher destination in the bounded page; no liveheap counter.
 Native independent oracle and generation invalidation tests establish correctness.
+
+
+Workload-label correction: `backlog` repeats amount20 to watchedtarget7 with16
+watchers on everypage; it is not uninterested traffic. `growing` first processes
+512competing identities, then mostly unwatched increasing targetnumbers and a
+final update to retainedtarget0. The36.7097%overall ICPbacklog result describes
+repeatedwatched traffic. Rawscenarios/fixtures/numbers are unchanged. Separate
+`ordinary` workloads are completely unwatched. Use these exactlabels inreports.
