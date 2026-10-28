@@ -1,0 +1,23 @@
+[
+  {
+    "profile": "z",
+    "artifact": "event_horizon",
+    "raw_bytes": 1562095,
+    "shrunk_bytes": 1428428,
+    "sha256": "2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528"
+  },
+  {
+    "profile": "z",
+    "artifact": "event_horizon_frontend",
+    "raw_bytes": 3848368,
+    "shrunk_bytes": 3757901,
+    "sha256": "2658a8abc721c4f92f4af2c1ce3116bad08826c1b21aca6e18327515314754c3"
+  },
+  {
+    "profile": "z",
+    "artifact": "event_horizon_debug",
+    "raw_bytes": 1673463,
+    "shrunk_bytes": 1528055,
+    "sha256": "486080fa4530afc72e6a3993de56e3e4b1a859bb5dd26461c144f5c401c7c324"
+  }
+]
