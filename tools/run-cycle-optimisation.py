@@ -16,7 +16,7 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("mode", choices=["debug", "production", "publication"])
+parser.add_argument("mode", choices=["debug", "production", "publication", "small", "scheduler"])
 parser.add_argument("baseline", type=Path)
 parser.add_argument("candidate", type=Path)
 parser.add_argument("output", type=Path)
@@ -25,10 +25,10 @@ parser.add_argument("--generic", choices=["false", "true"], action="append")
 parser.add_argument("--mocks", type=Path, help="immutable compiled mock directory, fixed across compiler comparisons")
 parser.add_argument("--metrics", action="store_true", help="instrumented production shadows only")
 args = parser.parse_args()
-assert not args.metrics or args.mode in ["production","publication"]
+assert not args.metrics or args.mode in ["debug","production","publication"]
 baseline, candidate, output = (p.resolve() for p in (args.baseline,args.candidate,args.output))
 sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-cases = args.case or (["ordinary:256:0", "global:1:1","idle:0:0","idle:0:256","idle:0:1024","new_range:1:256","specific:256:256"] if args.mode == "production" else [
+cases = args.case or (["small_mixed:1:1","small_mixed:16:16"] if args.mode == "small" else ["timed_standard:660:1","timed_standard:660:1024","timed_continuous:660:1","timed_continuous:660:1024"] if args.mode == "scheduler" else (["ordinary:256:0", "global:1:1","idle:0:0","idle:0:256","idle:0:1024","new_range:1:256","specific:256:256"] if args.mode == "production" else [
     "noop_self:256:1","noop_external:256:1","noop_global:256:1","new_global:1:1","threshold_lower:256:1",
     "new_range:1:256","fullwidth_range:1:256","alias_unchanged:0:2","alias_unchanged:0:4096",
     "alias_additions:0:2","alias_additions:0:4096"] if args.mode == "publication" else [
@@ -40,7 +40,7 @@ cases = args.case or (["ordinary:256:0", "global:1:1","idle:0:0","idle:0:256","i
     "unique:256:16", "unique_unwatched:256:0", "unique_watched:256:256",
     "nat257:32:1024", "nat4097:32:1024", "nat32769:32:16",
     "growing:256:512", "growing:512:512", "growing:4096:512", "growing:16384:512", "backlog:256:16",
-    "backlog:512:16", "backlog:4096:16", "backlog:16384:16"])
+    "backlog:512:16", "backlog:4096:16", "backlog:16384:16"]))
 generics = args.generic or ["false", "true"]
 receipt = dict(mode=args.mode, baseline=str(baseline), candidate=str(candidate),
     baseline_sha256=sha(baseline), candidate_sha256=sha(candidate),
@@ -82,9 +82,9 @@ for generic in generics:
                 if args.mocks: env["EH_OPT_MOCK_DIR"]=str(args.mocks.resolve())
                 env.update(EH_OPT_FULL="1",EH_OPT_CASE=case,EH_OPT_GENERIC=generic,EH_OPT_SAMPLE=str(sample),
                     DFX_IDENTITY="codex_local",POCKET_IC_MUTE_SERVER="1")
-                if args.mode in ["debug","publication"]:
+                if args.mode in ["debug","publication","small","scheduler"]:
                     env.update(EH_OPT_BASELINE=str(baseline),EH_OPT_CANDIDATE=str(candidate),EH_OPT_OUTPUT=str(target))
-                    test="paired_fixed_work" if args.mode=="debug" else "publication_fixed_work"
+                    test={"debug":"paired_fixed_work","publication":"publication_fixed_work","small":"small_fixed_work","scheduler":"scheduler_fixed_time"}[args.mode]
                     if args.metrics: env["EH_OPT_METRICS_OUTPUT"]=str(metric)
                 else:
                     env.update(EH_OPT_BASELINE_PROD=str(baseline),EH_OPT_CANDIDATE_PROD=str(candidate),EH_OPT_PRODUCTION_OUTPUT=str(target))

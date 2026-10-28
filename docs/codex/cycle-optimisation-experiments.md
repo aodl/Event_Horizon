@@ -102,3 +102,27 @@ measurements use a same-variant argument-free debug upgrade to clear scheduled
 timers, advance to the next eligible day, and settle setup/storage costs first.
 Publication attribution shadows use `debug_api,optimisation_metrics`; their debug
 configuration is separate from production-only `optimisation_metrics` measurements.
+
+
+`small` runner mode installs1/16 real self/external/neuron relations and verifies
+complete notifications at authenticated record receivers. Debug state's
+`subscriptions` counts only self-map entries; external relations are independently
+proved by actual subject-aware payloads. The real-receiver settlement trace found
+periodic301-second storage accounting applied near round50; this fixture uses120
+fixed drain rounds on both variants, then requires ten quiescent rounds. Initial
+failed probes are retained and produced no accepted CSV.
+
+`scheduler` mode evaluates actual unchanged scheduler lanes for660 simulated
+seconds at6T (Standard) and110T (Continuous), with1 real mixed subscriber or1,024
+idle globals. One explicit PIC tick per simulated second, plus fixture-ingress
+rounds, is a stated latency assumption. Setup/credits occur before the window.
+Window debits and settled window-plus-debug-control/drain debits are separate;
+in-flight work and extra drain lane starts are reported. This is not a daily
+mainnet-burn guarantee. A daily projection must be labelled modelled and account
+for the drain and memory/storage costs. No production scheduler control is added.
+
+Shadow attribution also supports `debug --metrics`; identical generated scopes
+measure synchronous page/matching/dispatch phases and actual invocation counts.
+Global count/write/encoding operation proofs remain native-only counters. Original
+release overflow-check policy is the unchanged Cargo release default (no explicit
+override), not an enabled overflow-check flag.

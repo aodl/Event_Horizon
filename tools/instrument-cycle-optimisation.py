@@ -54,6 +54,7 @@ for file, function, phase in [
     ("polling.rs", "stage", "admission_staging"),
     ("polling.rs", "icrc_page", "icrc_page_sync"),
     ("polling.rs", "dispatch_matches", "dispatch_sync"),
+    ("clients/subscriber.rs", "poke", "poke_call_sync"),
     ("state.rs", "global_subscribers", "global_enumeration"),
     ("state.rs", "interested_icp", "legacy_watcher_lookup"),
     ("state.rs", "interested_icrc", "icrc_watcher_lookup"),

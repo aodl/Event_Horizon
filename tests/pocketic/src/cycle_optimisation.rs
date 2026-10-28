@@ -59,6 +59,10 @@ mod cycle_optimisation {
     #[ignore = "serial installed-Wasm baseline/candidate measurements"]
     #[cfg(feature = "optimisation_benchmarks")]
     fn paired_fixed_work() -> Result<()> {
+        let instrumented = std::env::var_os("EH_OPT_METRICS_OUTPUT").is_some();
+        let mut metrics_csv = String::from(
+            "variant,sample,generic,scenario,phase,calls,instructions,linear_heap_pages\n",
+        );
         #[derive(CandidType)]
         struct Seed {
             subject: Principal,
@@ -338,6 +342,17 @@ mod cycle_optimisation {
                             watchers
                         };
                         let completed_polls = if scenario == "repeat_idle" { 8 } else { 1 };
+                        if instrumented {
+                            update::<_, ()>(
+                                &env.pic,
+                                env.event_horizon,
+                                "debug_reset_optimisation_metrics",
+                                (),
+                            )?;
+                            for _ in 0..10 {
+                                env.pic.tick();
+                            }
+                        }
                         let counts = env.poke_counts()?;
                         let start = env.pic.get_time();
                         let cycles = env.pic.cycle_balance(env.event_horizon);
@@ -465,6 +480,21 @@ mod cycle_optimisation {
                             .len() as u64
                                 * expected
                         };
+                        if instrumented {
+                            let metrics: Vec<Metric> = query(
+                                &env.pic,
+                                env.event_horizon,
+                                "debug_optimisation_metrics",
+                                (),
+                            )?;
+                            assert!(!metrics.is_empty());
+                            for m in metrics {
+                                metrics_csv.push_str(&format!(
+                                    "{variant},{sample},{generic},{scenario},{},{},{},{}\n",
+                                    m.phase, m.calls, m.instructions, m.linear_heap_pages
+                                ));
+                            }
+                        }
                         let semantic = encode_one((&state, calls, observed_notification))?;
                         if let Some(ref old) = reference {
                             assert_eq!(old, &semantic, "state differential {scenario}");
@@ -484,6 +514,9 @@ mod cycle_optimisation {
                     }
                 }
             }
+        }
+        if instrumented {
+            save_complete("EH_OPT_METRICS_OUTPUT", &metrics_csv)?;
         }
         save_complete("EH_OPT_OUTPUT", &csv)?;
         println!("{csv}");
@@ -1082,4 +1115,6 @@ mod cycle_optimisation {
     }
     include!("cycle_optimisation_interleaving.rs");
     include!("cycle_optimisation_publication.rs");
+    include!("cycle_optimisation_small.rs");
+    include!("cycle_optimisation_scheduler.rs");
 }

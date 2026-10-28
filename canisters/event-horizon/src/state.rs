@@ -119,7 +119,7 @@ impl Storable for PrincipalKey {
 impl From<Account> for AccountKey {
     fn from(value: Account) -> Self {
         let owner = value.owner.as_slice();
-        let mut bytes = Vec::with_capacity(1 + owner.len() + 32);
+        let mut bytes = Vec::with_capacity(2 + owner.len() + 32);
         bytes.push(1); // ICRC account protocol tag
         bytes.push(owner.len() as u8);
         bytes.extend_from_slice(owner);
@@ -861,6 +861,23 @@ pub fn interested_icp(account: [u8; 32]) -> Vec<crate::subscription::SubjectSubs
 mod external_key_tests {
     use super::*;
     use crate::subscription::SubjectSubscription;
+    #[test]
+    fn icrc_account_key_keeps_exact_bytes_without_growing_the_buffer() {
+        for length in [0, 1, 10, 29] {
+            let owner = candid::Principal::from_slice(&vec![7; length]);
+            for subaccount in [None, Some([0; 32]), Some([91; 32])] {
+                let key = AccountKey::from(Account { owner, subaccount });
+                let mut expected = vec![1, length as u8];
+                expected.extend_from_slice(owner.as_slice());
+                expected.extend_from_slice(&subaccount.unwrap_or([0; 32]));
+                assert_eq!(key.0, expected);
+                assert_eq!(key.0.capacity(), key.0.len());
+                assert_eq!(AccountKey::from_bytes(key.to_bytes()).0, expected);
+                assert!(key.0.len() <= 63);
+            }
+        }
+    }
+
     #[test]
     fn composite_keys_isolate_protocol_account_and_relation() {
         let subject = candid::Principal::from_slice(&[2, 1]);
