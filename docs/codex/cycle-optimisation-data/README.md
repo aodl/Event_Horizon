@@ -125,3 +125,14 @@ Four specific-only controls regress0.0053–0.0057%, about329cycles/recipient fr
 an additionalglobal-only selection path (exactinstructioncause notisolated).
 Retain thissmallbranchcost for eliminated repeated encodings; messagecost/call
 count/payload/reservepolicy unchanged. Native typed/raw exactbyte proof is separate.
+
+
+`component-g*` is the early publication prototype F→G atz/raw (22groups/66pairs),
+not the final implementation. Allfunctional checks pass. Newrange saves11.5067%
+ICP/1.8727%generic;unchanged4096aliases10.3547%/10.0644%. Eight rows regress:
+repeatedself/external2.00–3.46% from repeating derivation/lookup instead of caching
+a knownno-op, corrected inI; globaldeclarations0.0046–0.0249%. The latter show no
+isolated cyclewin forglobalpublication even though native stable-write counts
+fall; they are an explicit small stable-I/O trade-off, not a claimed saving.
+WholeG measurements do not isolate everylookup from otherpublicationcodegen.
+Final Icorrection and combinedrows must be assessed separately.

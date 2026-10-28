@@ -559,3 +559,26 @@ Queueexec7772 nowG66publicationpairs,thenIcorrection24 andattribution56. Post
 exec97871waitsforallstages. Rootruntime/profile/harness/mocks frozen; sourceclean.
 Fullgates, modelrun, canonicalrealfixtureextension/pins/artifacts/repro/CI/security/
 finalreport stillpending. Currentproduction backendhash remains unmeasuredcanonically.
+
+
+## G early prototype complete / I correction active
+
+All66G pairs/132rows pass(22groups),F→G z/raw. Newrange savesICP13,473,032cycles
+(11.5067%);generic2,242,834(1.8727%). Unchanged4096aliasesICP85,721,410(10.3547%),
+generic83,259,797(10.0644%); completevalidation retained. Eightadverse rows:
+ICPno-opself+36,112,815(1.9990%),external+55,125,640(3.0859%);genericself
++42,177,376(2.3365%),external+61,865,013(3.4644%). Gskippedstaging knownunchanged
+values, so laterduplicates rederivedkeys/lookedupstable state. FinalIkeepsknown
+no-op effectivevalues withdirty=false, preserving priortrueimprovements. Native
+proof256noops→1keyderive/0writes; Ipairedmeasurements nowactive.
+
+Globaldeclarations also regress slightly inG:ICPnew1144(0.00563%),noop83,549
+(0.00464%);genericnew5808(0.02191%),noop445,922(0.02488%). No isolatedglobal
+cyclewin demonstrated; keep the stable-write reduction as an explicit bounded
+raredeclaration trade-off, not an efficiencyclaim. WholeGcodegen/lookup costs are
+not isolated perstatement. Allfinalcombinedglobal rows improve, measuredseparately.
+Raw/summary/input/logreceipts trackedas`component-g*`. Sourceunaltered.
+
+Queueexec7772 nowIcorrection24pairs,then56instrumentedattribution. Postexec97871
+waits. Canonicalrealextension, native model, fullgates and actualpin/build/repro/
+CI/security/finalreport remainpending; no otherbuild/benchmark untilqueue ends.
