@@ -527,3 +527,18 @@ rawCSV/receipts/fixture/harness unchanged. LargestoverallICP36.7097%backloggain 
 repeatedwatchedtraffic, notuninterestedlaterpages. Actualuninterestedtraffic is
 `ordinary`; growingprovidesirrelevanttrailing-pagecostcoverage. Preserve distinction
 infinalreport andcrosspagecache analysis. Earlier numericalresults remainvalid.
+
+
+## E component complete / F active
+
+All48E pairs/96rows pass(16groups), allpositive D→E z/raw. Idle1024ICP19,480,442→
+13,225,778(6,254,664saved,32.1074%);generic24,308,890→19,410,672(4,898,218,
+20.1499%). Emptyregistry marginal0.0066–0.0120%, no artificialuniformgainclaim.
+Bootstrap1024 saves14.7022%ICP/9.2384%generic, archive23.5890%/15.4795%, without
+notifications. Nativeglobalvisit/count and liveadmission eligibilityproofs remain
+independent. Raw/summary/input/logreceipts trackedas`component-e*`.
+
+Queueexec7772 nowF36(global1/256/1024,mixed,specificcontrols),thenG66/I24 and
+attribution56. Postexec97871stillwaits. Runtime/profile/measuredinputs frozen.
+No otherbuild/benchmark. Modelsneedexecution andfinalcanonicalrealcoverage,
+fullgates, actualbackendpin/frontend/two-build/CI/security/report remainpending.

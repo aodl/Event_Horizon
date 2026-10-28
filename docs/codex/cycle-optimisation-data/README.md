@@ -108,3 +108,11 @@ watchers on everypage; it is not uninterested traffic. `growing` first processes
 final update to retainedtarget0. The36.7097%overall ICPbacklog result describes
 repeatedwatched traffic. Rawscenarios/fixtures/numbers are unchanged. Separate
 `ordinary` workloads are completely unwatched. Use these exactlabels inreports.
+
+
+`component-e*` isolates lazyglobal snapshots, D→E atz/raw (16groups/48pairs).
+Allrows pass and improve. Idle1024globals saves6,254,664cycles/32.1074%ICP and
+4,898,218/20.1499%generic; emptyregistry savings are only0.0066–0.0120%. Bootstrap
+andarchive-only savings preservezerowakes. Native traversal counters independently
+prove zeroglobal visits onempty pages and directmapcount. Eligibility/order tests
+covernewadmissions; no cross-pollregistry mirror is added.
