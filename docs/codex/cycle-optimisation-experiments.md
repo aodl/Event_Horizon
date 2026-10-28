@@ -310,6 +310,13 @@ sets each run 63 simulations using fresh three-sample median coefficients, curre
 policy and seed 20261028. No maintenance coefficients are invented. These are
 ordinary-polling projections, not whole-system burn or mainnet runway.
 
+For final frontend bytes after pinning, select only the validated release level
+with `EH_OPT_FRONTEND_LEVEL=2` in `frontend_profile_work`, placing the canonical
+frontend at `EH_OPT_FRONTEND_PROFILES/2/event_horizon_frontend.wasm`. This performs
+20 source-asset/certification-response checks without rebuilding other compiler
+levels. Old pre-pin compiler fixtures remain bound to their original source;
+they must not be compared to newly pinned source assets.
+
 
 Scenario names are literal: `backlog` repeatedly transfers amount20 to the same
 watchedtarget7 with16watchers on everypage. `growing` admits512targets, retains

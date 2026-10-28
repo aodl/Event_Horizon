@@ -7,7 +7,14 @@ fn frontend_profile_work() -> Result<()> {
         std::env::var_os("EH_OPT_FRONTEND_PROFILES").context("profile directory required")?,
     );
     let mut csv = String::from("profile,wasm_bytes,install_and_certification_cycles,idle_cycles_per_day,allocated_heap,queries,response_payload_bytes,reported_query_stats_calls,reported_query_stats_instructions\n");
-    for level in ["z", "s", "2", "3"] {
+    let selected = std::env::var("EH_OPT_FRONTEND_LEVEL").ok();
+    assert!(selected
+        .as_deref()
+        .is_none_or(|level| ["z", "s", "2", "3"].contains(&level)));
+    for level in ["z", "s", "2", "3"]
+        .into_iter()
+        .filter(|level| selected.as_deref().is_none_or(|s| s == *level))
+    {
         let bytes = std::fs::read(directory.join(level).join("event_horizon_frontend.wasm"))?;
         let size = bytes.len();
         let pic = PocketIcBuilder::new()
