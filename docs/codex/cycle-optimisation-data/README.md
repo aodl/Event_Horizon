@@ -87,3 +87,16 @@ Everyrow passes and improves: growing-map savings3.3630%ICP/2.5790%generic at
 longscans also eliminate repeated full-map copies. Irrelevant16-recipient backlog
 savings are0.0466–0.2110%. Failedscan discard/pagecommit proof is separate from
 these successful-cost rows. No independent per-page256-cap was introduced.
+
+
+`component-d.csv`/summary/input/receipts supersede older narrowD-adverse data with
+the stronger settlement cohort:27groups/81pairs/162rows, C→D atz/raw. All
+functional comparisons pass. Equal256×1024 saves21.5430%ICP/21.4936%generic.
+Sevenrows regress0.0100–0.0425%: singleton, increasingICP, uniqueunwatched and
+uniquewatched workloads. There is no skipped evaluation on increasing records;
+extra comparisons/record cloning and larger cache entries trade against repeated
+walk elimination. Exact codegen attribution is unavailable (generic increasing
+slightly improves0.0134%). No allocatedlinear-memory increase occurs; oneICP32
+transfer group uses onefewer64KiBpage. Extra live summary storage remains atmost
+oneownedNat per multi-watcher destination in the bounded page; no liveheap counter.
+Native independent oracle and generation invalidation tests establish correctness.

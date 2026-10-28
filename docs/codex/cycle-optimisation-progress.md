@@ -495,3 +495,23 @@ no per-pagehintcap. Actual copy counts awaitinstrumented attribution.
 Queueexec7772 nowD81pairs(includesnewstrong-settlement inc/uniqueadverse rows),
 thenE48/F36/G66/I24/attribution56. Postexec97871 waits. Immutableinputs unchanged;
 no concurrentbuilds. Canonicalrealfixtures and finalreleasegates remainpending.
+
+
+## D component complete / E active
+
+All81D pairs/162rows passed(27groups) C→D z/raw. Equal256×1024 savesICP1,650,062,233
+cycles(21.5430%);generic1,652,512,722(21.4936%). Sevenrepeatable regressions:
+ICPsingleton16,663(0.02034%),increasing3,358,969(0.04247%),uniqueunwatched24,819
+(0.03802%),uniquewatched175,652(0.01128%);genericsingleton11,868(0.01084%),
+uniqueunwatched9,927(0.00996%),uniquewatched253,051(0.01598%). Genericincreasing
+improves1,062,955(0.01339%). Notall addedsourceops translate directly tocycles;
+no exactcodegenattribution claimed. Largerboundedcacheheaders/record comparisons
+and newhighclones add overhead whenno walkcanbeskipped. Retain boundedtrade-off
+against~21.5%equal/shared benefit; no allocatedmemoryincrease, oneICP32transfer
+rowreduces64KiB. Liveheap overheadunmeasured, boundedownedNat summary explained.
+Allrawrows/summary/input/logreceipts trackedas`component-d*`, separateoldadverseCSV
+retainedhistorically. No productionalternativeorassertionweakening.
+
+Queueexec7772 nowE48,thenF36/G66/I24/attribution56. Postexec97871waits; no other
+build/benchmark. Freshmodelfiles areprepared, native modelnotrun. Canonicalreal
+extension, fullgates, actualpins/builds/repro/CI/security/finalreport stillpending.
