@@ -753,3 +753,19 @@ unfinished funding/pricing lanes. Add direct measurements before/after the debug
 stop ingress and later drain, then report control overhead separately. Earlier
 settled+control savings are not automatically daily-burn savings. Preserve both
 metrics and all adverserows; no scheduler or latency change is authorised.
+
+## Controlled final host checks pass / isolate daily boundary charge
+
+b0dd5d61061972bbaccc99b08cd161621a0ba447 passes strict feature Clippy and three
+focused full-state/receipt pairs with identical actual launch balances: global256
+ICP80T, growinggeneric80T and256target genericrange6T. Raw before-minus-after
+exactly equals sendercycles; excluded top-up credits are recorded outside capture.
+Files/results/logdigests: observations/cycle-optimisation/final-host-preflight.
+
+Daily diagnostic confirms all3lanes idle at boundary, no later drain cost, and
+first control-ingress debits55,440,266baseline/6,635,620candidate. The entire tail
+is charged inside that ingress, not unfinished lane work. It may include periodic
+allocation billing or cold entry costs; don't assert a pure opcode cause. Repeat
+the same pure setter at the same clock after all measured fields are captured to
+separate warm control cost. Raw+0.0363%ICPday row remains visible; report both
+window debit and settled+control, without equating either to a mainnet guarantee.

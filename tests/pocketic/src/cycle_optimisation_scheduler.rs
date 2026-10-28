@@ -250,6 +250,22 @@ fn scheduler_fixed_time() -> Result<()> {
                             .context("window sender credit")?;
                         let settled = before.checked_sub(after).context("settled sender credit")?;
                         csv.push_str(&format!("{variant},{sample},{generic},{name},{horizon},{globals},{step_seconds},{balance},{debit},{settled},{completed},{inflight},{},{observed},{callbacks},{maximum_lag},{},{},{},{},{},{},{},{},{funding_runs},{pricing_runs},{},{}\n",total_completed-completed,injected-observed,tiers[0],tiers[1],tiers[2],tiers[3],tiers[4],tiers[5],status.idle_cycles_burned_per_day.0,alias_before.last_success.map_or_else(String::new,|x|x.to_string()),alias_after.last_success.map_or_else(String::new,|x|x.to_string())));
+                        if std::env::var_os("EH_OPT_DIAG_LANES").is_some() {
+                            // All measured fields are already captured. Repeat
+                            // the identical pure control at the same clock to
+                            // distinguish its warm cost from boundary charges.
+                            let before_repeat = env.pic.cycle_balance(env.event_horizon);
+                            update::<_, ()>(
+                                &env.pic,
+                                env.event_horizon,
+                                "debug_set_scheduler_liquid_cycles_override",
+                                Some(0u128),
+                            )?;
+                            eprintln!(
+                                "stop-control variant={variant} repeated_debit={}",
+                                before_repeat - env.pic.cycle_balance(env.event_horizon)
+                            );
+                        }
                     }
                 }
             }
