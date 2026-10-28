@@ -407,3 +407,20 @@ Queueexec7772 advanced tosmall12pairs; scheduler36/component384/attribution56
 remain, thenwaitingexec97871 runs normalfullgates. Do not modifymeasured host
 inputs or run anotherbuild/benchmark. RuntimeJ/profile2 unchanged. Canonicalreal
 receiver extension and finalpins/builds/CI/security/report are stillpending.
+
+
+## Final-v2 small real receivers complete
+
+All12pairs/24rows passed (4groups,3samples) with exactauthenticated callbacks.
+ICP1relation31,608,494→31,031,689cycles(1.8248%);16relations44,091,087→41,470,909
+(5.9426%). Generic1relation37,844,542→37,134,222(1.8769%);16relations51,397,930→
+48,622,301(5.4003%). Zeroobservedranges. CompleteCSV/summary/input/logreceipts
+tracked as `small-receivers*`. These configured-debug fixtures remain distinct
+from future canonicalproduction realscenarios.
+
+Queueexec7772 nowruns scheduler36pairs (660secondStandard/Continuous and24hour
+Standard, botharchitectures,1real mixedsubscriber/1024idleglobals); then
+component384+attribution56pairs. Postexec97871 waits. Preserveimmutableinputs;
+no otherbuild/benchmark. Fixed-time results mustlabeldebugconfiguration and
+separate rawwindow vs settledpluscontroltail, with latencyassumptions explicit.
+Productionruntime unchanged; finalreleasegates and canonical pairing stillpending.

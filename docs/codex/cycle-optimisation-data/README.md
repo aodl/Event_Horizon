@@ -39,3 +39,10 @@ are2.3849–39.4538%ICP and2.3794–36.1586%generic. Alias additions mean one ne
 published binding in the stated2/4,096-binding complete table, with fullvalidation.
 No-op Hist verification is preserved. These combined source+compiler results are
 separate from the pending per-change attribution and canonical production rows.
+
+
+`small-receivers*` retains all4groups/12pairs/24rows at1/16relations, with
+separately installed authenticated full-record self/external/neuron receivers.
+All exactpayload/caller/count comparisons pass. Reductions1.8248/5.9426%ICP and
+1.8769/5.4003%generic; allthree samples agree. Configuration isdebug, notcanonical
+production. Sender/recipient costs remain separate in the larger matrix.
