@@ -297,7 +297,7 @@ claims cross-canister execution ordering.
 
 The measured refactor uses a separately preserved reviewed baseline and serial
 paired PocketIC instances. See the [experiment definitions and reproduction commands](../codex/cycle-optimisation-experiments.md)
-and [validation status and evidence](../codex/cycle-optimisation-validation.md).
+[validation evidence](../codex/cycle-optimisation-validation.md),
 and [resumable progress](../codex/cycle-optimisation-progress.md) for current status.
 Benchmarks require the host-only `optimisation_benchmarks` feature; ordinary
 regression discovery retains the baseline-upgrade and cache-invalidation tests.
