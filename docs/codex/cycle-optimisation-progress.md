@@ -664,3 +664,14 @@ in this separate worktree; it remains unexecuted pending the serial measurement
 window after root full gates. Root source d003486 remains clean and test_all is
 active (no failed assertions so far). Two-build final pairing, final canonical
 production matrices/upgrade, final security/CI/report remain outstanding.
+
+## Remote publication limitation established
+
+Frontend pin unit138/static/manifest gates passed; source pairing preparation is
+8f55240e565229655a75c0fe1fee5350f53a72c2. Noninteractive Git push to a new
+codex/cycle-optimisation-81c5a0d branch failed because HTTPS credentials are absent
+(root logs/review-branch-push.log). Connected GitHub create-branch at baseline81
+also returned403 Resource not accessible by integration. No remote branch/PR or
+candidate CI was created. This is an integration permission limitation, not a
+passing or failed final-source CI result. Continue all local gates; preserve
+publication command and final local source for an authorised subsequent push.
