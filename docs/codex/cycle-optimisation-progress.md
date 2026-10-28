@@ -370,3 +370,8 @@ Before claiming final principal-win production evidence, read `observations/cycl
 ## Future component coverage strengthened before first run
 
 While generic archive-only fixed-work rows run, add `ab-admissions` publication cases (new/full-width256range, no-opself/external, thresholdlower; botharchitectures3pairs) and include increasing/unique-unwatched in D's new200+20settlement cohort. These fill user-required attribution gaps, rather than relying on unrelated cumulative admission rows or the older adverse receipt. Both tracked and queued component scripts changed identically before their first measurement. Mainrunner/harness/mocks/artifacts are unchanged; active final-v2 fixed-work inputs remain frozen. Component script now has8steps; no existing acceptedcomponentrows overwritten. Native sampler SDK dev-edge remains the only lockfile difference, no dependency version changed.
+
+
+## Attribution receipts/resumption hardened before first sample
+
+Both queued/tracked attribution scripts now bind all six shadow artifacts, host fixture/harness, lock, frozenmocks, rustc and PocketIC digests. Resume verifies CSV/metric/log hashes for accepted cases and rejects changed inputs or unaccepted output; retry preserves an earlier failure transcript. One optional output-directory argument supports a separate investigated cohort. No sample count, case, command, source runtime or scope instrumentation changed; script has not started measuring yet. Main fixed-work harness remains frozen. Post-gate handoff still requires a clean committed tree.
