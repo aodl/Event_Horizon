@@ -1161,4 +1161,5 @@ mod cycle_optimisation {
     include!("cycle_optimisation_reserve.rs");
     include!("cycle_optimisation_production_upgrade.rs");
     include!("cycle_optimisation_state.rs");
+    include!("cycle_optimisation_production_real.rs");
 }

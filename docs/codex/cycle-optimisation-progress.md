@@ -616,3 +616,34 @@ immediate=settled, old41nsequiescence cohort labelled explicitly. RangeIbaseline
 matchesstronger currentcohort exactly117,599,231. Sourcekeybytes/bounds unchanged,
 nativecapacitytest proves2prefixbytes reservedwithoutreallocation. No sourceedit
 or refresh. Attribution56active,postfullgateswaiting. Native modelsstillpending.
+
+## Complete measurements; frozen-source gates and evidence worktree
+
+All 393 combined, 384 component, six older-cohort capacity and 56 attribution
+pairs passed. Instrumented diagnostics are one sample per case, not headlines.
+Raw diagnostic spans and overhead comparisons are now tracked. Four corrected
+cadence-model sets each produced 63 projections from fresh coefficients; the
+first adapter was rejected for unsupported workload IDs, then corrected to the
+existing required expected/expected_generic IDs. No model implementation or
+production policy changed. Models exclude unavailable maintenance and storage
+costs; actual whole-day scheduler results remain separate.
+
+Frozen root source d003486781551b35ce8985b44622297bd8fa343e is running full gates
+under exec97871/PID820596, with state/logs at
+observations/cycle-optimisation/prepin-gates-state.json and logs/prepin-*.log.
+Fmt, strict Clippy and test_unit passed:146Rust+138frontend. test_all is active,
+then fresh security. Do not modify that root source or overlap measurements/builds.
+
+This independent detached evidence worktree prepares only host fixtures, data and
+documentation while the root gates run. New production-real matrix is declared in
+the experiment guide but has not been compiled or executed yet. After root gates
+finish, fast-forward root to this evidence revision, run feature Clippy/preflight,
+and investigate daily ICP raw boundary debit using EH_OPT_DIAG_LANES (funding and
+pricing may be outstanding). Preserve raw/settled distinctions and all earlier
+measurement receipts. Root runtime remains J/profile2, unchanged.
+
+Next: final source gates outcome; focused real production preflights; supported
+model-wrapper reruns; actual canonical backend build and frontend pin; committed
+source pairing/two uncached Docker builds/population; final canonical production
+matrix and81production upgrade; final report/source manifest; branch/PR and final
+security CI. Security metadata blocker has no exception or suppression. No deploy.

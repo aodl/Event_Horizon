@@ -148,6 +148,17 @@ fn scheduler_fixed_time() -> Result<()> {
                             tiers[index] += step_seconds;
                         }
                         let window_balance = env.pic.cycle_balance(env.event_horizon);
+                        if std::env::var_os("EH_OPT_DIAG_LANES").is_some() {
+                            // Nonreplicated observations after the captured debit;
+                            // no ingress, extra tick or changed scheduler policy.
+                            for lane in ["poll", "funding", "pricing"] {
+                                eprintln!(
+                                    "window-end variant={variant} lane={lane} state={:?} counts={:?}",
+                                    env.scheduler_lane_state(lane)?,
+                                    env.scheduler_lane_counts(lane)?
+                                );
+                            }
+                        }
                         let starts_at_end = env.scheduler_lane_counts("poll")?[0];
                         let inflight = u64::from(env.scheduler_lane_state("poll")?[0]);
                         let completed = starts_at_end - starts - inflight;

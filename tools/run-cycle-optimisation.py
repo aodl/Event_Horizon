@@ -16,7 +16,7 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("mode", choices=["debug", "production", "publication", "small", "scheduler"])
+parser.add_argument("mode", choices=["debug", "production", "production-real", "publication", "small", "scheduler"])
 parser.add_argument("baseline", type=Path)
 parser.add_argument("candidate", type=Path)
 parser.add_argument("output", type=Path)
@@ -41,6 +41,10 @@ cases = args.case or (["small_mixed:1:1","small_mixed:16:16"] if args.mode == "s
     "nat257:32:1024", "nat4097:32:1024", "nat32769:32:16",
     "growing:256:512", "growing:512:512", "growing:4096:512", "growing:16384:512", "backlog:256:16",
     "backlog:512:16", "backlog:4096:16", "backlog:16384:16"]))
+if not args.case and args.mode == "production-real":
+    cases = ["real_equal:256:32", "real_increasing:256:32",
+        "real_unmatched_increasing:256:32", "real_global:1:256",
+        "real_growing:4096:512"]
 generics = args.generic or ["false", "true"]
 receipt = dict(mode=args.mode, baseline=str(baseline), candidate=str(candidate),
     baseline_sha256=sha(baseline), candidate_sha256=sha(candidate),
@@ -88,7 +92,7 @@ for generic in generics:
                     if args.metrics: env["EH_OPT_METRICS_OUTPUT"]=str(metric)
                 else:
                     env.update(EH_OPT_BASELINE_PROD=str(baseline),EH_OPT_CANDIDATE_PROD=str(candidate),EH_OPT_PRODUCTION_OUTPUT=str(target))
-                    test="production_fixed_work"
+                    test="production_real_fixed_work" if args.mode == "production-real" else "production_fixed_work"
                     if args.metrics: env["EH_OPT_METRICS_OUTPUT"]=str(metric)
                 command=["cargo","test","--locked","-p","event-horizon-pocketic","--features","optimisation_benchmarks",
                     "--lib",f"tests::cycle_optimisation::{test}","--","--exact","--ignored","--nocapture","--test-threads=1"]

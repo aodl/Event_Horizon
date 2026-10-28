@@ -275,6 +275,41 @@ coefficients; maintenance is unavailable there and no total mainnet runway is
 claimed. Genuine production Standard-timer comparisons separately exercise the
 fixed trust anchors. Final canonical shared/fan-out/page scenarios remain required.
 
+### Final real-receiver production matrix
+
+The feature-only `production_real_fixed_work` fixture seeds relations through real
+ICP/Historian admissions before upgrading to each genuine production module. It
+uses fixed trust anchors, ordinary execution limits and 200+20-round settlement.
+The predeclared matrix, for both architectures and three independent pairs, is:
+32 real receivers with 256 equal/increasing transfers; 32 admitted but unmatched
+receivers with increasing transfers; 256 real global receivers; and 512 relations
+with 4,096 blocks, retention overflow and a final update of retained target zero.
+Every intended receiver must authenticate and decode exactly one complete record.
+The unmatched case verifies its effective thresholds independently in stable ID11.
+Setup, inspection upgrades and receiver/dependency costs are outside sender debit.
+An explicitly selected 1,024-real-receiver smoke is separate from headline samples.
+
+Run `tools/run-cycle-optimisation.py production-real BASELINE CANDIDATE OUTPUT
+--mocks FROZEN_MOCKS` with the same environment as the production command above.
+Final evidence requires `EH_OPT_CANONICAL_SOURCE=$(git rev-parse HEAD)`, a clean
+source tree and candidate path `release-artifacts/event_horizon.wasm`; an arbitrary
+local file is not sufficient. This host extension changes no production code.
+
+### Scheduler boundary and model qualifications
+
+The ICP one-real-subscriber day has a raw boundary debit increase of 2,617,501
+cycles (0.0363%), despite a settled window plus control/drain reduction of
+46,187,145 (0.6356%). Both are retained. Optional `EH_OPT_DIAG_LANES=1` prints
+nonreplicated lane observations after capture, without an extra tick or ingress,
+to investigate outstanding funding/pricing reservations at that boundary.
+
+The existing cadence model requires workload IDs `expected`/`expected_generic`;
+the adapter uses those IDs for explicitly idle ICP/generic workloads. An earlier
+adapter failed this validation and produced no accepted simulation. Four corrected
+sets each run 63 simulations using fresh three-sample median coefficients, current
+policy and seed 20261028. No maintenance coefficients are invented. These are
+ordinary-polling projections, not whole-system burn or mainnet runway.
+
 
 Scenario names are literal: `backlog` repeatedly transfers amount20 to the same
 watchedtarget7 with16watchers on everypage. `growing` admits512targets, retains

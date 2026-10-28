@@ -59,8 +59,9 @@ config=json.loads(Path('tests/cadence-calibration/fixtures/model-config.json').r
 workloads=[]
 for generic in [False,True]:
     arch='generic_icrc3_separate_admission_scan' if generic else 'canonical_icp_shared_scan'
-    workloads.append(dict(id=f"idle_{arch}_{a.globals}globals",architecture=arch,blocks_per_second_milli=0,specific_matching_blocks_basis_points=0,specific_subscribers_per_matching_block_milli=0,global_subscribers=a.globals,specific_subscribers=0,global_specific_overlap_subscribers=0,initial_backlog_blocks=0,assumed_blocks_per_poll_capacity=16384,
+    workloads.append(dict(id=("expected_generic" if generic else "expected"),architecture=arch,blocks_per_second_milli=0,specific_matching_blocks_basis_points=0,specific_subscribers_per_matching_block_milli=0,global_subscribers=a.globals,specific_subscribers=0,global_specific_overlap_subscribers=0,initial_backlog_blocks=0,assumed_blocks_per_poll_capacity=16384,
         productive_endowment_backing=dict(protocol_endowment_icp_e8s=0,account_endowments=0,range_endowments=0,global_endowments=0,admission_price_basis_points_of_reference=10000,coupled_to_subscriber_workload=False)))
+# The existing model requires these IDs; both workloads are explicitly idle.
 config['workloads']=workloads
 (a.output/'model-config.json').write_text(json.dumps(config,indent=2)+'\n')
 print(a.output/'measurements.json')
