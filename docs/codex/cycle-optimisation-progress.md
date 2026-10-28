@@ -6,7 +6,7 @@ Evidence root: `observations/cycle-optimisation/` (ignored raw artifacts/logs).
 
 ## Status — current checkpoint
 
-- Runtime J/profile 2 is fixed (`9e304e1`); current committed evidence source is `8c65325`. No production source changed after profile selection.
+- Runtime J/profile 2 is fixed (`9e304e1`); harness checkpoint is `8c65325` (reproduction scripts retained in `fef1972`). No production source changed after profile selection.
 - Independent `81c5a0d` canonical/debug artifacts remain immutable. A–G implemented; 93 backend units/oracle, strict Clippy, focused failure/invalidation/alias/price checks and reviewed debug plus genuine production baseline upgrades passed. Full release gates remain pending.
 - All 48 single-sample compiler pairs passed; profile 2 selected. Actual-cost reserve boundaries passed for global cold/warm, 1×257, 256×4097 and 64×32769 bits. Rejected larger wrapper evidence is preserved; no production limit changed.
 - **New measurement queue active: exec7772**, host PID/phase/command in `observations/cycle-optimisation/active-process-v2.json`. Script `run-final-v2.py` serially runs publication/small/scheduler preflights, all final-v2 matrices, then prepared per-component and attribution scripts. No concurrent builds or benchmarks. The old main matrix is stopped; its 261 accepted pair shards under the older settlement check are provisional, not a complete final matrix. Generic growing16 failed a repeatable delayed debit near round 50. An unchanged diagnostic passed 200 drain + 20 quiescent rounds. New final matrices must use a fresh `final-v2/` receipt; do not resume the old `final/` inputs or mix costs.
@@ -346,3 +346,10 @@ Host-only stable reader uses pinned SDK structures on a memory copy and compares
 ## Strong-settlement matrix started
 
 Checkpoint `8c65325` passed all six largest growing64 pairs (ICP/generic, three independent samples), including exact256hint contents and post-overflow retained updates. Fresh queueexec7772 uses immutable baseline shrunkz/candidate shrunk2 and frozen mocks; `active-process-v2.json` and `logs/final-v2-queue.log` identify the live phase and command. No skipped or failed shard enters completeCSV. Queue stops at the first failure; preserve logs and investigate before changing anything. Current tracked helper/profile/runtime source must remain fixed; documentation-only progress commits do not change the receipt's harness identity.
+
+
+## Serial release-gate handoff queued
+
+Main measurementexec7772/PID759516 remains active (final-v2 debug at checkpoint: more than100pairs passed, through ICPzeroamount/shared traces; no new failure). Reproduction scripts are now tracked at `tools/run-cycle-optimisation-{components,attribution}.py` (`fef1972`); the queued ignored scripts are identical copies. Do not change measured inputs.
+
+Waiting exec **97871** runs `observations/cycle-optimisation/run-prepin-gates.py`. It performs no build/test until main queue's attribution COMPLETE and passed pointer are present. A failed/interrupted measurement aborts the handoff. It then requires clean source and serially runs exact fmt, strict Clippy, xtasktest_unit, xtasktest_all, security commands; no benchmark overlaps a build. Native fixtures are rebuilt from current source (performance artifact overrides explicitly removed). All normal integration scenarios including Index/maxpayload and the new independent stable comparisons remain discoverable. Any failed gate stops; no security failure is waived. State/logs: `prepin-gates-state.json`, `logs/prepin-gates-queue.log`, `logs/prepin-{fmt,clippy,unit,all,security}.log`. Keep tracked source clean while these gates run; write draft analysis only under ignoredobservations. Final frontend-pin changes later need their affected Node/certified-asset/static/manifest/export reruns and canonical checks.
