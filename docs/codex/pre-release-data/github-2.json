@@ -1,0 +1,26 @@
+{
+  "status": "fulfilled",
+  "value": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Action completed."
+      }
+    ],
+    "structuredContent": {
+      "workflow_runs": [
+        {
+          "id": 40765960497,
+          "name": "Dependency Security",
+          "status": "completed",
+          "conclusion": "failure",
+          "run_number": 28,
+          "jobs_url": "https://api.github.com/repos/aodl/Event_Horizon/actions/runs/40765960497/jobs",
+          "logs_url": "https://api.github.com/repos/aodl/Event_Horizon/actions/runs/40765960497/logs",
+          "workflow_id": 370614107
+        }
+      ]
+    },
+    "isError": false
+  }
+}

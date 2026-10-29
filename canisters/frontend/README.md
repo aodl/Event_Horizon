@@ -247,9 +247,10 @@ retires the statistic. Failure or absence of the optional component leaves the
 builder operational, still requiring successful configuration verification.
 
 Certification covers the static bundle and markup, **not** a separately queried
-runtime ledger total. No proof-backed tip-certificate feature is claimed. This
-release changes only frontend assets and tests; backend settings, state, Candid,
-principals and reviewed backend hash stay unchanged.
+runtime ledger total. No proof-backed tip-certificate feature is claimed. The
+original ledger-counter validation covered frontend assets and tests without
+changing the backend. The current coordinated release follows the deployment
+procedure linked below.
 
 For deterministic tests, real-browser checks, opt-in read-only live smoke and
 limitations, see [testing](../../docs/development/testing.md) and the
@@ -325,3 +326,5 @@ The builder shows resolved principals and validates alias declarations through
 the selected backend's local `preview_subscription` query. See the
 [subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
 local subject filtering, and authoritative reconciliation.
+
+The current coordinated first-release sequence is owned by [Deployment](../../docs/operations/deployment.md). Upgrade this existing frontend only after the reviewed backend and Jupiter prerequisites are verified; retain controller access throughout the separate observation period.

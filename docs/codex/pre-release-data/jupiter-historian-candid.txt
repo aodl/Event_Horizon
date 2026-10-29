@@ -1,0 +1,380 @@
+type Account = record { owner : principal; subaccount : opt vec nat8 };
+type EventHorizonPokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type EventHorizonPokeMatch = record { target : EventHorizonPokeTarget; max_amount : nat };
+type CanisterTrackingReason = variant { MemoCommitment; SnsDiscovery; RelayTarget; RelayInstance };
+type CommitmentSample = record {
+  tx_id : nat64;
+  timestamp_nanos : opt nat64;
+  amount_e8s : nat64;
+  counts_toward_faucet : bool;
+  raw_icp_destination_subaccount : opt blob;
+};
+type RecentCommitmentOutcomeCategory = variant {
+  QualifyingCommitment;
+  UnderThresholdCommitment;
+  InvalidTargetMemo;
+};
+type RecentCommitmentListItem = record {
+  canister_id : opt principal;
+  neuron_id : opt nat64;
+  raw_icp_memo_text : opt text;
+  raw_icp_destination_subaccount : opt blob;
+  neuron_memo_text : opt text;
+  memo_text : opt text;
+  tx_id : nat64;
+  timestamp_nanos : opt nat64;
+  amount_e8s : nat64;
+  counts_toward_faucet : bool;
+  outcome_category : RecentCommitmentOutcomeCategory;
+};
+type CyclesSampleSource = variant {
+  SelfCanister;
+  DirectCanisterStatus;
+  BlackholeStatus;
+  NnsRootStatus;
+  SnsRootStatus;
+  SnsSwapStatus;
+  SnsRootSummary;
+};
+type CyclesSample = record {
+  timestamp_nanos : nat64;
+  cycles : nat;
+  source : CyclesSampleSource;
+};
+type CyclesProbeResult = variant {
+  Ok : CyclesSampleSource;
+  NotAvailable;
+  Error : text;
+};
+type CanisterMeta = record {
+  first_seen_ts : opt nat64;
+  last_commitment_ts : opt nat64;
+  last_cycles_probe_ts : opt nat64;
+  last_cycles_probe_result : opt CyclesProbeResult;
+};
+type CommitmentIndexFault = record {
+  observed_at_ts : nat64;
+  last_cursor_tx_id : opt nat64;
+  offending_tx_id : nat64;
+  message : text;
+};
+type InitArgs = record {
+  staking_account : Account;
+  output_source_account : opt Account;
+  output_account : opt Account;
+  rewards_account : opt Account;
+  ledger_canister_id : opt principal;
+  index_canister_id : opt principal;
+  cmc_canister_id : opt principal;
+  faucet_canister_id : opt principal;
+  sns_wasm_canister_id : opt principal;
+  xrc_canister_id : opt principal;
+  enable_sns_tracking : opt bool;
+  scan_interval_seconds : opt nat64;
+  cycles_interval_seconds : opt nat64;
+  min_tx_e8s : opt nat64;
+  max_cycles_entries_per_canister : opt nat32;
+  max_commitment_entries_per_canister : opt nat32;
+  max_index_pages_per_tick : opt nat32;
+  max_canisters_per_cycles_tick : opt nat32;
+  relay_factory_enabled : opt bool;
+  relay_setup_min_e8s : opt nat64;
+  relay_initial_cycles : opt nat;
+  relay_cycle_safety_margin_e8s : opt nat64;
+  relay_min_subaccount_one_seed_e8s : opt nat64;
+  self_service_relay_interval_seconds : opt nat64;
+  canonical_relay_canister_id : opt principal;
+  canonical_relay_targets : opt vec principal;
+};
+type UpgradeArgs = record {
+  staking_account : opt Account;
+  ledger_canister_id : opt principal;
+  index_canister_id : opt principal;
+  enable_sns_tracking : opt bool;
+  output_source_account : opt Account;
+  output_account : opt Account;
+  rewards_account : opt Account;
+  clear_commitment_index_fault : opt bool;
+  scan_interval_seconds : opt nat64;
+  cycles_interval_seconds : opt nat64;
+  min_tx_e8s : opt nat64;
+  max_cycles_entries_per_canister : opt nat32;
+  max_commitment_entries_per_canister : opt nat32;
+  max_index_pages_per_tick : opt nat32;
+  max_canisters_per_cycles_tick : opt nat32;
+  sns_wasm_canister_id : opt principal;
+  xrc_canister_id : opt principal;
+  cmc_canister_id : opt principal;
+  faucet_canister_id : opt principal;
+  relay_factory_enabled : opt bool;
+  relay_setup_min_e8s : opt nat64;
+  relay_initial_cycles : opt nat;
+  relay_cycle_safety_margin_e8s : opt nat64;
+  relay_min_subaccount_one_seed_e8s : opt nat64;
+  self_service_relay_interval_seconds : opt nat64;
+  canonical_relay_canister_id : opt opt principal;
+  canonical_relay_targets : opt vec principal;
+};
+type ListCanistersArgs = record {
+  start_after : opt principal;
+  limit : opt nat32;
+  tracking_reason_filter : opt CanisterTrackingReason;
+};
+type CanisterListItem = record { canister_id : principal; tracking_reasons : vec CanisterTrackingReason };
+type ListCanistersResponse = record {
+  items : vec CanisterListItem;
+  next_start_after : opt principal;
+};
+type GetCyclesHistoryArgs = record {
+  canister_id : principal;
+  start_after_ts : opt nat64;
+  limit : opt nat32;
+  descending : opt bool;
+};
+type CyclesHistoryPage = record {
+  items : vec CyclesSample;
+  next_start_after_ts : opt nat64;
+};
+type GetCommitmentHistoryArgs = record {
+  canister_id : principal;
+  start_after_tx_id : opt nat64;
+  limit : opt nat32;
+  descending : opt bool;
+};
+type GetRawIcpCommitmentHistoryArgs = record {
+  canister_id : principal;
+  destination_subaccount : opt blob;
+  start_after_tx_id : opt nat64;
+  limit : opt nat32;
+  descending : opt bool;
+};
+type GetNeuronCommitmentHistoryArgs = record {
+  neuron_id : nat64;
+  start_after_tx_id : opt nat64;
+  limit : opt nat32;
+  descending : opt bool;
+};
+type CommitmentHistoryPage = record {
+  items : vec CommitmentSample;
+  next_start_after_tx_id : opt nat64;
+};
+type CommitmentRoute = variant {
+  CyclesTopUp : record { canister_id : principal };
+  RawIcp : record {
+    destination_canister_id : principal;
+    destination_subaccount : opt blob;
+    memo : blob;
+  };
+  NeuronStake : record { neuron_id : nat64; memo : opt blob };
+};
+type CommitmentRouteSummary = record {
+  route : CommitmentRoute;
+  qualifying_commitment_count : nat64;
+  total_qualifying_committed_e8s : nat64;
+};
+type GetCommitmentRouteSummariesArgs = record { routes : vec CommitmentRoute };
+type GetCommitmentRouteSummariesResponse = record {
+  items : vec CommitmentRouteSummary;
+  truncated : bool;
+  complete_from_genesis : bool;
+  indexed_through_staking_tx_id : opt nat64;
+  oldest_indexed_staking_tx_id : opt nat64;
+  last_index_run_ts : opt nat64;
+  commitment_index_fault : opt CommitmentIndexFault;
+  revision : opt nat64;
+  observed_head_staking_tx_id : opt nat64;
+  next_staking_start_tx_id : opt nat64;
+};
+type ExpectedEndowmentStatus = variant {
+  KnownIndexed;
+  ObservedNotQualifying;
+  NotYetObserved;
+  NotFoundInRetainedEvidence;
+};
+type EndowmentTransactionStatusResponse = record {
+  transaction_id : nat64;
+  status : ExpectedEndowmentStatus;
+  revision : nat64;
+  complete_from_genesis : bool;
+  commitment_index_fault : opt CommitmentIndexFault;
+};
+type CanisterOverview = record {
+  canister_id : principal;
+  tracking_reasons : vec CanisterTrackingReason;
+  meta : CanisterMeta;
+  cycles_points : nat32;
+  commitment_points : nat32;
+};
+type PublicCounts = record {
+  tracked_canister_count : nat64;
+  memo_registered_canister_count : nat64;
+  raw_icp_declared_canister_count : opt nat64;
+  declared_neuron_count : opt nat64;
+  qualifying_commitment_count : nat64;
+  sns_discovered_canister_count : nat64;
+  relay_target_canister_count : nat64;
+  relay_instance_canister_count : nat64;
+  total_output_e8s : nat64;
+  total_rewards_e8s : nat64;
+};
+type IcpXdrRateSnapshot = record {
+  rate : nat64;
+  decimals : nat32;
+  timestamp : nat64;
+  fetched_at_ts : nat64;
+};
+type PublicStatus = record {
+  staking_account : Account;
+  ledger_canister_id : principal;
+  faucet_canister_id : principal;
+  cmc_canister_id : opt principal;
+  output_source_account : opt Account;
+  output_account : opt Account;
+  rewards_account : opt Account;
+  index_canister_id : opt principal;
+  last_index_run_ts : opt nat64;
+  index_interval_seconds : nat64;
+  last_completed_cycles_sweep_ts : opt nat64;
+  cycles_interval_seconds : nat64;
+  heap_memory_bytes : opt nat64;
+  stable_memory_bytes : opt nat64;
+  total_memory_bytes : opt nat64;
+  commitment_index_fault : opt CommitmentIndexFault;
+  route_index_fault : opt text;
+  icp_xdr_rate : opt IcpXdrRateSnapshot;
+  last_icp_xdr_rate_error : opt text;
+  relay_factory_enabled : opt bool;
+  relay_setup_min_e8s : opt nat64;
+};
+type RelayCreationPhase = variant {
+  Reserved;
+  ProbingTargets;
+  CmcTransferPrepared;
+  CmcTransferAccepted;
+  CmcNotifySucceeded;
+  CreateDispatched;
+  ChildCreated;
+  CodeInstalled;
+  RelayFundingPrepared;
+  RelayFunded;
+  FinalizationAttempted;
+};
+type RelaySetupState = variant {
+  NotFunded;
+  InProgress : record { phase : RelayCreationPhase; relay_canister_id : opt principal };
+  Active : record { relay_canister_id : principal };
+  ManualRecoveryRequired : record {
+    phase : RelayCreationPhase;
+    relay_canister_id : opt principal;
+    message : text;
+  };
+};
+type RelaySurplusRecipient = variant {
+  Principal : record { "principal" : principal; memo : blob };
+  Neuron : record { neuron_id : nat64; memo : blob };
+};
+type RelaySetupArgs = record {
+  target_canister_ids : vec principal;
+  surplus_recipients : vec RelaySurplusRecipient;
+};
+type RelaySetupView = record {
+  canonical_target_canister_ids : vec principal;
+  canonical_surplus_recipients : vec RelaySurplusRecipient;
+  setup_key_identifier : text;
+  setup_account : opt Account;
+  setup_account_identifier : opt text;
+  target_count : nat32;
+  surplus_recipient_count : nat32;
+  singleton_nominal_minimum_e8s : nat64;
+  extra_target_count : nat64;
+  extra_target_unit_charge_e8s : nat64;
+  total_extra_target_charge_e8s : nat64;
+  nominal_minimum_e8s : nat64;
+  factory_available : bool;
+  state : RelaySetupState;
+};
+type RelaySetupViewResult = variant { Ok : RelaySetupView; Err : text };
+type RelaySetupNotifyResult = variant {
+  BelowMinimum : record { balance_e8s : nat64; required_e8s : nat64; shortfall_e8s : nat64 };
+  BelowCurrentRequirement : record { balance_e8s : nat64; required_e8s : nat64; shortfall_e8s : nat64 };
+  Busy;
+  InProgress : record { phase : RelayCreationPhase; relay_canister_id : opt principal };
+  Active : record { relay_canister_id : principal };
+  FailedPreSpend : record { message : text };
+  ManualRecoveryRequired : record {
+    phase : RelayCreationPhase;
+    relay_canister_id : opt principal;
+    message : text;
+  };
+};
+type ListMemoRegisteredCanisterSummariesArgs = record {
+  page : opt nat32;
+  page_size : opt nat32;
+};
+type MemoRegisteredCanisterSummary = record {
+  canister_id : principal;
+  tracking_reasons : vec CanisterTrackingReason;
+  qualifying_commitment_count : nat64;
+  total_qualifying_committed_e8s : nat64;
+  last_commitment_ts : opt nat64;
+  latest_cycles : opt nat;
+  last_cycles_probe_ts : opt nat64;
+};
+type ListMemoRegisteredCanisterSummariesResponse = record {
+  items : vec MemoRegisteredCanisterSummary;
+  page : nat32;
+  page_size : nat32;
+  total : nat64;
+};
+type FindCanistersByMemoPrefixArgs = record {
+  prefix : text;
+  limit : opt nat32;
+};
+type CanisterPrefixMatch = record {
+  canister_id : principal;
+  tracking_reasons : vec CanisterTrackingReason;
+  matched_prefix : text;
+  qualifying_commitment_count : nat64;
+  total_qualifying_committed_e8s : nat64;
+  last_commitment_ts : opt nat64;
+  latest_cycles : opt nat;
+  last_cycles_probe_ts : opt nat64;
+};
+type FindCanistersByMemoPrefixResponse = record {
+  items : vec CanisterPrefixMatch;
+  truncated : bool;
+};
+type ListRecentCommitmentsArgs = record {
+  limit : opt nat32;
+  qualifying_only : opt bool;
+};
+type ListRecentCommitmentsResponse = record {
+  items : vec RecentCommitmentListItem;
+};
+type CanisterModuleHash = record {
+  canister_id : principal;
+  module_hash_hex : opt text;
+  controllers : opt vec principal;
+  heap_memory_bytes : opt nat64;
+  stable_memory_bytes : opt nat64;
+  total_memory_bytes : opt nat64;
+};
+service : (InitArgs) -> {
+  get_canister_module_hashes : () -> (vec CanisterModuleHash) query;
+  list_canisters : (ListCanistersArgs) -> (ListCanistersResponse) query;
+  get_cycles_history : (GetCyclesHistoryArgs) -> (CyclesHistoryPage) query;
+  get_commitment_history : (GetCommitmentHistoryArgs) -> (CommitmentHistoryPage) query;
+  get_raw_icp_commitment_history : (GetRawIcpCommitmentHistoryArgs) -> (CommitmentHistoryPage) query;
+  get_neuron_commitment_history : (GetNeuronCommitmentHistoryArgs) -> (CommitmentHistoryPage) query;
+  get_commitment_route_summaries : (GetCommitmentRouteSummariesArgs) -> (GetCommitmentRouteSummariesResponse) query;
+  get_endowment_transaction_status : (nat64) -> (EndowmentTransactionStatusResponse) query;
+  poke : (vec EventHorizonPokeMatch) -> ();
+  get_canister_overview : (principal) -> (opt CanisterOverview) query;
+  get_public_counts : () -> (PublicCounts) query;
+  get_public_status : () -> (PublicStatus) query;
+  get_relay_configuration_view : (RelaySetupArgs) -> (RelaySetupViewResult) query;
+  notify_relay_configuration : (RelaySetupArgs) -> (RelaySetupNotifyResult);
+  find_canisters_by_memo_prefix : (FindCanistersByMemoPrefixArgs) -> (FindCanistersByMemoPrefixResponse) query;
+  list_memo_registered_canister_summaries : (ListMemoRegisteredCanisterSummariesArgs) -> (ListMemoRegisteredCanisterSummariesResponse) query;
+  list_recent_commitments : (ListRecentCommitmentsArgs) -> (ListRecentCommitmentsResponse) query;
+}

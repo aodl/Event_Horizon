@@ -1,11 +1,11 @@
-# Ready-to-submit advisory range correction
+# Submitted advisory range correction
 
-Status: prepared, not submitted or approved. No scanner exception is activated.
+Status: submitted as [advisory-database PR #10755](https://github.com/github/advisory-database/pull/10755), open at the 2026-10-29 resumed inspection. Authoritative metadata is not yet corrected. No scanner exception is approved or activated; do not submit a duplicate correction.
 
 Target: GitHub Advisory Database
 `advisories/github-reviewed/2026/08/GHSA-qwgh-2vcv-g2f7/GHSA-qwgh-2vcv-g2f7.json`.
-Use the [Suggest improvements process](https://docs.github.com/en/code-security/security-advisories/working-with-global-security-advisories-from-the-github-advisory-database/editing-security-advisories-in-the-github-advisory-database)
-to propose the following change for the Rust package `block_buffer`:
+The submitted request follows the [Suggest improvements process](https://docs.github.com/en/code-security/security-advisories/working-with-global-security-advisories-from-the-github-advisory-database/editing-security-advisories-in-the-github-advisory-database)
+and proposes the following change for the Rust package `block_buffer`:
 
 ```diff
 - "introduced": "0"

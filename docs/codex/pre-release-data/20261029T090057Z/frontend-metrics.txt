@@ -1,0 +1,12 @@
+file:///home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs:25
+if (result.status !== 'replied') throw new Error(JSON.stringify(result));
+                                                      ^
+
+TypeError: Do not know how to serialize a BigInt
+    at JSON.stringify (<anonymous>)
+    at file:///home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs:25:55
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.15.0
+
+Observation exit status: 1

@@ -1,0 +1,27 @@
+type Account = record { owner : principal; subaccount : opt vec nat8 };
+type EventHorizonPokeTarget = variant { subaccount : nat64; neuron_nonce : nat64 };
+type EventHorizonPokeMatch = record { target : EventHorizonPokeTarget; max_amount : nat };
+
+type InitArgs = record {
+  staking_account : Account;
+  payout_subaccount : opt vec nat8;
+
+  ledger_canister_id : opt principal;
+  index_canister_id : opt principal;
+  cmc_canister_id : opt principal;
+  governance_canister_id : opt principal;
+  funding_source_account : Account;
+
+  rescue_controller : principal;
+  autonomous_rescue_armed : opt bool;
+  expected_first_staking_tx_id : opt nat64;
+
+  main_interval_seconds : opt nat64;
+  rescue_interval_seconds : opt nat64;
+  min_tx_e8s : opt nat64;
+  stake_recognition_delay_seconds : opt nat64;
+};
+
+service : (InitArgs) -> {
+  poke : (vec EventHorizonPokeMatch) -> ();
+};

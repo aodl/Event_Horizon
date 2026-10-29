@@ -1,0 +1,4 @@
+Error: The replica returned an HTTP Error: Http Error: status 400 Bad Request, content type "text/plain; charset=utf-8", content: error: canister_not_found
+details: The specified canister does not exist.
+
+Metrics unavailable: caller may no longer be a controller.

@@ -1,0 +1,6 @@
+Canister Id: ej7c4-lyaaa-aaaar-qchrq-cai
+Canister Status Report:
+  Controllers: amzih-bssz4-twanl-zf6nr-bqsnn-d7rlt-eerbc-oe7vv-uggn5-3naqo-3ae, zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe
+  Module hash: 0x9a0f1978e0853a099433f8b1ea2f056f854443f76ed3c3cf870066df8486a7ef
+
+Observation exit status: 0

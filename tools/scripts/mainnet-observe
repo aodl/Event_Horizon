@@ -4,17 +4,31 @@ backend="${1:-eo6ei-gaaaa-aaaar-qchra-cai}"
 frontend="${2:-ej7c4-lyaaa-aaaar-qchrq-cai}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-out="$root/observations/$stamp"
-mkdir -p "$out"
+mkdir -p "$root/observations" || exit 1
+out="$(mktemp -d "$root/observations/${stamp}-XXXXXX")" || exit 1
 date -u +%Y-%m-%dT%H:%M:%SZ >"$out/timestamp.txt"
 git -C "$root" rev-parse HEAD >"$out/git-revision.txt"
-capture(){ local file="$1"; shift; { "$@"; } >"$out/$file" 2>&1 || true; }
-capture backend-status.txt icp canister status "$backend" -n ic
-capture frontend-status.txt icp canister status "$frontend" -n ic
-capture backend-instance.txt icp canister call "$backend" get_instance '()' -n ic --query
-capture backend-pricing.txt icp canister call "$backend" get_pricing '()' -n ic --query
-capture backend-logs.txt icp canister logs "$backend" -n ic
-metrics(){ local id="$1" file="$2"; if ! icp canister call aaaaa-aa canister_metrics "(record { canister_id = principal \"$id\" })" -n ic --query --candid "$root/candid/ic-management-metrics.did" >"$out/$file" 2>&1; then printf '\nMetrics unavailable: caller may no longer be a controller.\n' >>"$out/$file"; fi; }
+failed=0
+capture(){
+  local file="$1" rc=0; shift
+  { printf '%s:' "$file"; printf ' %q' "$@"; printf '\n'; } >>"$out/commands.txt"
+  { "$@"; } >"$out/$file" 2>&1 || rc=$?
+  printf '\nObservation exit status: %s\n' "$rc" >>"$out/$file"
+  printf '%s\t%s\n' "$file" "$rc" >>"$out/results.tsv"
+  if (( rc != 0 )); then failed=1; fi
+}
+capture backend-status.txt icp canister status "$backend" -n ic --public --identity anonymous
+capture frontend-status.txt icp canister status "$frontend" -n ic --public --identity anonymous
+capture backend-instance.txt icp canister call "$backend" get_instance '()' -n ic --query --identity anonymous --candid "$root/canisters/event-horizon/event_horizon.did"
+capture backend-pricing.txt icp canister call "$backend" get_pricing '()' -n ic --query --identity anonymous --candid "$root/canisters/event-horizon/event_horizon.did"
+capture backend-logs.txt icp canister logs "$backend" -n ic --identity anonymous
+metrics(){
+  local id="$1" file="$2"
+  capture "$file" node "$root/tools/scripts/public-management-query.mjs" canister_metrics "$id"
+}
+capture backend-public-status.txt node "$root/tools/scripts/public-management-query.mjs" canister_status "$backend"
+capture frontend-public-status.txt node "$root/tools/scripts/public-management-query.mjs" canister_status "$frontend"
 metrics "$backend" backend-metrics.txt
 metrics "$frontend" frontend-metrics.txt
 printf 'Read-only observation written to %s\n' "$out"
+exit "$failed"

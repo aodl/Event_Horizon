@@ -1,6 +1,15 @@
 # Cycle optimisation — resumable progress
 
-## Current release-closure checkpoint
+## Resumed closure
+
+Final resumed validation: 146 Rust + 138 frontend + 129 PocketIC = 413 passed;
+fmt/strict Clippy and source checks pass. Canonical hashes are unchanged. Security
+still fails the unsuppressed OSV finding; installed Jupiter prerequisites remain
+blocked. Full recovery, validation and operator handoff: [pre-release resume](pre-release-resume.md).
+PR #12 exists; advisory correction PR #10755 was submitted. The earlier access
+and submission statements below describe historical checkpoints only.
+
+## Historical release-closure checkpoint
 
 Validated recipe/source d13d1138e2fde4af18bd0d3f51f777470037f93f passes fmt,
 strict all-feature Clippy,146Rust+138frontend+128PocketIC=412tests, source manifest,

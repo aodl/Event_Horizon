@@ -12,6 +12,22 @@ Event Horizon uses the same test vocabulary as Jupiter Faucet where the projects
 | Complete behavioural suite | `POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all` |
 | Opt-in cadence calibration | `./tools/scripts/calibrate-cadence smoke` |
 
+The historical installed-version scenario requires the canonical candidate at
+`release-artifacts/event_horizon.wasm` and checks its reviewed SHA-256. On a
+fresh checkout, prepare it from the clean manifested revision **before** running
+`test_pocketic_integration`, `test_all`, or that isolated scenario:
+
+```bash
+./tools/scripts/docker-build
+DFX_IDENTITY=codex_local POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
+```
+
+The two historical 54d8b4b fixtures are checked into Git; no prior ignored build
+output is needed for them. Their deterministic rebuild recipe and dependency
+locks are in `tests/fixtures/event_horizon_54d8b4b.provenance.txt`. The candidate
+is a canonical release artifact, not a historical/debug substitute. Unit-only
+testing does not require Docker or this candidate artifact.
+
 The test commands automatically run `npm ci` when `node_modules` is absent or stale relative to `package.json` and `package-lock.json`. No preliminary manual npm command is required.
 
 `test_unit` runs repository/static protocol checks, source-manifest verification, ordinary locked Rust workspace tests (including xtask's parser/runner tests), and frontend Node unit tests. It excludes intentionally ignored PocketIC scenarios.

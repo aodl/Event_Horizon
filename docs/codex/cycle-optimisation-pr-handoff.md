@@ -1,16 +1,17 @@
-# Ready PR handoff
+# Existing PR handoff
 
-Status: PR creation returned 403; no PR exists from this session. The published
-branch was last verified at d13d1138e2fde4af18bd0d3f51f777470037f93f. First publish
-the final local evidence commit reported by `git rev-parse HEAD` and the final
-Codex response. Do not substitute an older head for final-commit CI evidence.
+Status: [PR #12](https://github.com/aodl/Event_Horizon/pull/12) already exists
+and remains open. Do not create another PR. Its last confirmed remote head is
+dd4a88993b92f522a08296786e9afd453b4a3101; publish the resumed closure commit on
+the same branch and verify CI for that exact head. The current release record
+and activation checklist are in [pre-release resume](pre-release-resume.md).
 
 - Repository: aodl/Event_Horizon
 - Head: codex/cycle-optimisation-81c5a0d
 - Base: main
 - Immutable validated recipe: d13d1138e2fde4af18bd0d3f51f777470037f93f
-- Suggested state: draft while security is blocked
-- [Open comparison](https://github.com/aodl/Event_Horizon/compare/main...codex/cycle-optimisation-81c5a0d?expand=1)
+- State: open; security clearance remains blocked; no merge is authorised
+- [Existing PR](https://github.com/aodl/Event_Horizon/pull/12)
 
 Title: **Reduce Event Horizon cycle costs and select reproducible hybrid release profiles**
 
@@ -45,9 +46,9 @@ Security is NOT cleared. Audit/deny/npm pass; OSV fails
 GHSA-qwgh-2vcv-g2f7/block-buffer 0.10.4. Maintainer range starts0.11.0; imported
 metadata starts0. Independent source review and191 native panic cases support a
 correction. A complete correction request and separate unapproved exact-version
-exception proposal are tracked. No correction was submitted or exception activated.
+exception proposal are tracked. [Advisory correction PR #10755](https://github.com/github/advisory-database/pull/10755) was submitted and remains open; no exception was activated.
 
-See docs/codex/cycle-optimisation-release-closure.md and its raw evidence links.
+See docs/codex/pre-release-resume.md for the historical installed-version upgrade test, updated runbooks, Jupiter installed-version blockers and final closure receipts. The older optimisation evidence remains in docs/codex/cycle-optimisation-release-closure.md.
 Required before release: authoritative metadata/policy resolution and actual
 passing Dependency Security on this PR's final head. Record the run URL, headSHA
 and conclusion after it finishes; no future CI success is claimed here.

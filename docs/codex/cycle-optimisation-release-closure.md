@@ -1,8 +1,9 @@
 # Cycle optimisation release closure
 
-Local engineering validation is complete. **Release clearance remains blocked**
-by the unsuppressed advisory metadata finding and unavailable PR creation/CI
-permissions. No deployment, real transfer, controller action or merge occurred.
+Historical closure at dd4a889 is recorded below. The current resumed closure,
+installed-version evidence and operator checklist are in [pre-release resume](pre-release-resume.md).
+**Release clearance remains blocked** by the unsuppressed advisory metadata
+finding and incompatible installed Jupiter prerequisites. No deployment, real transfer, controller action or merge occurred.
 
 ## Sources and scope
 
@@ -81,10 +82,10 @@ crate, not a universal memory-safety or post-panic hash-correctness proof. See
 for the checksum, VCS identity, precise database file and proposed0→0.11.0 change.
 No unrelated version is classified solely from this 0.10.4 inspection.
 
-The request is **ready to submit, not submitted**: available tooling has not
-provided an authenticated advisory-improvement/fork submission path. No external
-issue, PR or correction is invented. The documented GitHub Suggest improvements
-form is the intended handoff. A [separate exact-version exception proposal](block-buffer-not-affected-exception-proposal.md)
+The correction was subsequently submitted as
+[advisory-database PR #10755](https://github.com/github/advisory-database/pull/10755).
+It remains open at the resumed observation; submission does not establish an
+accepted correction or a passing gate. A [separate exact-version exception proposal](block-buffer-not-affected-exception-proposal.md)
 is unapproved and unimplemented; it is not an advisory-wide ignore. No security
 configuration, dependency version, severity or scan result was changed.
 
@@ -130,17 +131,12 @@ all four retained d13 outputs; its local receipt is evidence-final-status.json.
 
 ## GitHub and remaining actions
 
-No associated PR was found. Creation targeting main was attempted again against
-the now-published d13d113 branch and returned **403 Resource not accessible by
-integration**. The GitHub CLI is unavailable; Git push lacked HTTPS credentials
-in the preceding closure attempt. No PR number/URL or security run exists to report;
-PR-workflow lookup for d13d113 returned no runs. The security workflow triggers
-PRs or main/master pushes, not ordinary pushes to this branch.
-
-An operator must publish the final evidence commit if necessary and use the
-[ready PR title/body](cycle-optimisation-pr-handoff.md) for branch
-`codex/cycle-optimisation-81c5a0d`→main. Then verify [Dependency Security](https://github.com/aodl/Event_Horizon/actions/workflows/dependency-security.yml)
-for that exact head SHA, recording its actual result. No future/pending success is
-claimed. Required clearance remains: corrected authoritative advisory data (or an
-explicitly approved scoped policy resolution) yielding a passing normal gate,
-and verified PR/CI for the final source. No merge or deployment is authorised.
+[Event Horizon PR #12](https://github.com/aodl/Event_Horizon/pull/12) exists
+and remains open. At resumed inspection its head is dd4a889 and Dependency
+Security run 40765960497 completed with failure. Earlier PR creation permission
+failures above are historical. Verify CI again for the final published head;
+no merge or deployment is authorised. The advisory correction is already
+[PR #10755](https://github.com/github/advisory-database/pull/10755); do not submit
+a duplicate or implement an unapproved security exception. Current evidence,
+remaining blockers and activation ordering are in the
+[resumed pre-release report](pre-release-resume.md).

@@ -1,0 +1,19 @@
+(
+  record {
+    jupiter_historian = principal "j5gs6-uiaaa-aaaar-qb5cq-cai";
+    cmc = principal "rkp4c-7iaaa-aaaaa-aaaca-cai";
+    observed_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
+    jupiter_faucet = principal "acjuz-liaaa-aaaar-qb4qq-cai";
+    observed_profile = opt record {
+      decimals = 8 : nat8;
+      supports_icrc2_transfer_from = true;
+      neuron_governance = opt principal "rrkah-fqaaa-aaaaa-aaaaq-cai";
+      symbol = "ICP";
+    };
+    icp_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
+    sns_root = null;
+    surplus_canister = null;
+  },
+)
+
+Observation exit status: 0

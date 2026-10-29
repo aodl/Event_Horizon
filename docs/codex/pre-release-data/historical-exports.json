@@ -1,0 +1,12 @@
+[
+  "memory",
+  "get_candid_pointer",
+  "canister_init",
+  "canister_post_upgrade",
+  "canister_query get_instance",
+  "canister_query get_pricing",
+  "canister_global_timer",
+  "canister_update <ic-cdk internal> timer_executor",
+  "__data_end",
+  "__heap_base"
+]

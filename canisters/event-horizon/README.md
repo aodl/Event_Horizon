@@ -54,7 +54,7 @@ matches. False with empty matches is never sent. The minimum index and maximum
 amount may come from different transactions. Direct-Ledger readers keep their
 own cursors and bounded archive-aware reconciliation; see the
 [subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
-Jupiter's current receivers require a coordinated breaking ABI update.
+Current Jupiter source implements this ABI; live receiver installation must be verified separately in the [pre-release report](../../docs/codex/pre-release-resume.md).
 
 Within each completed poll, the backend attempts all actually globally matched
 recipients first, including mixed matches with specific payloads, then
@@ -142,3 +142,5 @@ The builder shows resolved principals and validates alias declarations through
 the selected backend's local `preview_subscription` query. See the
 [subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
 local subject filtering, and authoritative reconciliation.
+
+For the current first release, follow the authoritative [deployment procedure](../../docs/operations/deployment.md): preserve the existing backend by upgrade, verify Jupiter prerequisites, then separately upgrade the frontend. Controller removal follows a separate observation period.

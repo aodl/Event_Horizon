@@ -41,7 +41,7 @@ component's identity and role.
 
 ## Operations and deployment
 
-- [Deployment](operations/deployment.md)
+- [Deployment — authoritative current first-release procedure](operations/deployment.md)
 - [Deploying another immutable instance](operations/deploying-an-instance.md)
 - [Acceptance observation](operations/acceptance-observation.md)
 - [Controller removal](operations/controller-removal.md)
@@ -59,3 +59,5 @@ component's identity and role.
 - [Jupiter workflow alignment validation](codex/jupiter-workflow-alignment-validation.md)
 - [`docs/codex/`](codex/)
 - [`docs/provenance/`](provenance/)
+
+The [resumed pre-release report](codex/pre-release-resume.md) distinguishes timestamped live observations from historical validation and lists unresolved release blockers.

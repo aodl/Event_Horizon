@@ -1,0 +1,17 @@
+=== Suite: [pocketic] tests::cycle_optimisation::observed_54d8b4b_production_upgrades_preserving_financial_state ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running unittests src/lib.rs (target/debug/deps/event_horizon_pocketic-475e799b58fb26f2)
+
+running 1 test
+test tests::cycle_optimisation::observed_54d8b4b_production_upgrades_preserving_financial_state ...     Finished `release` profile [optimized] target(s) in 0.21s
+    Finished `release` profile [optimized] target(s) in 0.23s
+   Compiling mock-historian v0.1.0 (/home/codexdev/src/Event_Horizon/tests/mocks/mock-historian)
+    Finished `release` profile [optimized] target(s) in 8.06s
+    Finished `release` profile [optimized] target(s) in 0.18s
+    Finished `release` profile [optimized] target(s) in 0.18s
+    Finished `release` profile [optimized] target(s) in 0.23s
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 128 filtered out; finished in 187.35s
+
+✓ [pocketic] tests::cycle_optimisation::observed_54d8b4b_production_upgrades_preserving_financial_state (187.67s)

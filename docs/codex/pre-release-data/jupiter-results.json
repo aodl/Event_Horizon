@@ -1,0 +1,154 @@
+[
+  {
+    "at": "2026-10-29T09:04:14.219043+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "acjuz-liaaa-aaaar-qb4qq-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "faucet-status.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:15.650788+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "metadata",
+      "acjuz-liaaa-aaaar-qb4qq-cai",
+      "candid:service",
+      "-n",
+      "ic",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "faucet-candid.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:16.788334+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "uccpi-cqaaa-aaaar-qby3q-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "disburser-status.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:17.321647+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "metadata",
+      "uccpi-cqaaa-aaaar-qby3q-cai",
+      "candid:service",
+      "-n",
+      "ic",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "disburser-candid.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:18.187623+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "j5gs6-uiaaa-aaaar-qb5cq-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "historian-status.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:18.816657+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "metadata",
+      "j5gs6-uiaaa-aaaar-qb5cq-cai",
+      "candid:service",
+      "-n",
+      "ic",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "historian-candid.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:19.385646+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "u2qkp-aqaaa-aaaar-qb7ea-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "relay-status.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:20.015135+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "metadata",
+      "u2qkp-aqaaa-aaaar-qb7ea-cai",
+      "candid:service",
+      "-n",
+      "ic",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "file": "relay-candid.txt"
+  },
+  {
+    "at": "2026-10-29T09:04:20.616727+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "call",
+      "j5gs6-uiaaa-aaaar-qb5cq-cai",
+      "list_canister_aliases",
+      "(record { start_after = null; limit = opt (128 : nat32) })",
+      "-n",
+      "ic",
+      "--query",
+      "--identity",
+      "anonymous",
+      "--candid",
+      "/home/codexdev/src/Jupiter_Faucet_Suite/canisters/historian/jupiter_historian.did"
+    ],
+    "returncode": 1,
+    "file": "aliases.txt"
+  }
+]

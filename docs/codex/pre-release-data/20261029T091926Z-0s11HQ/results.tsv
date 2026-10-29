@@ -1,0 +1,9 @@
+backend-status.txt	0
+frontend-status.txt	0
+backend-instance.txt	0
+backend-pricing.txt	0
+backend-logs.txt	0
+backend-public-status.txt	0
+frontend-public-status.txt	0
+backend-metrics.txt	1
+frontend-metrics.txt	1
