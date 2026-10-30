@@ -1,10 +1,16 @@
-# Narrowly scoped not-affected implementation for operator review
+# Retired narrowly scoped not-affected implementation
 
-Status: **implemented locally for operator review, not approved for merge**.
-Authoritative metadata remained erroneous on 2026-10-30 and correction
-[PR #10755](https://github.com/github/advisory-database/pull/10755) remained open.
-The operator must explicitly approve this security-policy change before merging
-Event Horizon PR #12.
+Status: **historical; the temporary exception and guard are removed**.
+
+Event Horizon PR #12 temporarily carried this exact-version policy while the
+imported advisory range was incorrect. On 2026-10-30 GitHub merged correction
+[PR #10755](https://github.com/github/advisory-database/pull/10755), and OSV then
+published GHSA-qwgh-2vcv-g2f7 with the corrected affected interval
+`>=0.11.0,<0.12.1`. Because locked `block-buffer` 0.10.4 is outside that range,
+the repository returned to the standard OSV scan without this local exception.
+
+The following records the retired implementation and its review boundary; it is
+not current scanner policy.
 
 Implemented applicability is the intersection of:
 
@@ -22,24 +28,23 @@ Evidence and limitations: [independent source review and reproducible panic prob
 The described caught-panic inline-cursor corruption was not found in that exact
 release. This does not assert general memory safety or classify other releases.
 
-OSV's ignore is advisory-wide, so `tools/scripts/block-buffer-osv-guard` runs its
-regression suite and then parses the actual root `Cargo.lock` before OSV starts.
-It uses the standard-library TOML parser and accepts no lockfile override. It
-fails on malformed input, absence, duplicates, alternate spelling or any field
-change. Synthetic tests reject 0.11.0, 0.12.0 and even fixed 0.12.1 until the
-exception is removed; this makes dependency movement an explicit policy event.
-Integration tests show a guard failure prevents a filtered OSV success and an
-unrelated OSV failure still fails the canonical command.
+OSV's ignore was advisory-wide, so the removed `block-buffer-osv-guard` ran its
+regression suite and then parsed the actual root `Cargo.lock` before OSV started.
+It used the standard-library TOML parser and accepted no lockfile override. It
+failed on malformed input, absence, duplicates, alternate spelling or any field
+change. Synthetic tests rejected 0.11.0, 0.12.0 and even fixed 0.12.1 until the
+exception was removed, making dependency movement an explicit policy event.
+Integration tests showed a guard failure prevented a filtered OSV success and an
+unrelated OSV failure still failed the canonical command.
 
-Cargo audit, Cargo deny, npm audit and the online OSV scan remain unchanged and
-active. The four previous OSV entries are unchanged. No Cargo dependency,
-lockfile, severity threshold or production code is changed. The dependency is
-not dev-only: digest/SHA-2 reaches backend hashing, Candid principals and frontend
-certification. A RustCrypto-family migration would change that production graph
-solely to suppress the imported range discrepancy and was not selected.
+Cargo audit, Cargo deny, npm audit and the online OSV scan remained active. The
+four other OSV entries were unchanged. No Cargo dependency, lockfile, severity
+threshold or production code changed. The dependency was not dev-only:
+digest/SHA-2 reaches backend hashing, Candid principals and frontend
+certification. A RustCrypto-family migration would have changed that production
+graph solely to suppress the imported range discrepancy and was not selected.
 
-This implementation is a temporary local policy resolution. A green result is
-green under the exact guarded exception, not an upstream-corrected or exception-
-free result. After GitHub and OSV correct the range, remove the GHSA entry and
-this otherwise-unused guard/tests, run unfiltered OSV, and require successful CI
-without the exception. The repository owner is responsible for that removal.
+While active, this was a temporary local policy resolution: a green result was
+green under the exact guarded exception, not an upstream-corrected or
+exception-free result. The correction and cleanup now make that distinction
+historical; the current gate no longer contains the GHSA entry or guard.

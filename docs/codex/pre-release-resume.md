@@ -200,9 +200,8 @@ production query lists now include `preview_subscription`.
 
 Operator-only activation checklist (none performed here):
 
-1. Obtain explicit operator approval for the guarded block-buffer policy
-   resolution, publish it, and verify CI at that exact PR head. Review source
-   manifest and canonical artifacts.
+1. Verify security and behavioural CI at the exact release head. Review the
+   source manifest and canonical artifacts.
 2. Reobserve mappings, installed hashes/configuration, cycles/ICP, pricing and
    operational evidence. Stop on a changed backend hash until its upgrade
    compatibility is reviewed; retain unknown financial obligations.
@@ -256,19 +255,22 @@ was open and unmerged. Current PR-head Dependency Security run
 [40922693665](https://github.com/aodl/Event_Horizon/actions/runs/40922693665)
 therefore failed only that medium finding after the other three scanners passed.
 
-A temporary exact-version resolution is now prepared for operator review. Before
-OSV applies the single GHSA filter, a dependency-free guard parses the actual
-root lockfile and requires exactly one `block-buffer` package at 0.10.4 from the
-crates.io registry source with checksum
+A temporary exact-version resolution was merged in PR #12. Before OSV applied
+the single GHSA filter, a dependency-free guard parsed the actual root lockfile
+and required exactly one `block-buffer` package at 0.10.4 from the crates.io
+registry source with checksum
 `3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71`.
 Synthetic negative and shell-ordering tests prevent that advisory-wide filter
-from silently broadening. The four existing filters and all scanners remain.
-This is not an upstream correction, a dev-only classification, or merge approval;
-the operator must review the policy change before merging. The canonical local
-gate now exits 0 **under this guarded exception**: cargo-audit 0.22.2 passes with
-the same four allowed unmaintained warnings, cargo-deny 0.19.8 passes all four
-policy groups, npm 11.12.1 reports zero vulnerabilities, and OSV Scanner 2.3.8
-reports no unfiltered issues after the exact guard and its 16 tests pass. This is
-not an exception-free security result. Final behavioural, manifest and publication
-status are recorded in the handoff after validation. Jupiter installed
-compatibility remains an independent activation blocker.
+from silently broadening. The four existing filters and all scanners remained.
+The canonical local gate exited 0 **under this guarded exception**: cargo-audit
+0.22.2 passed with the same four allowed unmaintained warnings, cargo-deny 0.19.8
+passed all four policy groups, npm 11.12.1 reported zero vulnerabilities, and
+OSV Scanner 2.3.8 reported no unfiltered issues after the exact guard and its 16
+tests passed. That was not an exception-free security result.
+
+Post-merge on 2026-10-30, correction PR #10755 merged and live OSV metadata
+propagated the maintainer's `>=0.11.0,<0.12.1` affected interval. The follow-up
+cleanup removed the GHSA filter and otherwise-unused guard while preserving the
+four unrelated filters. Current security results are therefore produced by the
+standard scan without this exception. Jupiter installed compatibility remains
+an independent activation blocker.
