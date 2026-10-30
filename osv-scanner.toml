@@ -13,3 +13,7 @@ reason = "paste is Candid proc-macro/build support; current compatible Candid st
 [[IgnoredVulns]]
 id = "RUSTSEC-2021-0127"
 reason = "serde_cbor is confined to certified informational frontend dependencies and PocketIC test tooling, not the value-moving backend runtime."
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+reason = "Version-specific not-affected assessment: the sole locked block-buffer 0.10.4 package has the reviewed separate-cursor implementation, outside the maintainer's >=0.11.0 affected range. The security gate first enforces its exact version, registry source, crate checksum and sole-package invariant. Remove this exception after authoritative advisory metadata is corrected. See docs/security/dependency-scanning.md."

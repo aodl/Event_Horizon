@@ -10,6 +10,10 @@ echo "==> cargo deny"
 cargo deny check advisories licenses bans sources
 echo "==> npm audit"
 npm audit --omit=dev
+echo "==> block-buffer OSV exception guard tests"
+"$ROOT/tools/scripts/block-buffer-osv-guard" --test
+echo "==> block-buffer OSV exception guard"
+"$ROOT/tools/scripts/block-buffer-osv-guard"
 echo "==> OSV scan"
 osv-scanner scan -L Cargo.lock -L package-lock.json
 echo "Security gate passed"

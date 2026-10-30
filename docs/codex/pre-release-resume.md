@@ -200,8 +200,9 @@ production query lists now include `preview_subscription`.
 
 Operator-only activation checklist (none performed here):
 
-1. Clear the unchanged security blocker and verify CI at the exact published
-   PR head. Review source manifest and canonical artifacts.
+1. Obtain explicit operator approval for the guarded block-buffer policy
+   resolution, publish it, and verify CI at that exact PR head. Review source
+   manifest and canonical artifacts.
 2. Reobserve mappings, installed hashes/configuration, cycles/ICP, pricing and
    operational evidence. Stop on a changed backend hash until its upgrade
    compatibility is reviewed; retain unknown financial obligations.
@@ -247,11 +248,27 @@ was rechecked, as were final canonical Wasm bytes and all artifact-manifest
 entries. No production input changed; a new two-build campaign is unnecessary.
 Historical/debug fixtures never substitute for these release artifacts.
 
-The normal security scan still exits 1: audit/deny/npm pass; OSV flags locked
-block-buffer 0.10.4 for GHSA-qwgh-2vcv-g2f7. Fresh GitHub and OSV authoritative
-metadata still introduces the range at zero. [Correction PR #10755](https://github.com/github/advisory-database/pull/10755)
-is submitted and open; no duplicate, dependency refresh, exclusion or policy
-change was made. PR #12 is open; its starting dd4a889 head has failed Dependency
-Security run 40765960497. Final-head publication/CI must be verified separately;
-no green final CI or merge is claimed. Jupiter installed compatibility is an
-independent activation blocker even if local tests pass.
+On 2026-10-30 the unmodified security scan at `9df3f162` still exited 1:
+audit/deny/npm passed and OSV 2.3.8 reported only locked block-buffer 0.10.4 for
+GHSA-qwgh-2vcv-g2f7. GitHub still published `<0.12.1`, OSV still imported
+introduced `0`, and [correction PR #10755](https://github.com/github/advisory-database/pull/10755)
+was open and unmerged. Current PR-head Dependency Security run
+[40922693665](https://github.com/aodl/Event_Horizon/actions/runs/40922693665)
+therefore failed only that medium finding after the other three scanners passed.
+
+A temporary exact-version resolution is now prepared for operator review. Before
+OSV applies the single GHSA filter, a dependency-free guard parses the actual
+root lockfile and requires exactly one `block-buffer` package at 0.10.4 from the
+crates.io registry source with checksum
+`3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71`.
+Synthetic negative and shell-ordering tests prevent that advisory-wide filter
+from silently broadening. The four existing filters and all scanners remain.
+This is not an upstream correction, a dev-only classification, or merge approval;
+the operator must review the policy change before merging. The canonical local
+gate now exits 0 **under this guarded exception**: cargo-audit 0.22.2 passes with
+the same four allowed unmaintained warnings, cargo-deny 0.19.8 passes all four
+policy groups, npm 11.12.1 reports zero vulnerabilities, and OSV Scanner 2.3.8
+reports no unfiltered issues after the exact guard and its 16 tests pass. This is
+not an exception-free security result. Final behavioural, manifest and publication
+status are recorded in the handoff after validation. Jupiter installed
+compatibility remains an independent activation blocker.
