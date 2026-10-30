@@ -1,0 +1,41 @@
+{
+  "compared_to": "dd4a88993b92f522a08296786e9afd453b4a3101",
+  "production_paths": [
+    "canisters/event-horizon/src",
+    "canisters/frontend/src",
+    "canisters/frontend/public",
+    "Cargo.toml",
+    "Cargo.lock",
+    "package.json",
+    "package-lock.json",
+    "rust-toolchain.toml",
+    "Dockerfile.repro",
+    "tools/scripts/build-release",
+    "tools/scripts/docker-build",
+    "tools/scripts/verify-reproducible-artifacts",
+    "tools/audit-wasm.py",
+    "SPEC.md"
+  ],
+  "production_diff_empty": true,
+  "recorded_build_inputs_match": true,
+  "artifacts": {
+    "event_horizon.wasm": {
+      "bytes": 1847228,
+      "sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970"
+    },
+    "event_horizon_frontend.wasm": {
+      "bytes": 3757901,
+      "sha256": "210d4de6587a19228801f1d97264cb87d0c8d1117632ecb6f7051829b3b441c8"
+    },
+    "build-info.json": {
+      "bytes": 886,
+      "sha256": "a7e7b9c81303210cf13b23d1b8dae7421c692d62ed640b7776b5883154df2018"
+    },
+    "release-artifacts.sha256": {
+      "bytes": 261,
+      "sha256": "d60df64e7da08512e48addee371dfa392c65037e3b40f05b23602a6738ea5c5d"
+    }
+  },
+  "reused_two_build_receipt": "docs/codex/release-closure-data/status.json",
+  "reused_two_build_log": "observations/release-closure/reproducible.final.log"
+}

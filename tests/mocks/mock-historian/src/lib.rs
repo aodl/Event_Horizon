@@ -77,8 +77,90 @@ thread_local! {static STATE:RefCell<State>=RefCell::new(State::default());}
 fn init() {
     STATE.with(|s| *s.borrow_mut() = State::default());
 }
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct ObservedRoute {
+    destination: Principal,
+    memo: Vec<u8>,
+}
+#[derive(Clone, Default, CandidType, Deserialize)]
+struct RouteGate {
+    entered: u64,
+    waiting: bool,
+    routes: Vec<ObservedRoute>,
+}
+thread_local! {
+    static ROUTE_GATE: RefCell<RouteGate> = RefCell::new(RouteGate::default());
+    static ROUTE_GATE_ENABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static ROUTE_GATE_ARMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+#[ic_cdk::update]
+fn debug_route_gate(hold: bool) {
+    if hold {
+        ROUTE_GATE.with_borrow_mut(|g| {
+            *g = RouteGate {
+                waiting: true,
+                ..Default::default()
+            }
+        });
+        ROUTE_GATE_ARMED.set(true);
+        ROUTE_GATE_ENABLED.set(true);
+    } else {
+        ROUTE_GATE.with_borrow_mut(|g| g.waiting = false);
+    }
+}
+#[ic_cdk::query]
+fn debug_route_gate_state() -> RouteGate {
+    ROUTE_GATE.with_borrow(Clone::clone)
+}
+#[ic_cdk::update]
+fn debug_route_gate_tick() {}
+
+// Only the controlled-interleaving fixture changes method mode. A replicated
+// query cannot await; the update wrapper delegates to the identical pure response.
+#[cfg(feature = "interleaving_gate")]
+#[ic_cdk::update]
+async fn get_commitment_route_summaries(args: Args) -> Response {
+    // Test-only controlled interleaving. Default fixtures do not enter this lane.
+    if ROUTE_GATE_ENABLED.get() {
+        ROUTE_GATE.with_borrow_mut(|g| {
+            g.entered += 1;
+            for route in &args.routes {
+                if let CommitmentRoute::RawIcp {
+                    destination_canister_id,
+                    memo,
+                } = route
+                {
+                    assert!(g.routes.len() < 16);
+                    g.routes.push(ObservedRoute {
+                        destination: *destination_canister_id,
+                        memo: memo.clone(),
+                    });
+                }
+            }
+        });
+        if ROUTE_GATE_ARMED.replace(false) {
+            assert!(
+                ic_cdk::api::in_replicated_execution(),
+                "gate requires an inter-canister call"
+            );
+            while ROUTE_GATE.with_borrow(|g| g.waiting) {
+                ic_cdk::call::Call::bounded_wait(
+                    ic_cdk::api::canister_self(),
+                    "debug_route_gate_tick",
+                )
+                .await
+                .expect("mock gate tick");
+            }
+        }
+    }
+    route_response(args)
+}
+#[cfg(not(feature = "interleaving_gate"))]
 #[ic_cdk::query]
 fn get_commitment_route_summaries(args: Args) -> Response {
+    route_response(args)
+}
+fn route_response(args: Args) -> Response {
     STATE.with(|s| {
         let s = s.borrow();
         let items = args

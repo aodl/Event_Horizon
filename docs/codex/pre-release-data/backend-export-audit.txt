@@ -1,0 +1,1 @@
+release-artifacts/event_horizon.wasm: export audit passed (11 exports)

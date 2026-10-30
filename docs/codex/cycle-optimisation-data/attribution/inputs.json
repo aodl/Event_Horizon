@@ -1,0 +1,46 @@
+{
+  "source_revision": "431d32cdab46355212437dd882ba3c3efd3aada5",
+  "artifact_sha256": {
+    "final-shadows/baseline-z/event_horizon_debug.raw.wasm": "631e3b7771ff535be7b5eb5164f7cbb3d3543e9b89c81ae69e0388c3c35ba189",
+    "final-shadows/baseline-z/event_horizon_debug.wasm": "f6a1255b4bf5e665287100d407506f30a1aeab80b9c3d0c93187304ac025bd4d",
+    "final-shadows/baseline-z/event_horizon_production.raw.wasm": "314dff7be7e275865e48afe705d24208a80ec9b9de3d8654cbe81ebb77ae08cb",
+    "final-shadows/baseline-z/event_horizon_production.wasm": "4e1425b292eafef79f7d8183b3bed557c26cb34ac279cf4241341fca9a8cd792",
+    "final-shadows/candidate-2/event_horizon_debug.raw.wasm": "6c646c19e1b61cdef57de4ba0f8158ddafdd0c808922001d6e073ea1cb699d7a",
+    "final-shadows/candidate-2/event_horizon_debug.wasm": "81e31eef10a70f1829565c3d4014d2a2f7ae68adabe83414b85060ae4379791c",
+    "final-shadows/candidate-2/event_horizon_production.raw.wasm": "ab84c824df3ff7836ccc2cba31152ca1b5dea5b68d166c287550c015aced7dd0",
+    "final-shadows/candidate-2/event_horizon_production.wasm": "5ee319181892d3beec4e4f97ca73cd3ac7d41daeef5bd243face4a3c6b8d49fe",
+    "final-shadows/candidate-z/event_horizon_debug.raw.wasm": "f452156fe0928f544a281c83576dcb9e91cd989f901113f35a040b1a6d881508",
+    "final-shadows/candidate-z/event_horizon_debug.wasm": "a90c1320a6314f879ef8a2f0644d6b33f2f927427c865adb6231d38ce4f4cdd8",
+    "final-shadows/candidate-z/event_horizon_production.raw.wasm": "52218031306a391d585f866ba7c918f6561700ddadaf694053cbe0cc182274d2",
+    "final-shadows/candidate-z/event_horizon_production.wasm": "8c054c9167f0475d3b607fbd87decd1d9d792285306b8251857e6a799749b546"
+  },
+  "harness_sha256": {
+    "tests/pocketic/src/cycle_optimisation.rs": "ef59aa5b5fb2f72514a0bb40cb788e0397d7e76523b22c04e09bc3f64a03e10d",
+    "tests/pocketic/src/cycle_optimisation_frontend.rs": "64f45489b28777c43155a678ce83755c1c48263fb1fc0a9752578ea1a69d79d4",
+    "tests/pocketic/src/cycle_optimisation_interleaving.rs": "fed4442751bab2dcbe6f75a8099c7b5f77fc47ebf9da2db15981943ad5182b16",
+    "tests/pocketic/src/cycle_optimisation_production_upgrade.rs": "8528a45d419b29dc77f6025d6d32faf3531a7d66f5d6669890b63b382ad347bb",
+    "tests/pocketic/src/cycle_optimisation_publication.rs": "3a3deb1496befde0f163e27c6cdf23d27bb78d12e9e6aa067eb3b29f09972ee6",
+    "tests/pocketic/src/cycle_optimisation_reserve.rs": "43790fc0937c90b8d1cee66ca98e9cf3e14c89b6e11741ebe8db09903b9d50d6",
+    "tests/pocketic/src/cycle_optimisation_scheduler.rs": "7c9b29beb075981a1670412397a4c8d010814031eff93cd552a77f4ec2b5ee43",
+    "tests/pocketic/src/cycle_optimisation_small.rs": "2a3ee54a519684411b439241d9f7d5fe46cde4320c01a3388713723274ca6691",
+    "tests/pocketic/src/cycle_optimisation_state.rs": "46d7fcf0422a36c18ca62b099d35f43084d790e6e65ae853339eec3a10327b7d"
+  },
+  "fixture_helpers_sha256": "3b6d929d0ae664a64128d5bc83d190cdf81b7fd7fa00050c7beff0ec6b0aba6b",
+  "cargo_lock_sha256": "10e6dbf405589221d60e9f51bfb661f14aa400797eb74d412b3b01025ad066ed",
+  "mocks_sha256": {
+    "mock_cmc.wasm": "3f7e91db1d1780bd627e9ec1800d7c3f02ac8d527f1d850456b9f1e96ffda92e",
+    "mock_historian.wasm": "b6bb238cd6b282569212116ecaa0fd8db2791865c5e6c55f1397061821bf0076",
+    "mock_icp_ledger.wasm": "b37ba83d210473d0821237427b03dcf1c64cc45622ab9345388d141acbc44bf7",
+    "mock_icrc3_ledger.wasm": "c6c16a6797299d8f3d94b581ad8ff35e0fae432e5f400882b19f9a9ee7782df3",
+    "mock_index_poke.wasm": "631397f4374e3cc33f047fcec5605d0e1c6aee791188123bf735a4da575880eb",
+    "mock_sns_root.wasm": "763a94b1890321e219815d9c82bcf33827db7de71da146b0e60a6bf18c16689c",
+    "mock_subscriber.wasm": "82060daeeb0280595e628a9e828ee3bc46e2a871551a60c8566e8b92bb5a3566"
+  },
+  "pocket_ic_sha256": "29472ea4433b30a280676c4e22e369d79d5ba6ee1b4d48bab32ebe7d0ad2b4bb",
+  "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+  "script_sha256": "ade4838bcb1c386343a956118a56c25f471e41ea99cc14fe4c0344746961eeee",
+  "samples": 1,
+  "instrumented": true,
+  "canonical": false,
+  "headline_cycles": false
+}

@@ -1,0 +1,7 @@
+variant,sample,generic,scenario,blocks,watchers,sender_cycles,immediate_sender_cycles,stable_bytes,total_bytes,attempts,accepted,cursor,simulated_nanos,legacy_calls,icrc3_calls,ledger_cycles,historian_cycles,cmc_cycles,recipient_cycles,typed_payload_bytes,start_cursor,wasm_heap_before,wasm_heap_after,completed_polls,processed_blocks,fixture_phase
+baseline,0,true,unique_unwatched,256,0,99478813,99478813,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped
+candidate,0,true,unique_unwatched,256,0,99090461,99090461,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped
+baseline,1,true,unique_unwatched,256,0,99478813,99478813,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped
+candidate,1,true,unique_unwatched,256,0,99090461,99090461,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped
+baseline,2,true,unique_unwatched,256,0,99478813,99478813,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped
+candidate,2,true,unique_unwatched,256,0,99090461,99090461,100728832,104057840,0,0,256,41,1,1,20863528,0,0,0,0,0,1310720,1638400,1,256,bootstrapped

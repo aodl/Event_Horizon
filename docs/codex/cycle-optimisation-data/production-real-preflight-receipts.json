@@ -1,0 +1,286 @@
+{
+  "pid": 1578475,
+  "source": "53ca069078e1b372ec2e9457b34901f91e678f76",
+  "stage": "scheduler-boundary",
+  "status": "passed",
+  "results": [
+    {
+      "name": "feature-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 2.9209282398223877,
+      "log_sha256": "43c9257cec517d67faf85886c367091a5b3dcd2d811af8bc511c3e16d3144288"
+    },
+    {
+      "name": "manifest",
+      "command": [
+        "./tools/scripts/source-manifest",
+        "verify"
+      ],
+      "returncode": 0,
+      "seconds": 0.1348891258239746,
+      "log_sha256": "79c13b9bddb90796d66d7f6b9fcd561b6c2926effed273f5d3149e35e3a685d8"
+    },
+    {
+      "name": "negative-empty",
+      "returncode": 101,
+      "expected_failure": true,
+      "passed": true,
+      "log_sha256": "de11edef58142b2fbd5991e13b1c1622459b54fd50baf866c396b60cfd04971b"
+    },
+    {
+      "name": "false-real_global-1-256",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 227.21310877799988,
+      "log_sha256": "352bb531b986535a22c8d2a887ca86291d5adbab15d89896a6b857987bffe586"
+    },
+    {
+      "name": "true-real_global-1-256",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 191.71977138519287,
+      "log_sha256": "806653eca9d0e414ddbdf81e8a54178d49cbb6aa541115367ccb4ea42475fcd1"
+    },
+    {
+      "name": "false-real_equal-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 56.750091791152954,
+      "log_sha256": "3a6c6a6985e6794d4a933498ced4806e1d53cd1fe173f06a6838ed3432ee5d65"
+    },
+    {
+      "name": "false-real_increasing-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 57.820636510849,
+      "log_sha256": "ebcbfe19cf90f6b5c7b104ee4b09bdf1c1c3426849cf92b8176f4bbbcd0f7d21"
+    },
+    {
+      "name": "false-real_unmatched_increasing-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 55.333282232284546,
+      "log_sha256": "e178edcc29a76636e984d20cf0bf9fd605b43654e235c2252e846a010b3ca355"
+    },
+    {
+      "name": "false-real_growing-4096-512",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 38.17795205116272,
+      "log_sha256": "8d9e65ac12aa1ffec963ba3232820ca41114fdeadfffbb2d4dcde3e937eb85d1"
+    },
+    {
+      "name": "true-real_equal-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 57.98866820335388,
+      "log_sha256": "d382bdbbeb55a63732262a1007accb469d263cacf1b6d2bbd710622ed9c4775c"
+    },
+    {
+      "name": "true-real_increasing-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 58.85662603378296,
+      "log_sha256": "66e052a278ef52b6f2069493e6c7c32ca6c8005d39f809409e117e57a951e9e9"
+    },
+    {
+      "name": "true-real_unmatched_increasing-256-32",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 58.96084809303284,
+      "log_sha256": "8617fb019e1ff7af656ca287d8dda760a7e58f60abcce7b8fff7366633c7f9ec"
+    },
+    {
+      "name": "true-real_growing-4096-512",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_real_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 42.20445775985718,
+      "log_sha256": "658d66d356b1e0b4b80d955f55e524a0cb925fff75d499a95d82eed7bb1105ca"
+    },
+    {
+      "name": "scheduler-boundary",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::scheduler_fixed_time",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 55.9443621635437,
+      "log_sha256": "5dc99c0cfa4fd396324bf6a655fb7f3dca78d6ead01931a5ca515599e5a3adc6"
+    }
+  ]
+}

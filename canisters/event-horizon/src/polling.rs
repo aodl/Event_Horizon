@@ -56,7 +56,7 @@ fn dispatch_matches(
     }
 }
 struct SharedGlobalOrder {
-    existing: BTreeSet<Principal>,
+    existing: Option<BTreeSet<Principal>>,
     admitted_at: BTreeMap<Principal, u64>,
     last_live: Option<u64>,
 }
@@ -65,62 +65,99 @@ enum PreparedAdmission {
     Accounts(Vec<SubjectSubscription>),
 }
 
+/// Page-local cache generation. Removing an entry invalidates both its watcher
+/// list and its amount summary; a new relation never inherits earlier activity.
+struct CachedInterests {
+    subscriptions: Vec<SubjectSubscription>,
+    record_high: Option<Nat>,
+    #[cfg(test)]
+    walked: usize,
+}
+impl CachedInterests {
+    fn new(subscriptions: Vec<SubjectSubscription>) -> Self {
+        Self {
+            subscriptions,
+            record_high: None,
+            #[cfg(test)]
+            walked: 0,
+        }
+    }
+    fn observe(&mut self, index: u64, amount: &Nat, out: &mut BTreeMap<Principal, MatchState>) {
+        if self.subscriptions.is_empty() {
+            return;
+        }
+        if self.record_high.as_ref().is_some_and(|old| amount <= old) {
+            return;
+        }
+        #[cfg(test)]
+        {
+            self.walked += self.subscriptions.len();
+        }
+        observe_matches(index, amount, self.subscriptions.iter(), out);
+        // A singleton gets no reusable high-water allocation: walking it is cheap.
+        if self.subscriptions.len() > 1 {
+            self.record_high = Some(amount.clone());
+        }
+    }
+}
+
 #[derive(Default)]
 struct PendingAdmissions {
     globals: BTreeSet<Principal>,
-    subscriptions: BTreeMap<(Principal, Principal, WatchTarget), SubjectSubscription>,
+    subscriptions: BTreeMap<
+        (Principal, Principal, WatchTarget),
+        (state::RelationKey, SubjectSubscription, bool),
+    >,
     shared_overlay: BTreeMap<([u8; 32], Principal, Principal, WatchTarget), SubjectSubscription>,
-    shared_cache: BTreeMap<[u8; 32], Vec<SubjectSubscription>>,
+    shared_cache: BTreeMap<[u8; 32], CachedInterests>,
 }
 impl PendingAdmissions {
-    fn stage(&mut self, admission: PreparedAdmission, shared: bool) {
+    fn stage(&mut self, admission: PreparedAdmission, context: &mut AdmissionContext) {
         match admission {
             PreparedAdmission::Global(p) => {
                 self.globals.insert(p);
             }
             PreparedAdmission::Accounts(subscriptions) => {
                 for candidate in subscriptions {
-                    let key = candidate.identity();
-                    let existing = self
-                        .subscriptions
-                        .get(&key)
-                        .cloned()
-                        .or_else(|| state::get_relation(key.0, key.1, key.2));
-                    let effective = match existing {
-                        Some(old) => old.merge(candidate),
-                        None => candidate,
+                    let identity = candidate.identity();
+                    let key = if let Some((key, old, _changed)) = self.subscriptions.get(&identity)
+                    {
+                        if old.subscription.minimum_units <= candidate.subscription.minimum_units {
+                            continue;
+                        }
+                        key.clone()
+                    } else {
+                        let inputs = *context
+                            .relations
+                            .get_or_insert_with(|| state::relation_context(&context.runtime));
+                        let key = state::relation_key(&candidate, inputs);
+                        if let Some(old) = state::relation_at(&key) {
+                            if old.identity() == identity
+                                && old.subscription.minimum_units
+                                    <= candidate.subscription.minimum_units
+                            {
+                                // Retain the known effective value for this page,
+                                // without staging a write or invalidating watchers.
+                                self.subscriptions.insert(identity, (key, old, false));
+                                continue;
+                            }
+                        }
+                        key
                     };
-                    if shared {
-                        let account = effective
-                            .account(
-                                state::read_instance_config()
-                                    .observed_profile
-                                    .and_then(|p| p.neuron_governance),
-                            )
-                            .expect("verified governance");
-                        self.shared_cache.remove(&account_identifier_bytes(
-                            account.owner,
-                            *account.effective_subaccount(),
-                        ));
+                    if context.runtime.observed_ledger == context.runtime.icp_ledger {
+                        let account = key.icp_identifier().expect("shared account key");
+                        self.shared_cache.remove(&account);
                         self.shared_overlay.insert(
-                            (
-                                account_identifier_bytes(
-                                    account.owner,
-                                    *account.effective_subaccount(),
-                                ),
-                                key.0,
-                                key.1,
-                                key.2,
-                            ),
-                            effective.clone(),
+                            (account, identity.0, identity.1, identity.2),
+                            candidate.clone(),
                         );
                     }
-                    self.subscriptions.insert(key, effective);
+                    self.subscriptions.insert(identity, (key, candidate, true));
                 }
             }
         }
     }
-    fn shared_subscriptions(&mut self, account: [u8; 32]) -> &[SubjectSubscription] {
+    fn shared_subscriptions(&mut self, account: [u8; 32]) -> &mut CachedInterests {
         self.shared_cache.entry(account).or_insert_with(|| {
             let mut interested: BTreeMap<_, _> = state::interested_icp(account)
                 .into_iter()
@@ -139,12 +176,14 @@ impl PendingAdmissions {
             {
                 interested.insert(s.identity(), s.clone());
             }
-            interested.into_values().collect()
+            CachedInterests::new(interested.into_values().collect())
         })
     }
     fn publish(self) {
-        for s in self.subscriptions.into_values() {
-            state::put_relation(s)
+        for (key, s, changed) in self.subscriptions.into_values() {
+            if changed {
+                state::put_relation_at(key, s)
+            }
         }
         for p in self.globals {
             state::put_global_subscriber(p)
@@ -165,7 +204,7 @@ pub fn debug_set_abort_after_staged_admission(enabled: bool) {
 fn debug_abort_after_staged_admission() -> bool {
     #[cfg(feature = "debug_api")]
     {
-        return DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(std::cell::Cell::get);
+        DEBUG_ABORT_AFTER_STAGED_ADMISSION.with(std::cell::Cell::get)
     }
     #[cfg(not(feature = "debug_api"))]
     false
@@ -217,17 +256,23 @@ fn name(s: Stream) -> &'static str {
     }
 }
 fn u64nat(n: &Nat) -> Result<u64, String> {
-    u64::try_from(n.0.clone()).map_err(|_| "Nat exceeds u64".into())
+    u64::try_from(&n.0).map_err(|_| "Nat exceeds u64".into())
 }
 fn account_id(b: &[u8]) -> Option<[u8; 32]> {
     b.try_into().ok()
 }
+#[cfg(test)]
 fn merge(target: &mut BTreeMap<Principal, MatchState>, source: BTreeMap<Principal, MatchState>) {
     for (p, m) in source {
         let e = target.entry(p).or_default();
         e.global |= m.global;
         for (target_key, matched) in m.subs {
-            record_match(e, target_key, matched.first_block_index, matched.max_amount);
+            record_match(
+                e,
+                target_key,
+                matched.first_block_index,
+                &matched.max_amount,
+            );
         }
     }
 }
@@ -236,41 +281,53 @@ fn record_match(
     state: &mut MatchState,
     target: (Principal, WatchTarget),
     first_block_index: u64,
-    amount: Nat,
+    amount: &Nat,
 ) {
     if let Some(existing) = state.subs.get_mut(&target) {
         existing.first_block_index = existing.first_block_index.min(first_block_index);
-        if amount > existing.max_amount {
-            existing.max_amount = amount;
+        if amount > &existing.max_amount {
+            existing.max_amount = amount.clone();
         }
     } else if state.subs.len() < MAX_SPECIFIC_TARGETS_PER_POKE {
         state.subs.insert(
             target,
             TargetMatch {
                 first_block_index,
-                max_amount: amount,
+                max_amount: amount.clone(),
             },
         );
     }
 }
 
+struct AdmissionContext {
+    runtime: config::RuntimeConfig,
+    own_id: Principal,
+    decimals: u8,
+    accounts: Option<([u8; 32], [u8; 32])>,
+    relations: Option<state::RelationContext>,
+}
+impl AdmissionContext {
+    fn accounts(&mut self) -> &([u8; 32], [u8; 32]) {
+        self.accounts.get_or_insert_with(|| {
+            (
+                account_identifier_bytes(self.runtime.faucet_canister, [0; 32]),
+                account_identifier_bytes(self.own_id, [0; 32]),
+            )
+        })
+    }
+}
+
 async fn prepare_admission(
+    context: &mut AdmissionContext,
     from: &[u8],
     to: &[u8],
     memo: Option<&[u8]>,
-    decimals: u8,
 ) -> Option<PreparedAdmission> {
-    let r = config::runtime();
-    if account_id(from) != Some(account_identifier_bytes(r.faucet_canister, [0; 32]))
-        || account_id(to)
-            != Some(account_identifier_bytes(
-                ic_cdk::api::canister_self(),
-                [0; 32],
-            ))
-    {
+    let memo = memo?;
+    let (faucet, own) = context.accounts();
+    if account_id(from) != Some(*faucet) || account_id(to) != Some(*own) {
         return None;
     }
-    let memo = memo?;
     let Ok(resolved) = resolve_subscription_memo(memo, state::alias) else {
         return None;
     };
@@ -299,8 +356,8 @@ async fn prepare_admission(
     };
     let required = pricing::current_admission_e8s(class)?;
     match historian::route_is_admitted(
-        r.historian_canister,
-        ic_cdk::api::canister_self(),
+        context.runtime.historian_canister,
+        context.own_id,
         memo.to_vec(),
         required,
     )
@@ -312,7 +369,7 @@ async fn prepare_admission(
                     Some(PreparedAdmission::Global(subscriber))
                 }
                 x @ SubscriptionDeclaration::Account { .. } => {
-                    Subscription::from_declaration(x, decimals)
+                    Subscription::from_declaration(x, context.decimals)
                         .ok()
                         .map(|subscription| {
                             PreparedAdmission::Accounts(vec![SubjectSubscription {
@@ -328,7 +385,7 @@ async fn prepare_admission(
                     end,
                     minimum,
                 } => minimum
-                    .map(|x| x.to_units(decimals))
+                    .map(|x| x.to_units(context.decimals))
                     .transpose()
                     .ok()
                     .map(|minimum| {
@@ -373,7 +430,7 @@ fn observe_matches(
                 out.entry(s.subscription.subscriber).or_default(),
                 (s.subject, s.subscription.target),
                 index,
-                amount.clone(),
+                amount,
             )
         }
     }
@@ -381,14 +438,14 @@ fn observe_matches(
 fn observe_icrc3(
     first_block_index: u64,
     e: &icrc3::LedgerEvent,
-    cache: &mut BTreeMap<(Principal, [u8; 32]), Vec<SubjectSubscription>>,
+    cache: &mut BTreeMap<(Principal, [u8; 32]), CachedInterests>,
     out: &mut BTreeMap<Principal, MatchState>,
 ) {
     if let icrc3::LedgerEvent::Transfer { to, amount, .. } = e {
         let interests = cache
             .entry((to.owner, *to.effective_subaccount()))
-            .or_insert_with(|| state::interested_icrc(*to));
-        observe_matches(first_block_index, amount, interests.iter(), out)
+            .or_insert_with(|| CachedInterests::new(state::interested_icrc(*to)));
+        interests.observe(first_block_index, amount, out)
     }
 }
 fn observe_icp(
@@ -399,12 +456,9 @@ fn observe_icp(
 ) {
     if let Some(icp_ledger::Operation::Transfer { to, amount, .. }) = op {
         if let Some(id) = account_id(to) {
-            observe_matches(
-                first_block_index,
-                &Nat::from(amount.e8s),
-                pending.shared_subscriptions(id),
-                out,
-            )
+            pending
+                .shared_subscriptions(id)
+                .observe(first_block_index, &Nat::from(amount.e8s), out)
         }
     }
 }
@@ -528,9 +582,6 @@ async fn icrc_page(
         commit(Stream::Observed, true, at)
     }
     let blocks = icrc_live_blocks(r.blocks, at, requested_end)?;
-    // Retained poll identities must survive page-local overflow, including updates
-    // arriving after 256 new identities on a later page. Failed pages publish nothing.
-    let mut local = out.clone();
     let mut live = false;
     let mut cache = BTreeMap::new();
     for (id, block) in blocks {
@@ -538,7 +589,7 @@ async fn icrc_page(
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
         let e = icrc3::decode_block(&block)?;
-        observe_icrc3(id, &e, &mut cache, &mut local);
+        observe_icrc3(id, &e, &mut cache, out);
         live = true;
         at = at.checked_add(1).ok_or("observed cursor overflow")?;
     }
@@ -547,19 +598,24 @@ async fn icrc_page(
     }
     if live {
         commit(Stream::Observed, true, at);
-        merge(out, local)
     }
     Ok((at, live))
 }
-async fn scan_icrc(
-    ledger: Principal,
-    out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<bool, String> {
+/// Only successful scans yield their transient notifications. A failure drops the
+/// entire scan-owned accumulator; page admission/cursor commits remain independent.
+#[derive(Default)]
+struct CompletedScan {
+    matches: BTreeMap<Principal, MatchState>,
+    activity: bool,
+}
+
+async fn scan_icrc(ledger: Principal) -> Result<CompletedScan, String> {
+    let mut out = BTreeMap::new();
     let (ready, mut at) = position(&state::read_metadata(), Stream::Observed).unwrap();
     if !ready {
         let tip = u64nat(&icrc3::get_blocks(ledger, 0, 0).await?.log_length)?;
         commit(Stream::Observed, true, tip);
-        return Ok(false);
+        return Ok(CompletedScan::default());
     }
     let first_length = page_length(at, None);
     let first = icrc3::get_blocks(ledger, at, first_length).await?;
@@ -574,11 +630,14 @@ async fn scan_icrc(
                 (icrc3::get_blocks(ledger, at, length).await?, length)
             }
         };
-        let (n, live) = icrc_page(r, boundary, at, requested_length, out).await?;
+        let (n, live) = icrc_page(r, boundary, at, requested_length, &mut out).await?;
         at = n;
         activity |= live
     }
-    Ok(activity)
+    Ok(CompletedScan {
+        matches: out,
+        activity,
+    })
 }
 
 fn legacy_archived(
@@ -600,9 +659,9 @@ async fn legacy_page(
     s: Stream,
     boundary: u64,
     requested: Range<u64>,
-    decimals: u8,
+    context: &mut AdmissionContext,
     out: &mut BTreeMap<Principal, MatchState>,
-    shared_globals: Option<&mut SharedGlobalOrder>,
+    mut shared_globals: Option<&mut SharedGlobalOrder>,
 ) -> Result<(u64, bool), String> {
     if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive live blocks".into());
@@ -630,9 +689,6 @@ async fn legacy_page(
             r.first_block_index
         ));
     }
-    // Retained poll identities must survive page-local overflow, including updates
-    // arriving after 256 new identities on a later page. Failed pages publish nothing.
-    let mut local = out.clone();
     let mut pending = PendingAdmissions::default();
     let mut page_global_admissions = BTreeMap::new();
     let mut page_last_live = None;
@@ -654,21 +710,34 @@ async fn legacy_page(
         // The admitting Faucet transfer is still earlier than the new relation:
         // even watchers of this canister's default account start at later blocks.
         if matches!(s, Stream::Shared) {
-            observe_icp(id, &b.transaction.operation, &mut pending, &mut local);
+            // No admission writer has run yet. Snapshot once at the first live
+            // block, before observing or admitting that block; archive-only and
+            // empty scans never enumerate globals.
+            if let Some(order) = shared_globals.as_deref_mut() {
+                order
+                    .existing
+                    .get_or_insert_with(|| state::global_subscribers().into_iter().collect());
+            }
+            observe_icp(id, &b.transaction.operation, &mut pending, out);
             page_last_live = Some(id);
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
             if let Some(admission) =
-                prepare_admission(from, to, b.transaction.icrc1_memo.as_deref(), decimals).await
+                prepare_admission(context, from, to, b.transaction.icrc1_memo.as_deref()).await
             {
                 if let PreparedAdmission::Global(subscriber) = &admission {
                     if let Some(order) = shared_globals.as_deref() {
-                        if !order.existing.contains(subscriber) {
+                        if !order
+                            .existing
+                            .as_ref()
+                            .expect("live snapshot")
+                            .contains(subscriber)
+                        {
                             page_global_admissions.entry(*subscriber).or_insert(id);
                         }
                     }
                 }
-                pending.stage(admission, matches!(s, Stream::Shared));
+                pending.stage(admission, context);
                 if debug_abort_after_staged_admission() {
                     return Err("debug abort after staged legacy admission".into());
                 }
@@ -693,15 +762,11 @@ async fn legacy_page(
                 order.last_live = Some(last_live);
             }
         }
-        merge(out, local)
     }
     Ok((at, live))
 }
-async fn scan_legacy(
-    s: Stream,
-    decimals: u8,
-    out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<bool, String> {
+async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
+    let mut out = BTreeMap::new();
     let r = config::runtime();
     let Some((ready, mut at)) = position(&state::read_metadata(), s) else {
         logging::shared_cursor_invariant("bootstrap flags or cursors differ");
@@ -715,15 +780,22 @@ async fn scan_legacy(
             .await?
             .chain_length;
         commit(s, true, tip);
-        return Ok(false);
+        return Ok(CompletedScan::default());
     }
     // Snapshot once per shared scan. Admissions take effect only for later blocks,
     // without walking the complete global registry for every transaction.
     let mut shared_globals = matches!(s, Stream::Shared).then(|| SharedGlobalOrder {
-        existing: state::global_subscribers().into_iter().collect(),
+        existing: None,
         admitted_at: BTreeMap::new(),
         last_live: None,
     });
+    let mut context = AdmissionContext {
+        runtime: r.clone(),
+        own_id: ic_cdk::api::canister_self(),
+        decimals,
+        accounts: None,
+        relations: None,
+    };
     let first_length = page_length(at, None);
     let first = icp_ledger::query_blocks(r.icp_ledger, at, first_length).await?;
     let boundary = first.chain_length;
@@ -745,8 +817,8 @@ async fn scan_legacy(
             s,
             boundary,
             at..request_end(at, requested_length, boundary)?,
-            decimals,
-            out,
+            &mut context,
+            &mut out,
             shared_globals.as_mut(),
         )
         .await?;
@@ -755,7 +827,7 @@ async fn scan_legacy(
     }
     if let Some(order) = shared_globals {
         if let Some(last_live) = order.last_live {
-            for subscriber in order.existing {
+            for subscriber in order.existing.unwrap_or_default() {
                 out.entry(subscriber).or_default().global = true;
             }
             for (subscriber, admitted_at) in order.admitted_at {
@@ -765,7 +837,10 @@ async fn scan_legacy(
             }
         }
     }
-    Ok(activity)
+    Ok(CompletedScan {
+        matches: out,
+        activity,
+    })
 }
 fn failure(s: Stream, e: &str) {
     if config::is_reserve_protection(e) || e == "shared cursor invariant violated" {
@@ -787,7 +862,7 @@ pub async fn run_poll() {
         } else {
             Stream::Admission
         };
-        if let Err(e) = scan_legacy(stream, 0, &mut BTreeMap::new()).await {
+        if let Err(e) = scan_legacy(stream, 0).await {
             failure(stream, &e);
             if shared {
                 return;
@@ -812,39 +887,51 @@ pub async fn run_poll() {
             return;
         }
     };
-    let mut out = BTreeMap::new();
-    if shared {
-        match scan_legacy(Stream::Shared, profile.decimals, &mut out).await {
-            Ok(_) => logging::ledger_recovered_all(),
+    let out = if shared {
+        match scan_legacy(Stream::Shared, profile.decimals).await {
+            Ok(scan) => {
+                logging::ledger_recovered_all();
+                scan.matches
+            }
             Err(e) => {
                 failure(Stream::Shared, &e);
                 return;
             }
         }
     } else {
-        let globals = state::global_subscribers();
-        let activity = match scan_icrc(r.observed_ledger, &mut out).await {
-            Ok(a) => {
+        let (mut out, activity) = match scan_icrc(r.observed_ledger).await {
+            Ok(scan) => {
                 logging::observed_ledger_recovered();
-                a
+                (scan.matches, scan.activity)
             }
             Err(e) => {
                 failure(Stream::Observed, &e);
-                out.clear();
-                false
+                (BTreeMap::new(), false)
             }
         };
-        match scan_legacy(Stream::Admission, profile.decimals, &mut BTreeMap::new()).await {
+        // The guarded poll lane is the only production global-membership
+        // writer. Other lanes update aliases/pricing/funding, never globals.
+        // Snapshot after successful observation, before the admission stream.
+        let globals = if activity {
+            state::global_subscribers()
+        } else {
+            Vec::new()
+        };
+        match scan_legacy(Stream::Admission, profile.decimals).await {
             Ok(_) => logging::icp_admission_ledger_recovered(),
             Err(e) => failure(Stream::Admission, &e),
         }
         if activity {
             for p in globals {
-                out.entry(p).or_default().global = true
+                out.entry(p).or_default().global = true;
             }
         }
-    }
-    dispatch_matches(out, subscriber::poke);
+        out
+    };
+    let mut global_cache = None;
+    dispatch_matches(out, |principal, notification| {
+        subscriber::poke(principal, notification, &mut global_cache)
+    });
 }
 
 #[cfg(test)]
@@ -860,6 +947,40 @@ mod target_match_tests {
         Principal::from_slice(&[n, 1])
     }
     #[test]
+    fn nat_cursor_conversion_preserves_full_width_and_overflow_errors() {
+        for value in [0, (1u64 << 53) + 1, u64::MAX] {
+            let amount = Nat::from(value);
+            assert_eq!(u64nat(&amount), Ok(value));
+            assert_eq!(amount, Nat::from(value));
+        }
+        for bits in [65usize, 32769] {
+            let amount = Nat(Nat::from(1u8).0 << (bits - 1));
+            assert_eq!(u64nat(&amount), Err("Nat exceeds u64".into()));
+        }
+    }
+    #[test]
+    fn immutable_admission_accounts_are_lazy_and_reused() {
+        let own = p(7);
+        let runtime = config::RuntimeConfig::production(p(8), None);
+        let expected = (
+            account_identifier_bytes(runtime.faucet_canister, [0; 32]),
+            account_identifier_bytes(own, [0; 32]),
+        );
+        let mut context = AdmissionContext {
+            runtime,
+            own_id: own,
+            decimals: 8,
+            accounts: None,
+            relations: None,
+        };
+        assert!(context.accounts.is_none());
+        for _ in 0..256 {
+            assert_eq!(*context.accounts(), expected);
+        }
+        assert_eq!(context.accounts, Some(expected));
+    }
+
+    #[test]
     fn independent_first_index_and_maximum_include_zero_and_full_width() {
         for (events, first, maximum) in [
             (vec![(0, 7)], 0, 7),
@@ -870,7 +991,7 @@ mod target_match_tests {
             let mut s = MatchState::default();
             let key = (p(1), WatchTarget::Subaccount(7));
             for (i, a) in events {
-                record_match(&mut s, key, i, Nat::from(a as u64))
+                record_match(&mut s, key, i, &Nat::from(a as u64))
             }
             assert_eq!(
                 s.subs[&key],
@@ -886,12 +1007,12 @@ mod target_match_tests {
         for reverse in [false, true] {
             let key = (p(2), WatchTarget::Subaccount(7));
             let mut early = MatchState::default();
-            record_match(&mut early, key, 100, 4u8.into());
+            record_match(&mut early, key, 100, &4u8.into());
             let mut late = MatchState {
                 global: true,
                 ..Default::default()
             };
-            record_match(&mut late, key, 300, 15u8.into());
+            record_match(&mut late, key, 300, &15u8.into());
             let (a, b) = if reverse {
                 (late, early)
             } else {
@@ -917,7 +1038,7 @@ mod target_match_tests {
                 &mut first,
                 (p(2), WatchTarget::Subaccount(n)),
                 100,
-                1u8.into(),
+                &1u8.into(),
             );
         }
         let mut out = BTreeMap::from([(p(1), first)]);
@@ -927,14 +1048,14 @@ mod target_match_tests {
                 local.get_mut(&p(1)).unwrap(),
                 (p(2), WatchTarget::Subaccount(n)),
                 200,
-                2u8.into(),
+                &2u8.into(),
             );
         }
         record_match(
             local.get_mut(&p(1)).unwrap(),
             (p(2), WatchTarget::Subaccount(7)),
             300,
-            99u8.into(),
+            &99u8.into(),
         );
         merge(&mut out, local);
         assert_eq!(out[&p(1)].subs.len(), 256);
@@ -978,8 +1099,8 @@ mod target_match_tests {
                 ..Default::default()
             };
             if n != 4 {
-                record_match(&mut s, (p(n), WatchTarget::Subaccount(7)), 0, 100u8.into());
-                record_match(&mut s, (p(9), WatchTarget::Subaccount(7)), 1, 101u8.into());
+                record_match(&mut s, (p(n), WatchTarget::Subaccount(7)), 0, &100u8.into());
+                record_match(&mut s, (p(9), WatchTarget::Subaccount(7)), 1, &101u8.into());
             }
             matches.insert(p(n), s);
         }
@@ -1013,7 +1134,7 @@ mod target_match_tests {
             &mut external,
             (p(3), WatchTarget::Subaccount(7)),
             0,
-            1u8.into(),
+            &1u8.into(),
         );
         let mut seen = vec![];
         dispatch_matches(
@@ -1050,12 +1171,12 @@ mod target_match_tests {
                         WatchTarget::Subaccount(n),
                     ),
                     1000 - n,
-                    Nat::from(n),
+                    &Nat::from(n),
                 )
             }
-            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 3, huge.clone());
-            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 1, 1u8.into());
-            record_match(&mut s, (p(3), WatchTarget::NeuronNonce(0)), 0, 1u8.into());
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 3, &huge.clone());
+            record_match(&mut s, (p(2), WatchTarget::Subaccount(7)), 1, &1u8.into());
+            record_match(&mut s, (p(3), WatchTarget::NeuronNonce(0)), 0, &1u8.into());
             let mut attempts = 0;
             dispatch_matches(BTreeMap::from([(p(1), s)]), |_, n| {
                 attempts += 1;
@@ -1085,9 +1206,14 @@ mod target_match_tests {
                 &mut s,
                 (subject, WatchTarget::NeuronNonce(1)),
                 u64::MAX,
-                huge.clone(),
+                &huge.clone(),
             );
-            record_match(&mut s, (subject, WatchTarget::Subaccount(7)), 0, 1u8.into())
+            record_match(
+                &mut s,
+                (subject, WatchTarget::Subaccount(7)),
+                0,
+                &1u8.into(),
+            )
         }
         assert_eq!(s.subs.len(), 4);
         assert_eq!(
@@ -1107,11 +1233,11 @@ mod target_match_tests {
                 &mut s,
                 (p(1), WatchTarget::Subaccount(n)),
                 n + 100,
-                Nat::from(n),
+                &Nat::from(n),
             )
         }
         let key = (p(1), WatchTarget::Subaccount(7));
-        record_match(&mut s, key, 0, 999u16.into());
+        record_match(&mut s, key, 0, &999u16.into());
         assert_eq!(s.subs.len(), 256);
         assert_eq!(s.subs[&key].first_block_index, 0);
         assert_eq!(s.subs[&key].max_amount, Nat::from(999u16));
@@ -1287,3 +1413,7 @@ mod target_match_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "polling_differential.rs"]
+mod differential;

@@ -1,0 +1,53 @@
+{
+  "validated_recipe_source": "d13d1138e2fde4af18bd0d3f51f777470037f93f",
+  "starting_source": "9528da787f9e8a4d5df2d297401564d04adb41b6",
+  "artifacts": {
+    "build-info.json": {
+      "sha256": "a7e7b9c81303210cf13b23d1b8dae7421c692d62ed640b7776b5883154df2018",
+      "bytes": 886
+    },
+    "event_horizon.wasm": {
+      "sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970",
+      "bytes": 1847228
+    },
+    "event_horizon_frontend.wasm": {
+      "sha256": "210d4de6587a19228801f1d97264cb87d0c8d1117632ecb6f7051829b3b441c8",
+      "bytes": 3757901
+    },
+    "release-artifacts.sha256": {
+      "sha256": "d60df64e7da08512e48addee371dfa392c65037e3b40f05b23602a6738ea5c5d",
+      "bytes": 261
+    }
+  },
+  "reproducibility": "Supported wrapper passed two independent uncached Docker builds, comparing every generated file. Populated Wasm identities match that successful run; artifact manifest verifies.",
+  "test_counts": {
+    "rust": 146,
+    "frontend": 138,
+    "pocketic": 128,
+    "total": 412
+  },
+  "security": {
+    "cargo_audit": "pass0.22.1 existingpolicy",
+    "cargo_deny": "pass0.19.8",
+    "npm_audit": "pass npm11.12.1/node24.15.0",
+    "osv": "FAIL2.3.8 soleGHSA-qwgh-2vcv-g2f7/block-buffer0.10.4",
+    "new_exclusions": false,
+    "advisory_db_commit": "40f5be6fb12ed93fc591bf4ab23b7d793b3f2239",
+    "advisory_db_commit_time": "2026-10-28T09:50:03+01:00"
+  },
+  "public_branch_last_verified": "d13d1138e2fde4af18bd0d3f51f777470037f93f",
+  "github": {
+    "pr": "not created: API403 Resource not accessible by integration",
+    "ci": "no PR workflow runs returned for d13d113; no CI pass claimed"
+  },
+  "asset_probe": {
+    "assets_each": 29,
+    "requests_each": 29,
+    "verified_body_bytes_each": 2695829,
+    "stable_bytes_each": 0,
+    "allocated_heap_each": 3997696,
+    "source_sha256": "ed71616034679e73a5957937565c2f474cfa08b60756ee153d650fe83468b0da",
+    "run_script_sha256": "80c6bd8d732ce788d0ba3b020a6d603d254f375f5141ff9c373731ddbfcb8a00",
+    "log_sha256": "6b4dc9918329197ccda4da9c6547735bac6891cc8605e52098def057fc323f9f"
+  }
+}

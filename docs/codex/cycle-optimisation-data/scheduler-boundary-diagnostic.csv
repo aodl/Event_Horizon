@@ -1,0 +1,3 @@
+variant,sample,generic,scenario,seconds,globals,step_seconds,initial_cycles,window_debit,settled_window_plus_drain_cycles,completed_polls,inflight_at_end,extra_drain_polls,observed_blocks,callbacks,max_lag,ending_lag,reserve_seconds,economy_seconds,standard_seconds,fast_seconds,very_fast_seconds,continuous_seconds,idle_cycles_per_day,funding_runs,pricing_runs,alias_success_before,alias_success_after
+baseline,0,false,timed_daily_standard,86400,1,600,6000000000000,7211710205,7267150471,144,0,0,4,4,0,0,0,0,86400,0,0,0,3510277237,24,1,1700000000,1700006601
+candidate,0,false,timed_daily_standard,86400,1,600,6000000000000,7214327706,7220963326,144,0,0,4,4,0,0,0,0,86400,0,0,0,3521916465,24,1,1700000000,1700006601

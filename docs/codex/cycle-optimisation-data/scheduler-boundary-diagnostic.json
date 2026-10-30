@@ -1,0 +1,85 @@
+{
+  "source": "f1f333864a7d3502edad983c2c3f7c1d9a94852d",
+  "samples": 1,
+  "headline": false,
+  "log_sha256": "201ccebab07b82e048e81fdc12493feabb1b341421fedad653358d06cddf515f",
+  "details": {
+    "baseline": {
+      "lanes": {
+        "poll": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            145,
+            0
+          ]
+        },
+        "funding": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            25,
+            0
+          ]
+        },
+        "pricing": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            2,
+            0
+          ]
+        }
+      },
+      "ingress_debit": 55440266,
+      "later_drain_debit": 0,
+      "repeated_debit": 6622279,
+      "first_minus_repeat": 48817987
+    },
+    "candidate": {
+      "lanes": {
+        "poll": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            145,
+            0
+          ]
+        },
+        "funding": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            25,
+            0
+          ]
+        },
+        "pricing": {
+          "running_and_timer_present": [
+            false,
+            true
+          ],
+          "starts_and_busy": [
+            2,
+            0
+          ]
+        }
+      },
+      "ingress_debit": 6635620,
+      "later_drain_debit": 0,
+      "repeated_debit": 6593314,
+      "first_minus_repeat": 42306
+    }
+  },
+  "interpretation": "All lanes idle; no later drain work. First-control boundary charge differs from warm identical control; consistent with periodic allocation billing or cold state, not proven to an exact replica operation. Preserve raw and settled+control metrics separately; do not claim an unconditional daily saving."
+}

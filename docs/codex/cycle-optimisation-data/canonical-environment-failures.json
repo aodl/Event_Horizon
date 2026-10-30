@@ -1,0 +1,137 @@
+{
+  "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+  "failures": [
+    {
+      "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+      "failed_shard": "false-real_global:1:256 sample2",
+      "classification": "baseline PocketIC HTTP IncompleteMessage on update/tick; no behavioural assertion or accepted CSV; no surviving PocketIC/sandbox processes found",
+      "log": "observations/cycle-optimisation/canonical-production-real/false-real_global-1-256-2.failed-transport-1.log",
+      "log_sha256": "737f78d01fe252b356cab2a65442bc0ad0a8187ebd0ac4cc76bf561726f62368",
+      "rerun": "same immutable source/modules/harness/fixtures/settings; preserve11successful realpairs and42standardpairs; no production retry or assertion change",
+      "rerun_receipt": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::production_real_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "a7bf0c7e0dcabc9405c8af036c92136c57384123f700041a285b3534a4bf7221",
+        "log_sha256": "c2c07720ec2944e6a3bf4bf0f7a8f2a20fd4b216a53f1e94c647be5c1102a719"
+      },
+      "outcome": "Passing rerun preserves service inputs/ICsettings; native host environment is documented separately. Failed attempt has no accepted CSV row."
+    },
+    {
+      "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+      "failed_shard": "true-real_global:1:256 sample0",
+      "classification": "baseline PocketIC HTTP IncompleteMessage on update/tick; no behavioural assertion or accepted CSV; no surviving PocketIC/sandbox processes",
+      "log": "observations/cycle-optimisation/canonical-production-real/true-real_global-1-256-0.failed-transport-1.log",
+      "log_sha256": "78072a3545019a8a4b4ef6ddbc6aa3cc2e64b8b8fcfc9a830d170a511085518a",
+      "rerun": "Identical source/modules/fixtures/settings; enable native server stderr and sample task-descendant RSS. No execution limit or assertion change.",
+      "rerun_receipt": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::production_real_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "1522c78af3ba48c54d2a8913d3af0c268b15bb860fa92b7aafeb73ab783ee555",
+        "log_sha256": "3e590b29afce2d7d765b7f2baa3604ab6c9b567dfe052ffeb80d22daa8d7dd06"
+      },
+      "outcome": "Passing rerun preserves service inputs/ICsettings; native host environment is documented separately. Failed attempt has no accepted CSV row."
+    },
+    {
+      "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+      "failed_shard": "true-real_global:1:256 sample1",
+      "classification": "baseline HTTP IncompleteMessage; no behavioural assertion or accepted CSV",
+      "log": "observations/cycle-optimisation/canonical-production-real/true-real_global-1-256-1.failed-transport-1.log",
+      "log_sha256": "b67366999336e47ccaabc3f53fad6df4d7fdbb91467dfcc187b561eb30be6540",
+      "rerun": "Exact Cargo fixture invocation with native stderr directly unmuted; ordinary execution limits unchanged.",
+      "rerun_receipt": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::production_real_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "f7d399dc70abbe01c86957cd82a06c4a876f5605d002077e9eb00031c4b80906",
+        "log_sha256": "690c9d3bc6995bda67236d33b7fdb89d4ba85a6b53391ba24c7e332b633d332f"
+      },
+      "outcome": "Passing rerun preserves service inputs/ICsettings; native host environment is documented separately. Failed attempt has no accepted CSV row."
+    },
+    {
+      "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+      "failed_shard": "true-real_global:1:256 sample1 diagnosticrerun",
+      "classification": "candidate setup HTTP IncompleteMessage on instances/1/update/tick; native stderr contains no server panic; no accepted CSV",
+      "log": "observations/cycle-optimisation/canonical-production-real/true-real_global-1-256-1.failed-transport-2.log",
+      "log_sha256": "76fded11c50ce92846c6d6f474686566f57db7da294b5c5c226a5c1356a5d6c2",
+      "rerun": "MALLOC_ARENA_MAX=2 in native test processes only; source/modules/ICsettings/fixtures/call budgets unchanged.",
+      "rerun_receipt": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::production_real_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "f7d399dc70abbe01c86957cd82a06c4a876f5605d002077e9eb00031c4b80906",
+        "log_sha256": "690c9d3bc6995bda67236d33b7fdb89d4ba85a6b53391ba24c7e332b633d332f"
+      },
+      "outcome": "Passing rerun preserves service inputs/ICsettings; native host environment is documented separately. Failed attempt has no accepted CSV row."
+    }
+  ],
+  "resource_check": {
+    "available_memory_MiB": 4483,
+    "available_disk_KiB": 16807440,
+    "cause": "not established"
+  },
+  "diagnostic_note": "Previous outer MUTE override was superseded by the tracked matrix runner. Native RSS was captured; peak task RSS2,840,440KiB did not establish the transport cause.",
+  "native_monitor": {
+    "monitor_pid": 2910005,
+    "queue_pid": 2910008,
+    "returncode": 1,
+    "peak_task_descendant_RSS_KiB": 2840440,
+    "note": "Host process RSS sampled every2seconds; native stderr enabled. No simulated clocks, execution limits or fixtures altered.",
+    "clarification": "Matrix runner forced MUTE_SERVER=1, overriding outer logging request. Native RSS samples are valid host diagnostics; direct unmuted shard later captured actual stderr.",
+    "samples_sha256": "f20a7fb8089e003aabda7f78537fc8745e28b34f3321eef75048ddeea1e0b2bc",
+    "classification": "Native host RSS only, not canister heap or IC execution cost; no confirmed transport cause."
+  }
+}

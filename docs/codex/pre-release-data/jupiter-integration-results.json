@@ -1,0 +1,174 @@
+{
+  "source": "e60b79fc428b63cde629174a0f1c40d5fa372623",
+  "inspected_at": "2026-10-29T09:29:55.409114+00:00",
+  "results": [
+    {
+      "name": "faucet-event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-faucet",
+        "--test",
+        "jupiter_faucet_integration",
+        "event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 265.3716039657593,
+      "log_sha256": "0ecaa244da37a62444096baef68862947d44edeec275f9bfdaf67708b6bd4cd6",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 60 filtered out; finished in 70.25s"
+      ]
+    },
+    {
+      "name": "disburser-event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-disburser",
+        "--test",
+        "jupiter_disburser_integration",
+        "event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 159.88809323310852,
+      "log_sha256": "3b6126c381eb7fa0f9666ada98f2594864a48d18763610649926a50eb1ffc970",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 142.51s"
+      ]
+    },
+    {
+      "name": "relay-event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-relay",
+        "--test",
+        "jupiter_relay_integration",
+        "event_horizon_poke_authorization_filtering_and_cadence_are_independent",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 180.10014367103577,
+      "log_sha256": "2f415a7d9df7a92ebb00a11d330e3e609f65e1620d1f4578fe16209a17c7775f",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 59 filtered out; finished in 138.25s"
+      ]
+    },
+    {
+      "name": "faucet-event_horizon_small_hints_do_no_work_and_daily_poll_finds_small_funding",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-faucet",
+        "--test",
+        "jupiter_faucet_integration",
+        "event_horizon_small_hints_do_no_work_and_daily_poll_finds_small_funding",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 57.990742206573486,
+      "log_sha256": "87902caa7160684709a6ef7c3756c8cef9f31cd6e28a020381f9e1ad96c45c99",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 60 filtered out; finished in 55.58s"
+      ]
+    },
+    {
+      "name": "historian-staking_poke_prefilters_amount_and_checks_one_bounded_page",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-historian",
+        "--test",
+        "jupiter_historian_integration",
+        "staking_poke_prefilters_amount_and_checks_one_bounded_page",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 456.4587593078613,
+      "log_sha256": "e76985a3e92be80a278c1291d41a87a05cb6173b301dd89cb29bd0c0f0da7d27",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 353.37s"
+      ]
+    },
+    {
+      "name": "historian-historian_poke_rejects_ingress_and_untrusted_canisters",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-historian",
+        "--test",
+        "jupiter_historian_integration",
+        "historian_poke_rejects_ingress_and_untrusted_canisters",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 73.44712257385254,
+      "log_sha256": "7673fa4e98a2b11f69cbd2b9b4228d4294f5ba59db6b327ef5ced25872911d30",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 65.81s"
+      ]
+    },
+    {
+      "name": "historian-staking_poke_trailing_check_and_normal_poll_remain_independent",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "jupiter-historian",
+        "--test",
+        "jupiter_historian_integration",
+        "staking_poke_trailing_check_and_normal_poll_remain_independent",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 34.51761507987976,
+      "log_sha256": "2eb8178eac5dedc625eddf8e710658d0df0256cd2e7838f703b06381783768ac",
+      "final_result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 32.89s"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "memo-policy",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "jupiter-memo-policy",
+      "--lib"
+    ],
+    "returncode": 0,
+    "log_sha256": "04ae89ffe149aa809f6ad253c1c364a84de02eace39456faea22886e8de236cc",
+    "final_result_lines": [
+      "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+    ]
+  },
+  {
+    "name": "wire-contract",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "jupiter-ic-clients",
+      "--lib",
+      "event_horizon"
+    ],
+    "returncode": 0,
+    "log_sha256": "94f6dcb833b1c58fc6c93bb0b513312660145b7697569f003a1c97a8ad585f41",
+    "final_result_lines": [
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 98 filtered out; finished in 0.01s"
+    ]
+  },
+  {
+    "name": "historian-alias",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "jupiter-historian",
+      "--lib",
+      "alias"
+    ],
+    "returncode": 0,
+    "log_sha256": "52c271a90433f8afa83a9306202091f98cdac1a9a115e145835aaab52e936b96",
+    "final_result_lines": [
+      "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 304 filtered out; finished in 27.41s"
+    ]
+  }
+]

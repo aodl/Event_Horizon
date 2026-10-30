@@ -1,0 +1,29 @@
+{
+  "source_inspected": "e60b79fc428b63cde629174a0f1c40d5fa372623",
+  "source_clean": true,
+  "build_provenance_reestablished": false,
+  "local_build_info": {
+    "inputs": {
+      ".icp/data/mappings/ic.ids.json": "9edb56a8a7cf4ced7c6bc4963cc0d2e4d7bd09d2eeabd13191c800be290b7872",
+      "Cargo.lock": "02764432b41e6527c6fbbca3ecb1cffc0c3930071e12c24f6a812fa479d2c790",
+      "package-lock.json": "4937a4d93885104e53c48269575d2ba41fd5102a045c452783b7baf120769c28",
+      "package.json": "5cd8c417b6854c80d1db3dc8e1c518e3848a088c84465395440cbf67fdf22fe0",
+      "rust-toolchain.toml": "081815e5d42fd28c23c77fc1bba2c7c2fee495281ef9c1e04dc7091c56000679",
+      "tools/scripts/build-canister": "a35bff8408492dc5b714fb2bfcebbd802387c2ce9ff0fec6e7ebf51950407c4e"
+    },
+    "source_date_epoch": "1700000000",
+    "toolchain": {
+      "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+      "ic-wasm": "ic-wasm 0.9.7",
+      "node": "v18.20.4",
+      "npm": "9.2.0",
+      "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+    }
+  },
+  "raw_module_hashes": {
+    "faucet": "1952ddcf79e902e272a63b7b3964d3487e0b756f45a982b2f91f943ea0b7d5d9",
+    "disburser": "df4dda84aae43d6eda947097dab0697f245b5aff071b5d0116b37c94d7d7832a",
+    "historian": "716b75ecb44eb0b13b5be7d52704b41415f4cb8f1ce95b979726903feb0b98c7",
+    "relay": "8db17b838a57e67c733b4d5d2ff098e07242e9d41784c35396f834ba0991b661"
+  }
+}

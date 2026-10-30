@@ -60,20 +60,28 @@ impl Subscription {
         }
     }
     pub fn account(&self, neuron_governance: Option<Principal>) -> Option<Account> {
-        match self.target {
-            WatchTarget::Subaccount(number) => Some(Account {
-                owner: self.subscriber,
-                subaccount: Some(numbered_subaccount(number)),
-            }),
-            WatchTarget::NeuronNonce(nonce) => neuron_governance.map(|owner| Account {
-                owner,
-                subaccount: Some(neuron_staking_subaccount(self.subscriber, nonce)),
-            }),
-        }
+        watched_account(self.subscriber, self.target, neuron_governance)
     }
 
     pub fn matches(&self, amount_units: &Nat) -> bool {
         self.minimum_units == 0u8 || amount_units >= &self.minimum_units
+    }
+}
+
+fn watched_account(
+    controller: Principal,
+    target: WatchTarget,
+    neuron_governance: Option<Principal>,
+) -> Option<Account> {
+    match target {
+        WatchTarget::Subaccount(number) => Some(Account {
+            owner: controller,
+            subaccount: Some(numbered_subaccount(number)),
+        }),
+        WatchTarget::NeuronNonce(nonce) => neuron_governance.map(|owner| Account {
+            owner,
+            subaccount: Some(neuron_staking_subaccount(controller, nonce)),
+        }),
     }
 }
 
@@ -197,16 +205,6 @@ impl SubjectSubscription {
         )
     }
     pub fn account(&self, governance: Option<Principal>) -> Option<Account> {
-        let mut derivation = self.subscription.clone();
-        derivation.subscriber = self.subject;
-        derivation.account(governance)
-    }
-    pub fn merge(self, other: Self) -> Self {
-        assert_eq!(self.identity(), other.identity());
-        if self.subscription.minimum_units <= other.subscription.minimum_units {
-            self
-        } else {
-            other
-        }
+        watched_account(self.subject, self.subscription.target, governance)
     }
 }

@@ -1,0 +1,32 @@
+{
+  "validated_source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+  "canonical_pairs": 72,
+  "shadow_diagnostic_pairs": 8,
+  "canonical_upgrade_scenarios": 2,
+  "canonical_frontend_requests": 20,
+  "files": {
+    "canonical-build-info.json": "94ecf4da23d7291c9da089620c038dba6a3192c6bc567db1920b426132430238",
+    "canonical-checks.json": "443ffb005f8d14a5c4f1f0ace3ab5e880e10f70000e9260d373e512afda74c3e",
+    "canonical-environment-failures.json": "35e0f6afdb32f9c2e369031d00702b2564a0f56d57821fe7d7e2c38c595badc1",
+    "canonical-frontend.csv": "c46e4b5d9d4a9156ed39f640a8bc3f074ea85c38e1658326e84ff79f9197632f",
+    "canonical-native-host-environment.json": "7a04d809067b68aef65cd669818079f28659c414ac6bc36041fda909b4d1e815",
+    "canonical-native-rss.csv": "f20a7fb8089e003aabda7f78537fc8745e28b34f3321eef75048ddeea1e0b2bc",
+    "canonical-production-inputs.json": "838ea5a5b177feeb35a21d07799849adf3dd60468ac02c0c25d5b4589149780a",
+    "canonical-production-real-inputs.json": "57bcb3328b3a4a61a00607b61d01f76aed49971feb1c1491735e4cbfa90b09b2",
+    "canonical-production-real-receipts.json": "0b62dc96e013fac65b97e30497ac3a2e24ca43d2714692acdfe5b3a8e53b989f",
+    "canonical-production-real-summary.csv": "c8d0d9915782bd5d10db1f721448984beb4540ee4ab3188c48874ec710fc107b",
+    "canonical-production-real.csv": "5ca33d0e7ecfe5e419a1f851b549565f33e293aa02a8028bc74e7f37779a4c5d",
+    "canonical-production-receipts.json": "9f5ac3baf49719e974e211004ac4b928ab89b7add3502e12bf5644c54af06dfb",
+    "canonical-production-summary.csv": "8d80666464ba9a543722107a1265ae911b40860e95ec34ae6fd8de3236183402",
+    "canonical-production.csv": "e92d8cec8ef17520569487bf988ac3065f517d2a059aaad2a2e98178904181c1",
+    "canonical-release-artifacts.sha256": "93910f2566d89c6a2d589d6f533b4ade9cf4b3fd9d3f4f61326c749d90e8c191",
+    "canonical-remote-check.json": "2e8e2fe7b1c47096b43dd162fa50d7a51b0a1460f5f3406f9424533a8f1b222d",
+    "canonical-shadow-complete.csv": "79c0d9c6e2d7ca6a07c04ec6a6ac05259bd0edce1d5d0c7fc5e8d9f6da04747d",
+    "canonical-shadow-inputs.json": "4d59b7525a3c01ad95dbf89ad7fd378f1fe7ff9afb47786ea05c42ccd68e4ee3",
+    "canonical-shadow-metrics.csv": "a55874a6a4cb8c37638893b596abe5ef435a137f54353bced0b7a9c508871a28",
+    "canonical-shadow-overhead.csv": "c786a1d69c37dbbb2708de725af1eb9e18409f272da1d11dcece48ac2c407f6f",
+    "canonical-validation.json": "762578916353d553cd9de0b4357f670a4ae9f4df6e7732707a04dbd0008c0800",
+    "historical-sanity.json": "e9eeda47908c185183348ca94119dcb8cf5fe45951732a2e4ae4c2a65984fe21",
+    "historical-sanity.md": "d59341ceb1c51001f959ae1c91068e92570d6bb627bccb4e9c8a0da07f391c99"
+  }
+}

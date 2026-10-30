@@ -552,6 +552,26 @@ fn debug_append_transfer(arg: DebugAppendTransfer) -> u64 {
         )
     })
 }
+// Fixture setup only: keep large paired backlogs outside measured intervals.
+#[ic_cdk::update]
+fn debug_append_transfers(transfers: Vec<DebugAppendTransfer>) -> u64 {
+    assert!(transfers.len() <= 256);
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        for arg in transfers {
+            append_transfer(
+                &mut state,
+                arg.from,
+                arg.to,
+                arg.amount_e8s,
+                10_000,
+                arg.icrc1_memo,
+                0,
+            );
+        }
+        state.icrc_blocks.len() as u64
+    })
+}
 #[ic_cdk::update]
 fn debug_append_batch(arg: DebugAppendBatch) -> u64 {
     assert!(

@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-29T09:40:27.665878+00:00",
+  "command": [
+    "icp",
+    "canister",
+    "call",
+    "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "icrc1_balance_of",
+    "(record { owner = principal \"eo6ei-gaaaa-aaaar-qchra-cai\"; subaccount = null })",
+    "-n",
+    "ic",
+    "--query",
+    "--identity",
+    "anonymous",
+    "--candid",
+    "observations/pre-release-resume/icp-balance.did"
+  ],
+  "candid": "service : { icrc1_balance_of : (record { owner : principal; subaccount : opt blob }) -> (nat) query; }\n",
+  "returncode": 0,
+  "stdout": "(0 : nat)\n",
+  "stderr": ""
+}

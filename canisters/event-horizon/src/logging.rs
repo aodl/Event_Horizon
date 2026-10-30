@@ -155,7 +155,7 @@ pub fn daily_health() {
                 }
             },
         );
-    ic_cdk::println!("HEALTH day={} observed_ledger={} reader={} symbol={} neuron_support={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, reader, symbol, neuron_support, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscribers().len(), crate::pricing::get_pricing().initialized);
+    ic_cdk::println!("HEALTH day={} observed_ledger={} reader={} symbol={} neuron_support={} mode={:?} liquid_cycles={} observed_cursor={} admission_cursor={} watched_accounts={} global_subscribers={} pricing_initialized={}", day, instance.observed_ledger, reader, symbol, neuron_support, meta.polling_mode, ic_cdk::api::canister_liquid_cycle_balance(), meta.observed_next_block, meta.admission_next_block, crate::state::subscription_count(), crate::state::global_subscription_count(), crate::pricing::get_pricing().initialized);
     meta.last_health_log_day = Some(day);
     crate::state::write_metadata(meta);
 }

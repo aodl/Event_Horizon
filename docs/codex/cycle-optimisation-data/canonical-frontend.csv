@@ -1,0 +1,2 @@
+profile,wasm_bytes,install_and_certification_cycles,idle_cycles_per_day,allocated_heap,queries,response_payload_bytes,reported_query_stats_calls,reported_query_stats_instructions
+2,4009935,13914479233,1176063315,3997696,20,4872348,13,267326189

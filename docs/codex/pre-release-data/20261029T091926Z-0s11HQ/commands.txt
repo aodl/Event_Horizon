@@ -1,0 +1,9 @@
+backend-status.txt: icp canister status eo6ei-gaaaa-aaaar-qchra-cai -n ic --public --identity anonymous
+frontend-status.txt: icp canister status ej7c4-lyaaa-aaaar-qchrq-cai -n ic --public --identity anonymous
+backend-instance.txt: icp canister call eo6ei-gaaaa-aaaar-qchra-cai get_instance \(\) -n ic --query --identity anonymous --candid /home/codexdev/src/Event_Horizon/canisters/event-horizon/event_horizon.did
+backend-pricing.txt: icp canister call eo6ei-gaaaa-aaaar-qchra-cai get_pricing \(\) -n ic --query --identity anonymous --candid /home/codexdev/src/Event_Horizon/canisters/event-horizon/event_horizon.did
+backend-logs.txt: icp canister logs eo6ei-gaaaa-aaaar-qchra-cai -n ic --identity anonymous
+backend-public-status.txt: node /home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs canister_status eo6ei-gaaaa-aaaar-qchra-cai
+frontend-public-status.txt: node /home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs canister_status ej7c4-lyaaa-aaaar-qchrq-cai
+backend-metrics.txt: node /home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs canister_metrics eo6ei-gaaaa-aaaar-qchra-cai
+frontend-metrics.txt: node /home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs canister_metrics ej7c4-lyaaa-aaaar-qchrq-cai

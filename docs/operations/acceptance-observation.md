@@ -1,13 +1,18 @@
 # Acceptance cycle observation
 
-`./tools/scripts/mainnet-observe [backend-id] [frontend-id]` is a read-only operator command. Defaults are the canonical ICP backend `eo6ei-gaaaa-aaaar-qchra-cai` and frontend `ej7c4-lyaaa-aaaar-qchrq-cai`. It writes a UTC-stamped ignored `observations/` directory containing revision, status, backend instance/pricing/logs, and management-canister metrics.
+`./tools/scripts/mainnet-observe [backend-id] [frontend-id]` is a read-only operator command. Defaults are the canonical ICP backend `eo6ei-gaaaa-aaaar-qchra-cai` and frontend `ej7c4-lyaaa-aaaar-qchrq-cai`. It writes a unique UTC-stamped ignored `observations/` directory containing revision, commands, per-read exit results, public status, backend instance/pricing/logs, and attempted management-canister metrics. Prepare the locked SDK dependency with `cargo run -p xtask -- frontend_setup` on a fresh checkout.
 
 Run hourly or daily during focused acceptance testing and around each observed
-Faucet funding receipt. `canister_metrics` requires controller authority; after
-controllers are removed the script records that metrics are unavailable without
-failing the snapshot.
+Faucet funding receipt. All script reads use an anonymous identity. Native
+management status/metrics queries explicitly route through the observed
+canister using the pinned SDK; CLI 1.2.0 cannot supply this routing override.
+`canister_metrics` requires controller authority and therefore normally rejects
+these anonymous reads, even while the canister has controllers. The script
+records every failed command and returns nonzero while retaining all successful
+partial observations. A failure never means empty logs or zero consumption.
+Verify `results.tsv` before drawing conclusions.
 
-For two timestamps, subtract each cumulative `cycles_consumed` counter. Divide the total delta by elapsed days for cycles/day and divide each category delta by the total for category contribution. The counters distinguish memory, compute allocation, ingress induction, instructions, request/response transmission, HTTP outcalls, and explicitly burned cycles, so incoming top-ups do not obscure burn.
+For two independently obtained successful, controller-authorized metrics readings, subtract each cumulative `cycles_consumed` counter. Divide the total delta by elapsed days for cycles/day and divide each category delta by the total for category contribution. The counters distinguish memory, compute allocation, ingress induction, instructions, request/response transmission, HTTP outcalls, and explicitly burned cycles, so incoming top-ups do not obscure burn.
 
 Correlate, without treating any one item as sufficient proof:
 

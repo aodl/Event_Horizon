@@ -1,0 +1,15 @@
+{
+  "change": "MALLOC_ARENA_MAX=2 for both baseline and candidate native PocketIC/test processes",
+  "purpose": "bound native glibc allocation arenas after transport failures; cause not established",
+  "scope": "host allocator only; no Wasm allocator, metering, execution limits, IC clocks, subnet topology, balances, fixtures, receiver assertions or artifact changed",
+  "reference": "https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html",
+  "starting_shard": "true-real_global-1-256 sample1; prior default-host accepted sample0 retained for exactcyclecomparison",
+  "comparison": "Every raw CSV field except sample is identical between default-host sample0 and native-arena-bound sample1, in both variants.",
+  "applies_to_remaining_shards": [
+    "true-real_global-1-256-1",
+    "true-real_global-1-256-2",
+    "true-real_growing-4096-512-0",
+    "true-real_growing-4096-512-1",
+    "true-real_growing-4096-512-2"
+  ]
+}

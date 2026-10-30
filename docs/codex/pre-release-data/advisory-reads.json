@@ -1,0 +1,17 @@
+[
+  {
+    "at": "2026-10-29T09:04:23.606222+00:00",
+    "url": "https://api.osv.dev/v1/vulns/GHSA-qwgh-2vcv-g2f7",
+    "sha256": "5c29be245f0280e8a8124ba5d2cb4bf0c8a94d9d1ba958049a08f228a08fce83"
+  },
+  {
+    "at": "2026-10-29T09:04:23.940121+00:00",
+    "url": "https://api.github.com/advisories/GHSA-qwgh-2vcv-g2f7",
+    "sha256": "4a04eb3321183b83d27b12a6228c6505b06796e6e8fd8b1c8cca027ed607d8e7"
+  },
+  {
+    "at": "2026-10-29T09:04:24.166284+00:00",
+    "url": "https://api.github.com/repos/RustCrypto/utils/security-advisories/GHSA-qwgh-2vcv-g2f7",
+    "sha256": "8bdb1afeb04e221d52b37ce72dddf78837d5b222a445e430386b8f35d45de304"
+  }
+]

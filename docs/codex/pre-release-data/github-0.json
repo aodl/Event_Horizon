@@ -1,0 +1,50 @@
+{
+  "status": "fulfilled",
+  "value": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Action completed."
+      }
+    ],
+    "structuredContent": {
+      "url": "https://github.com/aodl/Event_Horizon/pull/12",
+      "number": 12,
+      "state": "open",
+      "merged": false,
+      "mergeable": true,
+      "draft": false,
+      "body": null,
+      "title": "Codex/cycle optimisation 81c5a0d",
+      "base": "main",
+      "base_sha": "81c5a0d72ff188f5ee9f412deb20566a12307642",
+      "head": "codex/cycle-optimisation-81c5a0d",
+      "head_sha": "dd4a88993b92f522a08296786e9afd453b4a3101",
+      "head_repo_id": 1381990300,
+      "head_repo_full_name": "aodl/Event_Horizon",
+      "merge_commit_sha": "ee59f727002869eea4cad0cdb83a6b138cf435ac",
+      "user": {
+        "login": "aodl",
+        "name": "aodl",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/14985227?v=4",
+        "id": 14985227
+      },
+      "requested_reviewers": null,
+      "requested_team_reviewers": null,
+      "diff": null,
+      "comments": null,
+      "created_at": "2026-10-28T20:44:25Z",
+      "updated_at": "2026-10-28T20:44:25Z",
+      "closed_at": null,
+      "merged_at": null,
+      "commits": 53,
+      "changed_files": 199,
+      "additions": 51300,
+      "deletions": 258,
+      "display_url": "https://github.com/aodl/Event_Horizon/pull/12",
+      "display_title": "Codex/cycle optimisation 81c5a0d"
+    },
+    "isError": false
+  }
+}

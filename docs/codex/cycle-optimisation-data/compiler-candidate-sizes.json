@@ -1,0 +1,86 @@
+[
+  {
+    "profile": "z",
+    "artifact": "event_horizon",
+    "raw_bytes": 1565451,
+    "shrunk_bytes": 1431613,
+    "sha256": "8fe988eac9366882e91bde05d39aadcf8c042e8c53f154f020e064f264231fcb"
+  },
+  {
+    "profile": "z",
+    "artifact": "event_horizon_frontend",
+    "raw_bytes": 3848368,
+    "shrunk_bytes": 3757901,
+    "sha256": "2658a8abc721c4f92f4af2c1ce3116bad08826c1b21aca6e18327515314754c3"
+  },
+  {
+    "profile": "z",
+    "artifact": "event_horizon_debug",
+    "raw_bytes": 1676498,
+    "shrunk_bytes": 1530921,
+    "sha256": "613d6ec27f83bdca1a76235cd6a39c3cc2bda1856ee390cf7d04873b50643962"
+  },
+  {
+    "profile": "s",
+    "artifact": "event_horizon",
+    "raw_bytes": 1859094,
+    "shrunk_bytes": 1730626,
+    "sha256": "b6ae0e92abfdf9edb109ac8b8af4c3e2070bac5f95a22f643a7978f3957e650c"
+  },
+  {
+    "profile": "s",
+    "artifact": "event_horizon_frontend",
+    "raw_bytes": 3951771,
+    "shrunk_bytes": 3867010,
+    "sha256": "2277bef18fcf64f939006a42ea49899126369eb893d5bf88d954d657a9571b4e"
+  },
+  {
+    "profile": "s",
+    "artifact": "event_horizon_debug",
+    "raw_bytes": 1994318,
+    "shrunk_bytes": 1853876,
+    "sha256": "6a9a4c5aa99679c6b1679bbe0ab3aaaf1bd14fbc635901a0142903d62f8f82d4"
+  },
+  {
+    "profile": "2",
+    "artifact": "event_horizon",
+    "raw_bytes": 1967044,
+    "shrunk_bytes": 1847228,
+    "sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970"
+  },
+  {
+    "profile": "2",
+    "artifact": "event_horizon_frontend",
+    "raw_bytes": 4089607,
+    "shrunk_bytes": 4009935,
+    "sha256": "01fa3cc38348f0fa4433d5bbe780caeb9f2cf7c768f6c8f789017ad537b22d2f"
+  },
+  {
+    "profile": "2",
+    "artifact": "event_horizon_debug",
+    "raw_bytes": 2116981,
+    "shrunk_bytes": 1983637,
+    "sha256": "f3979351c9db111c7bcecdd842a5ccf52b3db0ce7258a2c7cccf39348c17c816"
+  },
+  {
+    "profile": "3",
+    "artifact": "event_horizon",
+    "raw_bytes": 1990877,
+    "shrunk_bytes": 1870733,
+    "sha256": "7fb2cc69817a589f48d176add2e94e556755c727fe4e54dbd30d0128fff5f76d"
+  },
+  {
+    "profile": "3",
+    "artifact": "event_horizon_frontend",
+    "raw_bytes": 4151782,
+    "shrunk_bytes": 4071625,
+    "sha256": "9bff184c8ae272038bad9a626e5b07ed0132cf41ff0050a350107a63d8028ede"
+  },
+  {
+    "profile": "3",
+    "artifact": "event_horizon_debug",
+    "raw_bytes": 2141949,
+    "shrunk_bytes": 2008191,
+    "sha256": "2668748c718e16dd0a862a79f3880a986eff7b16ea88cf9a7547733376a2e167"
+  }
+]

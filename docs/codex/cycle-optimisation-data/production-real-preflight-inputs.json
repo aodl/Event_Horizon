@@ -1,0 +1,27 @@
+{
+  "source": "53ca069078e1b372ec2e9457b34901f91e678f76",
+  "host": {
+    "cycle_optimisation.rs": "d3684833998a581325092870ecf7344c18b33d9edc794c9d2d09e4420edfee7a",
+    "cycle_optimisation_scheduler.rs": "e721f8beee2856212a6896ec6d158378c1806386015823fcec2fbfe9c1f76c1e",
+    "cycle_optimisation_small.rs": "2a3ee54a519684411b439241d9f7d5fe46cde4320c01a3388713723274ca6691",
+    "cycle_optimisation_production_real.rs": "8854ba35c249d90fdc7160fea049221e42b94c03a7e4c329344d3fb40c27371f",
+    "cycle_optimisation_interleaving.rs": "fed4442751bab2dcbe6f75a8099c7b5f77fc47ebf9da2db15981943ad5182b16",
+    "cycle_optimisation_production_upgrade.rs": "8528a45d419b29dc77f6025d6d32faf3531a7d66f5d6669890b63b382ad347bb",
+    "cycle_optimisation_publication.rs": "3a3deb1496befde0f163e27c6cdf23d27bb78d12e9e6aa067eb3b29f09972ee6",
+    "cycle_optimisation_reserve.rs": "43790fc0937c90b8d1cee66ca98e9cf3e14c89b6e11741ebe8db09903b9d50d6",
+    "cycle_optimisation_frontend.rs": "521535b20aefcd1916176f479d17b1679076df5e9fd86b356462479cce156691",
+    "cycle_optimisation_state.rs": "46d7fcf0422a36c18ca62b099d35f43084d790e6e65ae853339eec3a10327b7d"
+  },
+  "candidate_sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970",
+  "baseline_sha256": "2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528",
+  "mocks": {
+    "mock_cmc.wasm": "3f7e91db1d1780bd627e9ec1800d7c3f02ac8d527f1d850456b9f1e96ffda92e",
+    "mock_sns_root.wasm": "763a94b1890321e219815d9c82bcf33827db7de71da146b0e60a6bf18c16689c",
+    "mock_icrc3_ledger.wasm": "c6c16a6797299d8f3d94b581ad8ff35e0fae432e5f400882b19f9a9ee7782df3",
+    "mock_index_poke.wasm": "631397f4374e3cc33f047fcec5605d0e1c6aee791188123bf735a4da575880eb",
+    "mock_icp_ledger.wasm": "b37ba83d210473d0821237427b03dcf1c64cc45622ab9345388d141acbc44bf7",
+    "mock_historian.wasm": "b6bb238cd6b282569212116ecaa0fd8db2791865c5e6c55f1397061821bf0076",
+    "mock_subscriber.wasm": "82060daeeb0280595e628a9e828ee3bc46e2a871551a60c8566e8b92bb5a3566"
+  },
+  "purpose": "one-pair fixture preflights only; canonical three-sample headlines separate"
+}

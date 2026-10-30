@@ -11,11 +11,14 @@ artifacts="$(mktemp -d "$ROOT/.release-artifacts.XXXXXX")"
 trap 'rm -rf "$artifacts"' EXIT
 npm ci
 npm run build:frontend
-cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon -p event-horizon-frontend
+# Build the same package set twice to preserve Cargo feature unification.
+# Keep the backend's reviewed profile and isolate the size-oriented frontend.
+CARGO_PROFILE_RELEASE_OPT_LEVEL=2 cargo build --locked --target wasm32-unknown-unknown --release -p event-horizon -p event-horizon-frontend
+CARGO_PROFILE_RELEASE_OPT_LEVEL=z cargo build --locked --target wasm32-unknown-unknown --release --target-dir target/frontend-size -p event-horizon -p event-horizon-frontend
 
 ic-wasm target/wasm32-unknown-unknown/release/event_horizon.wasm \
   -o "$artifacts/event_horizon.wasm" shrink
-ic-wasm target/wasm32-unknown-unknown/release/event_horizon_frontend.wasm \
+ic-wasm target/frontend-size/wasm32-unknown-unknown/release/event_horizon_frontend.wasm \
   -o "$artifacts/event_horizon_frontend.wasm" shrink
 
 python3 tools/audit-wasm.py "$artifacts/event_horizon.wasm" --backend
@@ -33,6 +36,7 @@ def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def ver(args): return subprocess.check_output(args, text=True).strip()
 print(json.dumps({
   "source_date_epoch": os.environ.get("SOURCE_DATE_EPOCH"),
+  "profiles": {"backend":"2", "frontend":"z", "package_set":"event-horizon,event-horizon-frontend", "frontend_target":"target/frontend-size"},
   "inputs": {x: sha(x) for x in ["Cargo.lock","package-lock.json","rust-toolchain.toml","SPEC.md","tools/scripts/build-release"]},
   "toolchain": {"rustc":ver(["rustc","-V"]),"cargo":ver(["cargo","-V"]),"ic-wasm":ver(["ic-wasm","--version"]),"node":ver(["node","-v"]),"npm":ver(["npm","-v"])},
 }, sort_keys=True, indent=2))

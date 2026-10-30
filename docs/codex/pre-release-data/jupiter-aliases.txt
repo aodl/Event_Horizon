@@ -1,0 +1,2 @@
+Error: The replica returned a rejection error: reject code CanisterError, reject message Error from Canister j5gs6-uiaaa-aaaar-qb5cq-cai: Canister has no query method 'list_canister_aliases'..
+Check that the method being called is exported by the target canister. See documentation: https://docs.internetcomputer.org/references/execution-errors#method-not-found, error code Some("IC0536")

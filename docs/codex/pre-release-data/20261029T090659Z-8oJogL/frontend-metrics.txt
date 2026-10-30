@@ -1,0 +1,11 @@
+file:///home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs:25
+if (result.status !== 'replied') throw new Error(JSON.stringify({ status: result.status, reject_code: result.reject_code, reject_message: result.reject_message, error_code: result.error_code }));
+                                       ^
+
+Error: {"status":"rejected","reject_code":5,"reject_message":"Only the controllers of the canister ej7c4-lyaaa-aaaar-qchrq-cai can control it.\nCanister's controllers: amzih-bssz4-twanl-zf6nr-bqsnn-d7rlt-eerbc-oe7vv-uggn5-3naqo-3ae zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\nSender's ID: 2vxsx-fae\nExecute this call from a controller of the target canister or add the current caller as a controller. See documentation: https://docs.internetcomputer.org/references/execution-errors#invalid-controller","error_code":"IC0512"}
+    at file:///home/codexdev/src/Event_Horizon/tools/scripts/public-management-query.mjs:25:40
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.15.0
+
+Observation exit status: 1

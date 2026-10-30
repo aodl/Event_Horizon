@@ -1,0 +1,98 @@
+{
+  "funding_assumptions": {
+    "account_reference_endowment_icp_e8s": 1000000000,
+    "range_reference_endowment_icp_e8s": 2000000000,
+    "global_reference_endowment_icp_e8s": 100000000000,
+    "gross_maturity_apy_basis_points": 700,
+    "effective_payout_apy_basis_points": 560,
+    "xdr_per_icp_permyriad": 20000,
+    "initial_recognition_delay_seconds": 1209600,
+    "conversion_delay_seconds": 3600,
+    "conversion_fee_e8s": 10000,
+    "delivery_shortfall_basis_points": 0,
+    "surplus_diversion_basis_points": 0
+  },
+  "policies": [
+    {
+      "id": "current",
+      "thresholds": {
+        "economy_entry": 2000000000000,
+        "economy_exit": 1000000000000,
+        "standard_entry": 5000000000000,
+        "standard_exit": 3000000000000,
+        "fast_entry": 10000000000000,
+        "fast_exit": 6000000000000,
+        "very_fast_entry": 25000000000000,
+        "very_fast_exit": 15000000000000,
+        "continuous_entry": 100000000000000,
+        "continuous_exit": 60000000000000
+      }
+    }
+  ],
+  "workloads": [
+    {
+      "id": "expected",
+      "architecture": "canonical_icp_shared_scan",
+      "blocks_per_second_milli": 0,
+      "specific_matching_blocks_basis_points": 0,
+      "specific_subscribers_per_matching_block_milli": 0,
+      "global_subscribers": 0,
+      "specific_subscribers": 0,
+      "global_specific_overlap_subscribers": 0,
+      "initial_backlog_blocks": 0,
+      "assumed_blocks_per_poll_capacity": 16384,
+      "productive_endowment_backing": {
+        "protocol_endowment_icp_e8s": 0,
+        "account_endowments": 0,
+        "range_endowments": 0,
+        "global_endowments": 0,
+        "admission_price_basis_points_of_reference": 10000,
+        "coupled_to_subscriber_workload": false
+      }
+    },
+    {
+      "id": "expected_generic",
+      "architecture": "generic_icrc3_separate_admission_scan",
+      "blocks_per_second_milli": 0,
+      "specific_matching_blocks_basis_points": 0,
+      "specific_subscribers_per_matching_block_milli": 0,
+      "global_subscribers": 0,
+      "specific_subscribers": 0,
+      "global_specific_overlap_subscribers": 0,
+      "initial_backlog_blocks": 0,
+      "assumed_blocks_per_poll_capacity": 16384,
+      "productive_endowment_backing": {
+        "protocol_endowment_icp_e8s": 0,
+        "account_endowments": 0,
+        "range_endowments": 0,
+        "global_endowments": 0,
+        "admission_price_basis_points_of_reference": 10000,
+        "coupled_to_subscriber_workload": false
+      }
+    }
+  ],
+  "continuous_effective_poll_interval_seconds": 1,
+  "continuous_effective_poll_intervals_seconds": [
+    1,
+    2,
+    5,
+    10
+  ],
+  "equal_starting_balances_cycles": [
+    6000000000000,
+    110000000000000
+  ],
+  "continuous_runway_targets_days": [
+    7,
+    14,
+    30,
+    60,
+    90
+  ],
+  "lower_tier_runway_targets_days": [
+    30,
+    30,
+    30,
+    30
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-29T09:35:24.409225+00:00",
+  "test": "tests::cycle_optimisation::observed_54d8b4b_production_upgrades_preserving_financial_state",
+  "source_sha256": "505522a42c24abc4d16c6fcd3f95d8ba43dbfff77876aa8c9f4adcbc64b94682",
+  "log": "observations/pre-release-resume/historical-isolated-low-water.log",
+  "log_sha256": "932fbd1000fa8ea12ad7b8bdd6dcb1b8a60a3106820443b9d1c5a23b36ba3af8",
+  "returncode": 0,
+  "case_count": 4,
+  "result": "1 passed; 0 failed; 0 ignored; 128 filtered out",
+  "seconds": 368.81,
+  "native_compile_environment": {
+    "DFX_IDENTITY": "codex_local",
+    "POCKET_IC_MUTE_SERVER": "1",
+    "CARGO_MANIFEST_DIR": "/home/codexdev/src/Event_Horizon/tools/xtask"
+  },
+  "production_candidate_sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970"
+}

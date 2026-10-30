@@ -1,0 +1,67 @@
+{
+  "mode": "debug",
+  "baseline": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/e/event_horizon_debug.wasm",
+  "candidate": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/f/event_horizon_debug.wasm",
+  "baseline_sha256": "9b9979b99852b58a46edaf145fcbf3c6ed79f9d0d1166c627275edf3b323744d",
+  "candidate_sha256": "4eca8534fdfc96656278374ab1de346970b1ecb72706428036ac130f1edad3a7",
+  "harness_sha256": {
+    "tests/pocketic/src/cycle_optimisation.rs": "ef59aa5b5fb2f72514a0bb40cb788e0397d7e76523b22c04e09bc3f64a03e10d",
+    "tests/pocketic/src/cycle_optimisation_frontend.rs": "64f45489b28777c43155a678ce83755c1c48263fb1fc0a9752578ea1a69d79d4",
+    "tests/pocketic/src/cycle_optimisation_interleaving.rs": "fed4442751bab2dcbe6f75a8099c7b5f77fc47ebf9da2db15981943ad5182b16",
+    "tests/pocketic/src/cycle_optimisation_production_upgrade.rs": "8528a45d419b29dc77f6025d6d32faf3531a7d66f5d6669890b63b382ad347bb",
+    "tests/pocketic/src/cycle_optimisation_publication.rs": "3a3deb1496befde0f163e27c6cdf23d27bb78d12e9e6aa067eb3b29f09972ee6",
+    "tests/pocketic/src/cycle_optimisation_reserve.rs": "43790fc0937c90b8d1cee66ca98e9cf3e14c89b6e11741ebe8db09903b9d50d6",
+    "tests/pocketic/src/cycle_optimisation_scheduler.rs": "7c9b29beb075981a1670412397a4c8d010814031eff93cd552a77f4ec2b5ee43",
+    "tests/pocketic/src/cycle_optimisation_small.rs": "2a3ee54a519684411b439241d9f7d5fe46cde4320c01a3388713723274ca6691",
+    "tests/pocketic/src/cycle_optimisation_state.rs": "46d7fcf0422a36c18ca62b099d35f43084d790e6e65ae853339eec3a10327b7d"
+  },
+  "source_revision": "2597b341f80cbb4a7fcbbc0e1ec52ea164d1cf41",
+  "fixture_source_sha256": {
+    "tests/mocks/mock-cmc/Cargo.toml": "0eb6079c66eae2de92c1396bdd86eb298b25135ee70b5e443ebb64c13bf17fa4",
+    "tests/mocks/mock-cmc/src/lib.rs": "a08de0b9eccf7587cae2f0592b42226c12d9748e0959e53c7cfdd60c7b894211",
+    "tests/mocks/mock-historian/Cargo.toml": "de1f969e0a325620441fda8df1ca8e708670266df15561d14e14546f2de07bb0",
+    "tests/mocks/mock-historian/src/lib.rs": "7ed3b76cf7bf865fd5bca404aade27e7b17f153eb68f4cf3de2ed427e2adfd53",
+    "tests/mocks/mock-icp-ledger/Cargo.toml": "061ae20b249120db70105c257baec62264368524f5c6e0a304c1bcd790d6208e",
+    "tests/mocks/mock-icp-ledger/src/lib.rs": "f5b6e43d4ebd552ac731da745965b8d7bed8b25b8135a38869a5c7481784f849",
+    "tests/mocks/mock-icrc3-ledger/Cargo.toml": "e434c747ff2974a19891ffd6c8c95d5181acd1d95cc08b8284f5744d93379636",
+    "tests/mocks/mock-icrc3-ledger/src/lib.rs": "aab5f1d95284f82c1f1dbe71213ca217b9c0cff7527e29d8dc8a2d8c5f247302",
+    "tests/mocks/mock-index-poke/Cargo.toml": "f8ae5b3ffadf57fa909e19832f0f05920297b9e108e48e605341baaafec030eb",
+    "tests/mocks/mock-index-poke/src/lib.rs": "a6c8252aeffea08b702c80907bcb5e968ab30460fe28ee001307cfa2f78d417a",
+    "tests/mocks/mock-sns-root/Cargo.toml": "021a89062fe38336c5c8180dbbb18ba4a495b7b83318c2ea1d432a81cf92b897",
+    "tests/mocks/mock-sns-root/src/lib.rs": "0362c367795e0bb4d7e594a08efa90b5c01e71c043fee3fac64c47f548601a25",
+    "tests/mocks/mock-subscriber/Cargo.toml": "5cff4e433e1e8284dc72abd998a976c499836a28e69a74977fbea22068cc1b33",
+    "tests/mocks/mock-subscriber/src/lib.rs": "5f18bcc1194b84000151908cd83eb3b55fb2101bea11689d0fc06a580b0c2e47"
+  },
+  "cargo_lock_sha256": "10e6dbf405589221d60e9f51bfb661f14aa400797eb74d412b3b01025ad066ed",
+  "runner_sha256": "23d248505a423531fa662051db8246202b7a251a0ef618357f1352fe39a8c854",
+  "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+  "pocket_ic_binary_sha256": "29472ea4433b30a280676c4e22e369d79d5ba6ee1b4d48bab32ebe7d0ad2b4bb",
+  "fixture_helpers_sha256": "3b6d929d0ae664a64128d5bc83d190cdf81b7fd7fa00050c7beff0ec6b0aba6b",
+  "cases": [
+    "global:1:1",
+    "global:1:256",
+    "global:1:1024",
+    "mixed:1:1024",
+    "equal:1:1024",
+    "unique_watched:256:256"
+  ],
+  "generic": [
+    "false",
+    "true"
+  ],
+  "samples": 3,
+  "instrumented": false,
+  "mock_binaries_sha256": {
+    "mock_cmc.wasm": "3f7e91db1d1780bd627e9ec1800d7c3f02ac8d527f1d850456b9f1e96ffda92e",
+    "mock_historian.wasm": "b6bb238cd6b282569212116ecaa0fd8db2791865c5e6c55f1397061821bf0076",
+    "mock_icp_ledger.wasm": "b37ba83d210473d0821237427b03dcf1c64cc45622ab9345388d141acbc44bf7",
+    "mock_icrc3_ledger.wasm": "c6c16a6797299d8f3d94b581ad8ff35e0fae432e5f400882b19f9a9ee7782df3",
+    "mock_index_poke.wasm": "631397f4374e3cc33f047fcec5605d0e1c6aee791188123bf735a4da575880eb",
+    "mock_sns_root.wasm": "763a94b1890321e219815d9c82bcf33827db7de71da146b0e60a6bf18c16689c",
+    "mock_subscriber.wasm": "82060daeeb0280595e628a9e828ee3bc46e2a871551a60c8566e8b92bb5a3566"
+  },
+  "canonical": false,
+  "canonical_source": null,
+  "note": "Explicit artifact identities; canonical release provenance is validated separately.",
+  "pocket_ic": "15.0.0; default ordinary execution limits; paired instances serial; setup/query costs excluded"
+}

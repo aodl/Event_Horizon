@@ -1,0 +1,50 @@
+[
+  {
+    "source": "https://api.osv.dev/v1/vulns/GHSA-qwgh-2vcv-g2f7",
+    "retrieved_utc": "2026-10-28T19:49:09.320202+00:00",
+    "sha256": "ff99a926a5d61c750d8a41ffab67512b8c4a0091f98c17a0d09443a6f3789321",
+    "modified": "2026-08-19T19:30:06.686866977Z",
+    "affected": [
+      {
+        "package": {
+          "name": "block_buffer",
+          "ecosystem": "crates.io",
+          "purl": "pkg:cargo/block_buffer"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.12.1"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/08/GHSA-qwgh-2vcv-g2f7/GHSA-qwgh-2vcv-g2f7.json"
+        }
+      }
+    ]
+  },
+  {
+    "source": "https://api.github.com/advisories/GHSA-qwgh-2vcv-g2f7",
+    "retrieved_utc": "2026-10-28T19:49:09.613621+00:00",
+    "sha256": "4a04eb3321183b83d27b12a6228c6505b06796e6e8fd8b1c8cca027ed607d8e7",
+    "modified": "2026-08-19T19:15:35Z",
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "rust",
+          "name": "block_buffer"
+        },
+        "vulnerable_version_range": "< 0.12.1",
+        "first_patched_version": "0.12.1",
+        "vulnerable_functions": []
+      }
+    ]
+  }
+]

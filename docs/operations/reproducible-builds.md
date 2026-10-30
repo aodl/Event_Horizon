@@ -79,3 +79,12 @@ After deployment, compare each public module hash with the SHA-256 printed by `.
 Canonical deployment requires a clean reviewed source revision, matching two-build evidence, audited Wasm exports/imports, a verified artifact manifest, and operator comparison of uncompressed module hashes. See [deployment](deployment.md).
 
 Current primary guidance: [ICP reproducible builds](https://docs.internetcomputer.org/guides/canister-management/reproducible-builds/).
+
+
+Release compiler profiles: backend `2`, frontend `z`. `build-release` builds the
+same backend/frontend package set twice to retain Cargo feature unification. The
+second invocation has its own `target/frontend-size` directory; only its frontend
+module is selected. This intentionally compiles an unused backend-z intermediate
+to keep the recipe explicit and auditable. Build metadata records both profiles.
+
+The historical 54d8b4b fixtures are compatibility inputs, not release artifacts. Their exact source, dependency-lock identities and rebuild command are recorded beside them in `tests/fixtures/event_horizon_54d8b4b.provenance.txt`. For this closure, production inputs and the canonical build recipe remain unchanged; compare the canonical hashes and retained two-build receipts rather than rebuilding historical fixtures as release candidates.

@@ -1,0 +1,142 @@
+{
+  "accepted_pairs": 6,
+  "cohort": "00c0d63; pre-200+20 harness, no sends/timeadvance in either case",
+  "files": {
+    "component-j-range-summary.csv": "ee8979a5860cc77a00f956470450633f659c9c38900666468f9041e9c23fedad",
+    "component-j-range.csv": "6739d6687756a64570dc734238a2850dcacd3102aa332a2eaff94865a51bc2a5",
+    "component-j-unique-summary.csv": "adfb93cfc97fcaca5503d228cde924b5cdfd79d61965d93b6366722d10fb41b1",
+    "component-j-unique.csv": "791ec315d4a3af1a22f6f670ce4e95fc313e4f36eeeac956f492488589c7c497"
+  },
+  "shards": {
+    "unique": [
+      {
+        "shard": "true-unique_unwatched-256-0-0",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::paired_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "23678dfced844bb48f3345bbf094db20c7a242036787abe4776284564f5264f2",
+        "log_sha256": "125768fba6a024f9272858a3f7316e0869c34c48f90ec6f347ebd4117d1c3484"
+      },
+      {
+        "shard": "true-unique_unwatched-256-0-1",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::paired_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "d9db058cb5a4dd114efe10def679806ff6d07e057adf6d9fc6b340b475604e99",
+        "log_sha256": "00feb8e08f1ef8cc473057d4e1bff0086ad102c36ab1bcc523d1f969e2dd6ff9"
+      },
+      {
+        "shard": "true-unique_unwatched-256-0-2",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::paired_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "60c70d5d5f383149c0ed4989452d49061e9572911cd380c866ba3c36ee0d7715",
+        "log_sha256": "eac230ced209af353871f43bc30ad8ee83dc16601d8c99fba1997e9f8b6324dc"
+      }
+    ],
+    "range": [
+      {
+        "shard": "true-new_range-1-256-0",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::publication_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "7857cc2ee78a128d4cb75876fcc94cb2e74a8a1bbf396bcbe12bdfb62faf59fa",
+        "log_sha256": "51feefe21bda867ebc3b98fc63f70cda40add57e153d58b4088c196008fd6972"
+      },
+      {
+        "shard": "true-new_range-1-256-1",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::publication_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "ce28a50fd76b3a05d6cf72ad5691596286d17a7c82b9f4378b09d950c581b98a",
+        "log_sha256": "c7163f77d72ca61107f916df09b194a6c5d99f34baa2e46643f4da0d352437a9"
+      },
+      {
+        "shard": "true-new_range-1-256-2",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "event-horizon-pocketic",
+          "--features",
+          "optimisation_benchmarks",
+          "--lib",
+          "tests::cycle_optimisation::publication_fixed_work",
+          "--",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "csv_sha256": "718c3e2601e5307823e7d4f2c7b7bceb0fca512d6405091a2956ff1cec29e540",
+        "log_sha256": "ec3984299eb9d7f81334c2474557ea316b281b7f74741894ea5c8447e513fe20"
+      }
+    ]
+  }
+}

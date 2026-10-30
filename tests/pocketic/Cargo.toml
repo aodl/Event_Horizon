@@ -3,6 +3,9 @@ name = "event-horizon-pocketic"
 version = "0.1.0"
 edition = "2021"
 publish = false
+[features]
+optimisation_benchmarks = []
+
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
@@ -10,3 +13,6 @@ pocket-ic = { workspace = true }
 serde = { workspace = true }
 crc32fast = { workspace = true }
 sha2 = { workspace = true }
+
+[dev-dependencies]
+ic-stable-structures = { workspace = true }

@@ -1,0 +1,105 @@
+{
+  "pid": 3504870,
+  "source": "d13d1138e2fde4af18bd0d3f51f777470037f93f",
+  "stage": "complete",
+  "status": "local engineering gates passed; security/CI separate",
+  "results": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "returncode": 0,
+      "seconds": 0.7967567443847656,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 21.23050355911255,
+      "log_sha256": "ba76267ce2d83ae7c5673539e74eba40516548fb3982bb4e4a61bdafb1bb47f8"
+    },
+    {
+      "name": "unit",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_unit"
+      ],
+      "returncode": 0,
+      "seconds": 157.21999168395996,
+      "log_sha256": "826e1ec46f7f35994617f6ad710e42b4d3953255d208dd3e5338aae6f1dbdf25"
+    },
+    {
+      "name": "all",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_all"
+      ],
+      "returncode": 0,
+      "seconds": 2525.9718084335327,
+      "log_sha256": "327df3ad6cb2404c9ec088c5b38b378ebd1ecaed361fd38a4a6660b1f98824f0"
+    },
+    {
+      "name": "manifest",
+      "command": [
+        "./tools/scripts/source-manifest",
+        "verify"
+      ],
+      "returncode": 0,
+      "seconds": 0.25999975204467773,
+      "log_sha256": "8e28b4dcc30c51f7107ad2fdb0dba4acf13fbc1f3f20cc0a9e1701e12accda5b"
+    },
+    {
+      "name": "security",
+      "command": [
+        "./tools/scripts/security-scan"
+      ],
+      "returncode": 1,
+      "seconds": 8.87017297744751,
+      "log_sha256": "465bdea68c1522ab617ea0b691c0e1536eead52cb3bce746b374b18cac837bdb"
+    },
+    {
+      "name": "reproducible",
+      "command": [
+        "npm",
+        "run",
+        "verify:reproducible-artifacts"
+      ],
+      "returncode": 0,
+      "seconds": 2601.834719657898,
+      "log_sha256": "c6bf8f38720010f6e1e9bc6e06531a7ab31a6959f2e51cc446f576d8c96c8b70"
+    },
+    {
+      "name": "populate",
+      "command": [
+        "./tools/scripts/docker-build"
+      ],
+      "returncode": 0,
+      "seconds": 214.61965918540955,
+      "log_sha256": "9ba9ff6543fce5326a256803082c4dddef75cd53f73fb6db08d5afde65ff84fc"
+    }
+  ]
+}

@@ -76,16 +76,11 @@ instance verified.
 
 ## Canonical transitions
 
-`X` maps to canonical ICP Event Horizon. The 1,000 ICP global-pricing release
-requires a separately approved prelaunch decision about a controlled reinstall
-using `canisters/event-horizon/mainnet-icp-install-args.did`, whose three-field
-constructor selects the ICP Ledger, no SNS Root, and no surplus recipient. Do
-not infer that reinstall is safe from an earlier zero-subscriber observation.
-The operator must first verify current subscriptions, patron expectations,
-pending financial state, and the accepted loss of all stable state under the
-decision gate in [Deployment](deployment.md). Reinstall is exceptional, is not
-a Ledger-backlog remedy, and is not an ordinary future production operation.
-This source task performs no deployment or reinstall.
+The existing canonical ICP backend uses E. Its current first-release procedure
+is a state-preserving upgrade under [Deployment](deployment.md), not a new
+instance install or an automatic pricing reset. The current published identity
+aliases are D and E; only E. routes Event Horizon payments. Additional aliases
+require separate Jupiter review and activation.
 
 `I` is the intended canonical IO alias, not a claim that Jupiter has activated it. After the IO SNS Ledger launches: verify its principal and standards, reserve an IO Event Horizon principal, obtain alias `I`, install the identical generic Wasm with that Ledger, verify query/log/hash, run controlled tests, remove controllers, then change the frontend entry from planned to live. Do not invent IDs beforehand.
 

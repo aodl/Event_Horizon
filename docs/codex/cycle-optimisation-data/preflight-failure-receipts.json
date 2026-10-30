@@ -1,0 +1,14 @@
+{
+  "failed_logs": {
+    "observations/cycle-optimisation/logs/postpin-real-false-real_global-1-256.log": "6778a62b37030507f324a6094248e1792cdb9c1b9fa88696ee9229c8a4c80f5e",
+    "observations/cycle-optimisation/preflight-real-v2/false-real_global-1-256.log": "0b0b748f9f5db9ed047a6d34602ec2dd70b55957f03a6c729f9b18ed6e74b79e",
+    "observations/cycle-optimisation/logs/real-global256-diagnostic.log": "ff35038c261d5778d76dfd3837c1f74a5f0a86eaf3d30f249987dea638491e4d",
+    "observations/cycle-optimisation/logs/review-branch-push.log": "2e554a39e2bb4414b5e2c3f5a90ebc87b405b5b8231d692704ec6df4580e8f60"
+  },
+  "dispositions": [
+    "baseline fixture256Historian awaits exceeded100ingressrounds; setupbatched16",
+    "baseline6Treserve policy allowed116of256calls;80TVeryFastcontrolledfixturepassesall256",
+    "diagnostic400extra rounds unchanged116receipts; no partialrowsaccepted",
+    "publicationCLIcredentialfailure, pluginbranchcreate403, no remoteCI"
+  ]
+}

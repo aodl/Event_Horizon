@@ -1,0 +1,4 @@
+Canister Id: eo6ei-gaaaa-aaaar-qchra-cai
+Canister Status Report:
+  Controllers: zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe
+  Module hash: 0xe012e7138cfe2d251bd24edf868cb74aa5fd35856412facd926b65ad519cdcca

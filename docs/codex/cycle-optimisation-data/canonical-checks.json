@@ -1,0 +1,363 @@
+{
+  "pid": 3344144,
+  "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+  "stage": "complete",
+  "status": "all_local_production_checks_passed",
+  "results": [
+    {
+      "name": "production",
+      "command": [
+        "python3",
+        "tools/run-cycle-optimisation.py",
+        "production",
+        "tests/fixtures/event_horizon_81c5a0d_production.wasm",
+        "release-artifacts/event_horizon.wasm",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production",
+        "--mocks",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/frozen-mocks-z"
+      ],
+      "returncode": 0,
+      "seconds": 1394.8812313079834,
+      "log_sha256": "a432415ee40b95d7e6bda6bf2285ba92a70278ef3d70d4ca6100a4ba8354a9d0"
+    },
+    {
+      "name": "production-summary",
+      "command": [
+        "python3",
+        "tools/summarize-cycle-optimisation.py",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production/complete.csv"
+      ],
+      "returncode": 0,
+      "seconds": 0.027127742767333984,
+      "log_sha256": "8d80666464ba9a543722107a1265ae911b40860e95ec34ae6fd8de3236183402"
+    },
+    {
+      "name": "production-real",
+      "command": [
+        "python3",
+        "tools/run-cycle-optimisation.py",
+        "production-real",
+        "tests/fixtures/event_horizon_81c5a0d_production.wasm",
+        "release-artifacts/event_horizon.wasm",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production-real",
+        "--mocks",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/frozen-mocks-z"
+      ],
+      "returncode": 1,
+      "seconds": 1078.632622718811,
+      "log_sha256": "a296499a128c836ba3b99fc585503bf9109dbec3d48e6e9f4511bab6a2e2ca93"
+    },
+    {
+      "name": "production-real",
+      "command": [
+        "python3",
+        "tools/run-cycle-optimisation.py",
+        "production-real",
+        "tests/fixtures/event_horizon_81c5a0d_production.wasm",
+        "release-artifacts/event_horizon.wasm",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production-real",
+        "--mocks",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/frozen-mocks-z"
+      ],
+      "returncode": 1,
+      "seconds": 1440.189162492752,
+      "log_sha256": "e064d3878eb9ec67abad8f7004fe016580f86563069acf915de84d2116e627b3",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-production-real.retry1.log"
+    },
+    {
+      "name": "production-real",
+      "command": [
+        "python3",
+        "tools/run-cycle-optimisation.py",
+        "production-real",
+        "tests/fixtures/event_horizon_81c5a0d_production.wasm",
+        "release-artifacts/event_horizon.wasm",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production-real",
+        "--mocks",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/frozen-mocks-z"
+      ],
+      "returncode": 1,
+      "seconds": 404.5533072948456,
+      "log_sha256": "8ca70df2f468dec588e8acb88baf357fa27d0a5208426ccc83a49481114c46b2",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-production-real.retry2.log"
+    },
+    {
+      "name": "production-real",
+      "command": [
+        "python3",
+        "tools/run-cycle-optimisation.py",
+        "production-real",
+        "tests/fixtures/event_horizon_81c5a0d_production.wasm",
+        "release-artifacts/event_horizon.wasm",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production-real",
+        "--mocks",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/frozen-mocks-z"
+      ],
+      "returncode": 0,
+      "seconds": 316.5594925880432,
+      "log_sha256": "e790e0e19db26e1d5c25d4741c6adb0dbfbf6383389e0cf21c09360490f2b275",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-production-real.retry3.log"
+    },
+    {
+      "name": "production-real-summary",
+      "command": [
+        "python3",
+        "tools/summarize-cycle-optimisation.py",
+        "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/canonical-production-real/complete.csv"
+      ],
+      "returncode": 0,
+      "seconds": 0.02820134162902832,
+      "log_sha256": "c8d0d9915782bd5d10db1f721448984beb4540ee4ab3188c48874ec710fc107b",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-production-real-summary.log"
+    },
+    {
+      "name": "shadow-false-ordinary-256-0",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 30.813886165618896,
+      "log_sha256": "5f0110c69a50b53906ceed074c4fc13c44032d428dd91b0ee38fac2dba9a98c5",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-false-ordinary-256-0.log"
+    },
+    {
+      "name": "shadow-false-new_range-1-256",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 30.75773596763611,
+      "log_sha256": "19787e968d3f5636f2302c25c4efd82bed33e7d806d65aea542fadd57035bec9",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-false-new_range-1-256.log"
+    },
+    {
+      "name": "shadow-false-global-1-1",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 31.332047700881958,
+      "log_sha256": "79b8265732807b6c7cc8354dc47e34b327a85364ea54a9a6a752f3829adccbff",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-false-global-1-1.log"
+    },
+    {
+      "name": "shadow-false-idle-0-1024",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 31.992653131484985,
+      "log_sha256": "ff10078f5671aac5c50042f0c5d2e686fa3b34678e5476d039d66d9e050993ad",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-false-idle-0-1024.log"
+    },
+    {
+      "name": "shadow-true-ordinary-256-0",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 34.59045338630676,
+      "log_sha256": "1f5a71094810cbc909739091e21c944b4ec6d14f180829687de165d957355806",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-true-ordinary-256-0.log"
+    },
+    {
+      "name": "shadow-true-new_range-1-256",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 33.72011160850525,
+      "log_sha256": "ee120195ed51f50b5fb37f2612acebc59d58f279d433d4970f971948cf61b2f5",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-true-new_range-1-256.log"
+    },
+    {
+      "name": "shadow-true-global-1-1",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 34.711655378341675,
+      "log_sha256": "8d926bd91281861132da4c87b22871c84d59d6ec53509e1d99b884892a180e21",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-true-global-1-1.log"
+    },
+    {
+      "name": "shadow-true-idle-0-1024",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::production_fixed_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 33.66956877708435,
+      "log_sha256": "7b7f750b5de1bbcfdde784b60ec5a514d2ef9fca2dd1195e8b3a329c31708240",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-shadow-true-idle-0-1024.log"
+    },
+    {
+      "name": "upgrade-icp",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--lib",
+        "tests::cycle_optimisation::reviewed_production_baseline_upgrade_icp",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 49.04706287384033,
+      "log_sha256": "c4e08fd3d325b4f859e76b4cf895c5d096ce3355b255ececed26b57d74426324",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-upgrade-icp.log"
+    },
+    {
+      "name": "upgrade-generic",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--lib",
+        "tests::cycle_optimisation::reviewed_production_baseline_upgrade_generic",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 45.20300793647766,
+      "log_sha256": "819df63330fdeb2cff1e6b6ea03243f975a988f0abfe9f7808f43223588a31e0",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-upgrade-generic.log"
+    },
+    {
+      "name": "frontend",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "event-horizon-pocketic",
+        "--features",
+        "optimisation_benchmarks",
+        "--lib",
+        "tests::cycle_optimisation::frontend_profile_work",
+        "--",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 5.150522470474243,
+      "log_sha256": "8cf30fcf38afb2b48a6995aa83f70504e1853011d7d35953b819724ef9952108",
+      "log_path": "/home/codexdev/src/Event_Horizon/observations/cycle-optimisation/logs/final-production-frontend.log"
+    }
+  ]
+}

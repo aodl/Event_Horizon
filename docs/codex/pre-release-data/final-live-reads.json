@@ -1,0 +1,217 @@
+[
+  {
+    "label": "backend-status",
+    "at": "2026-10-29T10:58:56.855172+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "eo6ei-gaaaa-aaaar-qchra-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"eo6ei-gaaaa-aaaar-qchra-cai\",\"controllers\":[\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0xe012e7138cfe2d251bd24edf868cb74aa5fd35856412facd926b65ad519cdcca\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "frontend-status",
+    "at": "2026-10-29T10:58:58.183951+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "ej7c4-lyaaa-aaaar-qchrq-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"ej7c4-lyaaa-aaaar-qchrq-cai\",\"controllers\":[\"amzih-bssz4-twanl-zf6nr-bqsnn-d7rlt-eerbc-oe7vv-uggn5-3naqo-3ae\",\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0x9a0f1978e0853a099433f8b1ea2f056f854443f76ed3c3cf870066df8486a7ef\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "faucet-status",
+    "at": "2026-10-29T10:58:58.762912+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "acjuz-liaaa-aaaar-qb4qq-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"acjuz-liaaa-aaaar-qb4qq-cai\",\"controllers\":[\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0x772a4da72c296eb9296fc95b70bd056475efd65416f795eaab5f181f1926410a\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "disburser-status",
+    "at": "2026-10-29T10:58:59.497427+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "uccpi-cqaaa-aaaar-qby3q-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"uccpi-cqaaa-aaaar-qby3q-cai\",\"controllers\":[\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0xf7568b3d4fd4a3a2109e6f16cb486b4da1e31987ebf34775ce6f2b856dab7862\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "historian-status",
+    "at": "2026-10-29T10:59:00.192893+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "j5gs6-uiaaa-aaaar-qb5cq-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"j5gs6-uiaaa-aaaar-qb5cq-cai\",\"controllers\":[\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0xfa4911b98b5e0fedccea0a57d62be0a0b1696334f3cb0fe440d41917fdfd584a\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "relay-status",
+    "at": "2026-10-29T10:59:01.292824+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "status",
+      "u2qkp-aqaaa-aaaar-qb7ea-cai",
+      "-n",
+      "ic",
+      "--public",
+      "--json",
+      "--identity",
+      "anonymous"
+    ],
+    "returncode": 0,
+    "stdout": "{\"id\":\"u2qkp-aqaaa-aaaar-qb7ea-cai\",\"controllers\":[\"zkkkd-i34qc-367ln-e2u7o-ezznu-dkfqh-gtfvz-cviph-6qa4v-evtfs-wqe\"],\"module_hash\":\"0xb603668def7304c0a669c019f3f9cd024fa37b03004c852e11c11744e278e358\"}\n",
+    "stderr": ""
+  },
+  {
+    "label": "backend-native-status",
+    "at": "2026-10-29T10:59:02.123307+00:00",
+    "command": [
+      "node",
+      "tools/scripts/public-management-query.mjs",
+      "canister_status",
+      "eo6ei-gaaaa-aaaar-qchra-cai"
+    ],
+    "returncode": 0,
+    "stdout": "{\n  \"timestamp\": \"2026-10-29T10:59:04.882Z\",\n  \"canister_id\": \"eo6ei-gaaaa-aaaar-qchra-cai\",\n  \"method\": \"canister_status\",\n  \"result\": {\n    \"status\": {\n      \"running\": null\n    },\n    \"memory_size\": \"69942772\",\n    \"cycles\": \"4379567985571\",\n    \"module_hash\": [\n      {\n        \"0\": 224,\n        \"1\": 18,\n        \"2\": 231,\n        \"3\": 19,\n        \"4\": 140,\n        \"5\": 254,\n        \"6\": 45,\n        \"7\": 37,\n        \"8\": 27,\n        \"9\": 210,\n        \"10\": 78,\n        \"11\": 223,\n        \"12\": 134,\n        \"13\": 140,\n        \"14\": 183,\n        \"15\": 74,\n        \"16\": 165,\n        \"17\": 253,\n        \"18\": 53,\n        \"19\": 133,\n        \"20\": 100,\n        \"21\": 18,\n        \"22\": 250,\n        \"23\": 205,\n        \"24\": 146,\n        \"25\": 107,\n        \"26\": 101,\n        \"27\": 173,\n        \"28\": 81,\n        \"29\": 156,\n        \"30\": 220,\n        \"31\": 202\n      }\n    ],\n    \"reserved_cycles\": \"0\"\n  }\n}\n",
+    "stderr": ""
+  },
+  {
+    "label": "backend-balance",
+    "at": "2026-10-29T10:59:04.964254+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "call",
+      "ryjl3-tyaaa-aaaaa-aaaba-cai",
+      "icrc1_balance_of",
+      "(record { owner = principal \"eo6ei-gaaaa-aaaar-qchra-cai\"; subaccount = null })",
+      "-n",
+      "ic",
+      "--query",
+      "--identity",
+      "anonymous",
+      "--candid",
+      "observations/pre-release-resume/icp-balance.did"
+    ],
+    "returncode": 0,
+    "stdout": "(0 : nat)\n",
+    "stderr": ""
+  },
+  {
+    "label": "get_instance",
+    "at": "2026-10-29T10:59:05.440562+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "call",
+      "eo6ei-gaaaa-aaaar-qchra-cai",
+      "get_instance",
+      "()",
+      "-n",
+      "ic",
+      "--query",
+      "--identity",
+      "anonymous",
+      "--candid",
+      "canisters/event-horizon/event_horizon.did"
+    ],
+    "returncode": 0,
+    "stdout": "(\n  record {\n    jupiter_historian = principal \"j5gs6-uiaaa-aaaar-qb5cq-cai\";\n    cmc = principal \"rkp4c-7iaaa-aaaaa-aaaca-cai\";\n    observed_ledger = principal \"ryjl3-tyaaa-aaaaa-aaaba-cai\";\n    jupiter_faucet = principal \"acjuz-liaaa-aaaar-qb4qq-cai\";\n    observed_profile = opt record {\n      decimals = 8 : nat8;\n      supports_icrc2_transfer_from = true;\n      neuron_governance = opt principal \"rrkah-fqaaa-aaaaa-aaaaq-cai\";\n      symbol = \"ICP\";\n    };\n    icp_ledger = principal \"ryjl3-tyaaa-aaaaa-aaaba-cai\";\n    sns_root = null;\n    surplus_canister = null;\n  },\n)\n",
+    "stderr": ""
+  },
+  {
+    "label": "get_pricing",
+    "at": "2026-10-29T10:59:05.907596+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "call",
+      "eo6ei-gaaaa-aaaar-qchra-cai",
+      "get_pricing",
+      "()",
+      "-n",
+      "ic",
+      "--query",
+      "--identity",
+      "anonymous",
+      "--candid",
+      "canisters/event-horizon/event_horizon.did"
+    ],
+    "returncode": 0,
+    "stdout": "(\n  record {\n    next_effective_at = 1_793_491_200 : nat64;\n    initialized = true;\n    next_carried_forward_due_to_stale_rate = false;\n    next = opt record {\n      range_icp = 20 : nat64;\n      global_icp = 991 : nat64;\n      account_icp = 10 : nat64;\n    };\n    latest_xdr_permyriad = 19_483 : nat64;\n    current_effective_at = 1_792_341_341 : nat64;\n    next_freeze_at = 1_792_886_400 : nat64;\n    floor_observed_at = 1_793_145_240 : nat64;\n    observed_floor_xdr_permyriad = 19_150 : nat64;\n    latest_observed_at = 1_793_231_640 : nat64;\n    current = record {\n      range_icp = 20 : nat64;\n      global_icp = 1_000 : nat64;\n      account_icp = 10 : nat64;\n    };\n  },\n)\n",
+    "stderr": ""
+  },
+  {
+    "label": "historian-aliases",
+    "at": "2026-10-29T10:59:06.631253+00:00",
+    "command": [
+      "icp",
+      "canister",
+      "call",
+      "j5gs6-uiaaa-aaaar-qb5cq-cai",
+      "list_canister_aliases",
+      "(record { start_after = null; limit = opt (128 : nat32) })",
+      "-n",
+      "ic",
+      "--query",
+      "--identity",
+      "anonymous",
+      "--candid",
+      "/home/codexdev/src/Jupiter_Faucet_Suite/canisters/historian/jupiter_historian.did"
+    ],
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Error: The replica returned a rejection error: reject code CanisterError, reject message Error from Canister j5gs6-uiaaa-aaaar-qb5cq-cai: Canister has no query method 'list_canister_aliases'..\nCheck that the method being called is exported by the target canister. See documentation: https://docs.internetcomputer.org/references/execution-errors#method-not-found, error code Some(\"IC0536\")\n"
+  }
+]

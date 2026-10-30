@@ -1,0 +1,19 @@
+{
+  "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+  "baseline_sha256": "4e1425b292eafef79f7d8183b3bed557c26cb34ac279cf4241341fca9a8cd792",
+  "candidate_sha256": "5ee319181892d3beec4e4f97ca73cd3ac7d41daeef5bd243face4a3c6b8d49fe",
+  "samples": 1,
+  "purpose": "matched-host instrumented overhead, not headline cycles",
+  "host_sha256": {
+    "cycle_optimisation.rs": "58b3471fdbd9ffe74a75f0e61f38dcbb740367afe7b96530236418bac51ff1a6",
+    "cycle_optimisation_scheduler.rs": "6c79f2223e25bcd1963fce77d851992ad71e60f9f042cd1add938dab7374a366",
+    "cycle_optimisation_small.rs": "2a3ee54a519684411b439241d9f7d5fe46cde4320c01a3388713723274ca6691",
+    "cycle_optimisation_production_real.rs": "f660bc93705eb8c98d59ae203ecd9ad62f6e9fd7be8a64ece67eb6ca9dd7f956",
+    "cycle_optimisation_interleaving.rs": "fed4442751bab2dcbe6f75a8099c7b5f77fc47ebf9da2db15981943ad5182b16",
+    "cycle_optimisation_production_upgrade.rs": "8528a45d419b29dc77f6025d6d32faf3531a7d66f5d6669890b63b382ad347bb",
+    "cycle_optimisation_publication.rs": "3a3deb1496befde0f163e27c6cdf23d27bb78d12e9e6aa067eb3b29f09972ee6",
+    "cycle_optimisation_reserve.rs": "43790fc0937c90b8d1cee66ca98e9cf3e14c89b6e11741ebe8db09903b9d50d6",
+    "cycle_optimisation_frontend.rs": "521535b20aefcd1916176f479d17b1679076df5e9fd86b356462479cce156691",
+    "cycle_optimisation_state.rs": "46d7fcf0422a36c18ca62b099d35f43084d790e6e65ae853339eec3a10327b7d"
+  }
+}

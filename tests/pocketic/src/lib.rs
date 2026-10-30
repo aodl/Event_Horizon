@@ -41,6 +41,20 @@ mod tests {
     }
 
     fn wasm(cache: &OnceLock<Vec<u8>>, package: &str, features: Option<&str>) -> Result<Vec<u8>> {
+        if package == "event-horizon" && features == Some("debug_api") {
+            if let Some(path) = std::env::var_os("EH_TEST_BACKEND_WASM") {
+                return std::fs::read(&path)
+                    .with_context(|| format!("test backend {}", PathBuf::from(path).display()));
+            }
+        }
+        if package.starts_with("mock-") && features != Some("interleaving_gate") {
+            if let Some(directory) = std::env::var_os("EH_OPT_MOCK_DIR") {
+                let path =
+                    PathBuf::from(directory).join(format!("{}.wasm", package.replace('-', "_")));
+                return std::fs::read(&path)
+                    .with_context(|| format!("frozen fixture {}", path.display()));
+            }
+        }
         if let Some(bytes) = cache.get() {
             return Ok(bytes.clone());
         }
@@ -478,15 +492,95 @@ mod tests {
             separate_observed: bool,
             sns: bool,
         ) -> Result<Self> {
-            let pic = PocketIcBuilder::new().with_application_subnet().build();
-            let ledger = pic.create_canister();
+            Self::with_anchors(
+                event_horizon_wasm,
+                event_horizon_cycles,
+                surplus_enabled,
+                separate_observed,
+                sns,
+                false,
+            )
+        }
+        fn with_anchors(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+            surplus_enabled: bool,
+            separate_observed: bool,
+            sns: bool,
+            fixed: bool,
+        ) -> Result<Self> {
+            Self::with_anchors_at(
+                event_horizon_wasm,
+                event_horizon_cycles,
+                surplus_enabled,
+                separate_observed,
+                sns,
+                fixed,
+                None,
+            )
+        }
+        fn with_anchors_at(
+            event_horizon_wasm: Vec<u8>,
+            event_horizon_cycles: u128,
+            surplus_enabled: bool,
+            separate_observed: bool,
+            sns: bool,
+            fixed: bool,
+            initial_time: Option<pocket_ic::Time>,
+        ) -> Result<Self> {
+            // Compile fixtures before starting the server: a cold/rebuilt Wasm
+            // can exceed PocketIC's idle TTL, independently of IC execution.
+            // Warm both ledgers before a mixed-architecture test creates any instance.
+            for (cache, package) in [
+                (&LEDGER_WASM, "mock-icp-ledger"),
+                (&ICRC3_LEDGER_WASM, "mock-icrc3-ledger"),
+                (&HISTORIAN_WASM, "mock-historian"),
+                (&CMC_WASM, "mock-cmc"),
+                (&SUBSCRIBER_WASM, "mock-subscriber"),
+            ] {
+                wasm(cache, package, None)?;
+            }
+            if sns {
+                wasm(&SNS_ROOT_WASM, "mock-sns-root", None)?;
+            }
+            let builder = PocketIcBuilder::new().with_application_subnet();
+            let builder = if fixed {
+                builder.with_nns_subnet().with_initial_time(
+                    pocket_ic::Time::from_nanos_since_unix_epoch(1_700_000_000_000_000_000),
+                )
+            } else {
+                builder
+            };
+            let builder = if let Some(time) = initial_time {
+                builder.with_initial_time(time)
+            } else {
+                builder
+            };
+            let pic = builder.build();
+            let fixed_canister = |text: &str| -> Result<Principal> {
+                pic.create_canister_with_id(None, None, Principal::from_text(text)?)
+                    .map_err(|e| anyhow!(e))
+            };
+            let ledger = if fixed {
+                fixed_canister("ryjl3-tyaaa-aaaaa-aaaba-cai")?
+            } else {
+                pic.create_canister()
+            };
             let observed_ledger = if separate_observed {
                 pic.create_canister()
             } else {
                 ledger
             };
-            let historian = pic.create_canister();
-            let cmc = pic.create_canister();
+            let historian = if fixed {
+                fixed_canister("j5gs6-uiaaa-aaaar-qb5cq-cai")?
+            } else {
+                pic.create_canister()
+            };
+            let cmc = if fixed {
+                fixed_canister("rkp4c-7iaaa-aaaaa-aaaca-cai")?
+            } else {
+                pic.create_canister()
+            };
             let subscriber = pic.create_canister();
             let subscriber_second = pic.create_canister();
             let sns_root = sns.then(|| pic.create_canister());
@@ -495,7 +589,10 @@ mod tests {
                     None,
                     CreateCanisterParams {
                         cycles: Some(event_horizon_cycles),
-                        settings: None,
+                        settings: fixed.then(|| pocket_ic::CanisterSettings {
+                            freezing_threshold: Some(0u8.into()),
+                            ..Default::default()
+                        }),
                         placement: None,
                     },
                 )
@@ -578,7 +675,11 @@ mod tests {
                 vec![],
                 None,
             );
-            let faucet = Principal::from_slice(&[42]);
+            let faucet = if fixed {
+                Principal::from_text("acjuz-liaaa-aaaar-qb4qq-cai")?
+            } else {
+                Principal::from_slice(&[42])
+            };
             pic.install_canister(
                 event_horizon,
                 event_horizon_wasm,
@@ -7793,4 +7894,5 @@ mod tests {
         assert_eq!(request("/app.bundle.js")?.status_code, 200);
         Ok(())
     }
+    include!("cycle_optimisation.rs");
 }

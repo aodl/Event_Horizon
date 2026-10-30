@@ -1,0 +1,9 @@
+{
+  "screen_source": "9528da787f9e8a4d5df2d297401564d04adb41b6",
+  "canonical_recipe_source": "d13d1138e2fde4af18bd0d3f51f777470037f93f",
+  "profile": "workspace-z; both packages; preserved feature unification",
+  "raw_bytes": 3848368,
+  "raw_sha256": "c2315be93adc676e8869e6f2a54717be341b8da45b3a7f576fe868d51157c9ec",
+  "canonical_shrunk_bytes": 3757901,
+  "canonical_shrunk_sha256": "210d4de6587a19228801f1d97264cb87d0c8d1117632ecb6f7051829b3b441c8"
+}

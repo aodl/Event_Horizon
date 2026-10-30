@@ -12,6 +12,22 @@ Event Horizon uses the same test vocabulary as Jupiter Faucet where the projects
 | Complete behavioural suite | `POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all` |
 | Opt-in cadence calibration | `./tools/scripts/calibrate-cadence smoke` |
 
+The historical installed-version scenario requires the canonical candidate at
+`release-artifacts/event_horizon.wasm` and checks its reviewed SHA-256. On a
+fresh checkout, prepare it from the clean manifested revision **before** running
+`test_pocketic_integration`, `test_all`, or that isolated scenario:
+
+```bash
+./tools/scripts/docker-build
+DFX_IDENTITY=codex_local POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
+```
+
+The two historical 54d8b4b fixtures are checked into Git; no prior ignored build
+output is needed for them. Their deterministic rebuild recipe and dependency
+locks are in `tests/fixtures/event_horizon_54d8b4b.provenance.txt`. The candidate
+is a canonical release artifact, not a historical/debug substitute. Unit-only
+testing does not require Docker or this candidate artifact.
+
 The test commands automatically run `npm ci` when `node_modules` is absent or stale relative to `package.json` and `package-lock.json`. No preliminary manual npm command is required.
 
 `test_unit` runs repository/static protocol checks, source-manifest verification, ordinary locked Rust workspace tests (including xtask's parser/runner tests), and frontend Node unit tests. It excludes intentionally ignored PocketIC scenarios.
@@ -62,7 +78,7 @@ on ICP, ICRC-3 and SNS, including the combined 256-match cap. Production has
 one notification protocol and no alternate method.
 
 A separate, test-only `mock-index-poke` compiles an authenticated genuine
-`poke : () -> ()` receiving method. The current inventory has 134 Rust unit tests, 138 frontend tests and 121
+`poke : () -> ()` receiving method. The current inventory has 146 Rust unit tests, 138 frontend tests and 128
 isolated PocketIC scenarios. The three Index-specific scenarios cover
 canonical ICP global wakes, generic ICRC-3 global wakes with ICP-only admission,
 and real specific/global mixed envelopes through the 256-match cap. They reuse
@@ -292,3 +308,17 @@ archives, staged-admission failure recovery and the combined 256-hint cap.
 The shared-account capacity case measures 1,024 indexed external watchers with
 1, 32 and 256 transfers and reports settled local cycle costs. No assertion
 claims cross-canister execution ordering.
+
+## Cycle optimisation experiments
+
+The measured refactor uses a separately preserved reviewed baseline and serial
+paired PocketIC instances. See the [experiment definitions and reproduction commands](../codex/cycle-optimisation-experiments.md)
+[validation evidence](../codex/cycle-optimisation-validation.md),
+and [resumable progress](../codex/cycle-optimisation-progress.md) for current status.
+Benchmarks require the host-only `optimisation_benchmarks` feature; ordinary
+regression discovery retains the baseline-upgrade and cache-invalidation tests.
+Production trust anchors and application exports are unchanged.
+
+The [release-closure report](../codex/cycle-optimisation-release-closure.md) records
+current hybrid compiler selection, complete final-source regression/reproducibility
+checks, all-public-asset comparisons, advisory correction evidence and PR/CI status.

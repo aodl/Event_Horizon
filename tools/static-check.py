@@ -238,7 +238,7 @@ registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert registry.count('surplusCanisterId:null') == 2
-assert "expectedBackendWasmSha256:'2792706c1100d23da6f9980cf3412d544edf87417c1ea9dad12ea3b661248528'" in registry
+assert "expectedBackendWasmSha256:'f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970'" in registry
 assert "alias:'E'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
@@ -344,9 +344,9 @@ assert "rsplit_once('.')" not in memo_src
 polling=(root/'canisters/event-horizon/src/polling.rs').read_text()
 assert 'SubscriptionDeclaration::Range' in polling
 assert 'BTreeMap<Principal, MatchState>' in polling
-assert polling.count('state::global_subscribers()') == 2
 legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async fn scan_legacy')]
-assert 'state::global_subscribers()' not in legacy_page
+# Global eligibility/order is protected by installed-Wasm admission-in-first/last
+# block regressions, rather than forcing eager traversal at a source location.
 assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
 assert 'BTreeMap<(Principal, WatchTarget), TargetMatch>' in polling
@@ -566,7 +566,11 @@ assert 'poke_subjects' not in subscriber_did
 assert 'opt ' not in subscriber_did
 assert 'subject : principal' in subscriber_did
 sender=(root/'canisters/event-horizon/src/clients/subscriber.rs').read_text()
-assert 'Call::bounded_wait(subscriber, "poke").with_arg(&notification)' in sender
+# Exact typed/raw encoding equivalence and one-record contents are behavioural
+# unit tests; installed standard/Index receivers test the actual sending path.
+assert 'candid::encode_one(notification)' in sender
+assert '.with_raw_args(bytes)' in sender
+assert '.with_arg(&notification)' in sender
 assert 'call.get_cost()' in sender and 'call.oneway()' in sender
 for obsolete in ['poke_subjects', 'self_matches', 'subject_matches', 'with_args', 'notification.method()']:
     assert obsolete not in sender

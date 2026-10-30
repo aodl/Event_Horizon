@@ -1,0 +1,113 @@
+{
+  "source": "7cfa8b354fa9621786a09b13c9a6dff498872b19",
+  "manifest_sha256": "868243efc1e785a04e11467cf2a307f720660bb9e4a0c3a71e0b8c623bd8ec30",
+  "backend_sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970",
+  "frontend_sha256": "46d7b10673b7c37dce7ec773a0829bf104723b57b7fe2370d5838bc8df3b4a24",
+  "security_blocked": true,
+  "ci": "unverified: Git credentials unavailable; integration403",
+  "recipe": "Unmodified supported wrappers; two independent uncached docker-container builders; all4outputsA=B=populated. A copied from task-owned tempdir during B, without modifying Docker command or transport.",
+  "artifacts": {
+    "event_horizon.wasm": {
+      "sha256": "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970",
+      "bytes": 1847228
+    },
+    "event_horizon_frontend.wasm": {
+      "sha256": "46d7b10673b7c37dce7ec773a0829bf104723b57b7fe2370d5838bc8df3b4a24",
+      "bytes": 4009935
+    },
+    "release-artifacts.sha256": {
+      "sha256": "93910f2566d89c6a2d589d6f533b4ade9cf4b3fd9d3f4f61326c749d90e8c191",
+      "bytes": 261
+    },
+    "build-info.json": {
+      "sha256": "94ecf4da23d7291c9da089620c038dba6a3192c6bc567db1920b426132430238",
+      "bytes": 719
+    }
+  },
+  "results": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "returncode": 0,
+      "seconds": 0.5016553401947021,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 9.014859914779663,
+      "log_sha256": "4bb5617bbc0d085b00485016365fc3d1df6e4800b0214594fd5650b16c191144"
+    },
+    {
+      "name": "unit",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_unit"
+      ],
+      "returncode": 0,
+      "seconds": 101.16046619415283,
+      "log_sha256": "07961658e2380433ca4f086ee54b513e6b6ea3e4fb07def80972041da9114e15"
+    },
+    {
+      "name": "manifest",
+      "command": [
+        "./tools/scripts/source-manifest",
+        "verify"
+      ],
+      "returncode": 0,
+      "seconds": 0.250887393951416,
+      "log_sha256": "ac89eb845b9d2a39d8bec508a66491da6c3af0c8d62da23c90e1b9e472f104b2"
+    },
+    {
+      "name": "security",
+      "command": [
+        "./tools/scripts/security-scan"
+      ],
+      "returncode": 1,
+      "seconds": 8.513230562210083,
+      "log_sha256": "84f78eafa9f5262de06b0072f366a1dbf949344c4967ed5c504ca0412b2b05f1",
+      "status": "blocked_existing_osv_metadata"
+    },
+    {
+      "name": "reproducible",
+      "command": [
+        "npm",
+        "run",
+        "verify:reproducible-artifacts"
+      ],
+      "returncode": 0,
+      "seconds": 2638.2511336803436,
+      "log_sha256": "03a7b5c738e695b0697fd7cb3b01e84edff38646fca6a7931d8032ca588ace9e"
+    },
+    {
+      "name": "populate",
+      "command": [
+        "./tools/scripts/docker-build"
+      ],
+      "returncode": 0,
+      "seconds": 128.70730996131897,
+      "log_sha256": "871948969a6a651e126fc7e86fc1672dbe8da936884063515c9871cac89f3b88"
+    }
+  ]
+}

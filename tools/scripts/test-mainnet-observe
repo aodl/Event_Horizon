@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Exercise observation capture without contacting mainnet or reading identities."""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+root = Path(__file__).resolve().parents[2]
+(root / 'observations').mkdir(exist_ok=True)
+with tempfile.TemporaryDirectory(dir=root / 'observations', prefix='mock-observe-') as directory:
+    mock = Path(directory)
+    for name, body in [
+        ('icp', '''case "$*" in
+*get_pricing*) if [[ "${FAIL_PRICING:-0}" == 1 ]]; then echo forced-failure; exit 23; fi;;
+esac
+echo fake-success'''),
+        ('node', 'echo fake-public-management-success'),
+    ]:
+        path = mock / name
+        path.write_text('#!/usr/bin/env bash\n' + body + '\n')
+        path.chmod(0o755)
+    for fail in [False, True]:
+        env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ['PATH'],
+                   FAIL_PRICING=str(int(fail)))
+        result = subprocess.run([str(root / 'tools/scripts/mainnet-observe')],
+                                env=env, text=True, capture_output=True, check=False)
+        assert result.returncode == int(fail), result
+        output = Path(result.stdout.strip().split('written to ')[1])
+        rows = dict(line.split('\t') for line in (output / 'results.tsv').read_text().splitlines())
+        assert len(rows) == 9, rows
+        assert rows['backend-pricing.txt'] == ('23' if fail else '0'), rows
+        assert rows['frontend-metrics.txt'] == '0', rows
+        commands = (output / 'commands.txt').read_text()
+        assert len(commands.splitlines()) == 9
+        assert '--public --identity anonymous' in commands
+        assert '--query --identity anonymous --candid' in commands
+        assert f'Observation exit status: {23 if fail else 0}' in (output / 'backend-pricing.txt').read_text()
+print('PASS: explicit success/failure, partial capture, unique directories and read-only command flags')

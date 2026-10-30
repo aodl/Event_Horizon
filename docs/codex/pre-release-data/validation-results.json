@@ -1,0 +1,117 @@
+{
+  "at": "2026-10-29T11:02:07.558560+00:00",
+  "starting_commit": "dd4a88993b92f522a08296786e9afd453b4a3101",
+  "test_source_sha256": "505522a42c24abc4d16c6fcd3f95d8ba43dbfff77876aa8c9f4adcbc64b94682",
+  "final_checks": [
+    {
+      "name": "final-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "at": "2026-10-29T10:16:57.888168+00:00",
+      "returncode": 0,
+      "seconds": 0.8129591941833496,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "at": "2026-10-29T10:16:58.701769+00:00",
+      "returncode": 0,
+      "seconds": 25.185144424438477,
+      "log_sha256": "98a2a0a81ec083c45df761fcc53d8d63f3d006348343e5a6261cbf50cce9900e"
+    },
+    {
+      "name": "final-unit",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_unit"
+      ],
+      "at": "2026-10-29T10:17:23.888844+00:00",
+      "returncode": 0,
+      "seconds": 172.07564091682434,
+      "log_sha256": "b9a995ebf809320eb6d7c204bbd8cc408a849f6cda4ad26320b31e1e98793281"
+    },
+    {
+      "name": "final-observation-tool",
+      "command": [
+        "./tools/scripts/test-mainnet-observe"
+      ],
+      "at": "2026-10-29T10:20:15.966633+00:00",
+      "returncode": 0,
+      "seconds": 0.15395855903625488,
+      "log_sha256": "270d54512e2413345ae61b5d42ea010370e8da928469e82848a93197f809c3d6"
+    }
+  ],
+  "final_all_and_security": [
+    {
+      "name": "all-final",
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "test_all"
+      ],
+      "at": "2026-10-29T10:20:17.363917+00:00",
+      "returncode": 0,
+      "seconds": 2479.6626205444336,
+      "log_sha256": "5b35e001f426061c1e6286488bbde0fa9dfcf53fa33c150d612d72087ee62573"
+    },
+    {
+      "name": "security-last",
+      "command": [
+        "./tools/scripts/security-scan"
+      ],
+      "at": "2026-10-29T11:01:37.027762+00:00",
+      "returncode": 1,
+      "seconds": 7.628790855407715,
+      "log_sha256": "1588dab63cb67f4ade073443f068666bea8d8f3b6e8795499b571c73226653d0"
+    }
+  ],
+  "counts": {
+    "rust": 146,
+    "frontend": 138,
+    "pocketic": 129,
+    "total": 413
+  },
+  "jupiter_counts": {
+    "native": 28,
+    "pocketic": 7
+  },
+  "superseded_first_combined_attempt": {
+    "command": [
+      "cargo",
+      "run",
+      "-p",
+      "xtask",
+      "--",
+      "test_all"
+    ],
+    "returncode": 1,
+    "log_sha256": "1510bd3b0ad89d9d6644de650f788d53202e0763a537b4e9059c634e26e72be7",
+    "pocketic_passed": 129,
+    "pocketic_failed": 0,
+    "reason": "unit phase compiled the earlier transient hex::decode reference; retained as a failure, superseded by final source unit and combined gates"
+  },
+  "security_policy_diff": ""
+}

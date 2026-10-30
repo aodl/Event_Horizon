@@ -1,0 +1,153 @@
+{
+  "runtime_source": "4cd89c8",
+  "host_final_envelope": "8876833",
+  "canonical": false,
+  "warning": "Actual-sender wrapper in generated shadow artifacts; no production export. Full256x32769 wrapper exceeds baseline40B due extra encoding/decoding; no accepted row. Separate ordinary fullreceiver regression retained.",
+  "artifacts": {
+    "baseline-z": {
+      "source_revision": "81c5a0d",
+      "profile": "z",
+      "canonical": false,
+      "warning": "Instrumented shadow only; extra metrics/probe exports forbidden in releases",
+      "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "ic_wasm_sha256": "defe628dfeadec9b53205f253c4895dfc8bbf01d1eb4f4c34c14e7eaa064ea4d",
+      "artifacts": [
+        {
+          "artifact": "event_horizon_production.wasm",
+          "raw_bytes": 1605732,
+          "shrunk_bytes": 1467884,
+          "sha256": "4e1425b292eafef79f7d8183b3bed557c26cb34ac279cf4241341fca9a8cd792",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "optimisation_metrics"
+          ],
+          "features": "optimisation_metrics"
+        },
+        {
+          "artifact": "event_horizon_debug.wasm",
+          "raw_bytes": 1716143,
+          "shrunk_bytes": 1566705,
+          "sha256": "f6a1255b4bf5e665287100d407506f30a1aeab80b9c3d0c93187304ac025bd4d",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "debug_api,optimisation_metrics"
+          ],
+          "features": "debug_api,optimisation_metrics"
+        }
+      ]
+    },
+    "candidate-2": {
+      "source_revision": "4cd89c84bc25d75b3b658d436371b643c57ec330",
+      "profile": "2",
+      "canonical": false,
+      "warning": "Instrumented shadow only; extra metrics/probe exports forbidden in releases",
+      "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "ic_wasm_sha256": "defe628dfeadec9b53205f253c4895dfc8bbf01d1eb4f4c34c14e7eaa064ea4d",
+      "artifacts": [
+        {
+          "artifact": "event_horizon_production.wasm",
+          "raw_bytes": 2016384,
+          "shrunk_bytes": 1892933,
+          "sha256": "5ee319181892d3beec4e4f97ca73cd3ac7d41daeef5bd243face4a3c6b8d49fe",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "optimisation_metrics"
+          ],
+          "features": "optimisation_metrics"
+        },
+        {
+          "artifact": "event_horizon_debug.wasm",
+          "raw_bytes": 2165694,
+          "shrunk_bytes": 2028816,
+          "sha256": "81e31eef10a70f1829565c3d4014d2a2f7ae68adabe83414b85060ae4379791c",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "debug_api,optimisation_metrics"
+          ],
+          "features": "debug_api,optimisation_metrics"
+        }
+      ]
+    },
+    "candidate-z": {
+      "source_revision": "4cd89c84bc25d75b3b658d436371b643c57ec330",
+      "profile": "z",
+      "canonical": false,
+      "warning": "Instrumented shadow only; extra metrics/probe exports forbidden in releases",
+      "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "ic_wasm_sha256": "defe628dfeadec9b53205f253c4895dfc8bbf01d1eb4f4c34c14e7eaa064ea4d",
+      "artifacts": [
+        {
+          "artifact": "event_horizon_production.wasm",
+          "raw_bytes": 1608309,
+          "shrunk_bytes": 1470394,
+          "sha256": "8c054c9167f0475d3b607fbd87decd1d9d792285306b8251857e6a799749b546",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "optimisation_metrics"
+          ],
+          "features": "optimisation_metrics"
+        },
+        {
+          "artifact": "event_horizon_debug.wasm",
+          "raw_bytes": 1718276,
+          "shrunk_bytes": 1568773,
+          "sha256": "a90c1320a6314f879ef8a2f0644d6b33f2f927427c865adb6231d38ce4f4cdd8",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "event-horizon",
+            "--features",
+            "debug_api,optimisation_metrics"
+          ],
+          "features": "debug_api,optimisation_metrics"
+        }
+      ]
+    }
+  },
+  "rejected_log_sha256": "a79bec628acfef81caa57b76e7e1e0aa31dd630f6eb1fcc92fb6dba2fa2663b1"
+}

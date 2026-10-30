@@ -61,28 +61,47 @@ for the mapping locations. Identity documentation is also available in the
 [repository README](../../README.md#mainnet-canisters), and
 [documentation index](../README.md#mainnet-deployment-identities).
 
-### Backend deployment policy
+### First-release policy and ordering
 
-The canonical ICP backend is already installed. This 1,000 ICP global-pricing
-release is an exceptional prelaunch state-policy boundary: old stable global
-prices cannot safely be interpreted using the new range divisor. The selected
-strategy is a controlled reinstall, but only after the decision gate below is
-completed and separately approved. Subsequent ordinary releases return to
-state-preserving, argument-free upgrades. Reinstall must never be used to
-discard a Ledger backlog. A genuinely new additional instance uses install
-mode. The operator performs every mainnet action manually; the repository
-provides no automatic deployment script.
+This is the authoritative current first-release procedure. The backend and
+frontend are already installed. Prefer an ordinary argument-free backend
+upgrade when the installed hash matches the tested historical module and the
+state-preservation checks pass. Having no users or subscriptions is not a
+reason to reinstall. Earlier pricing-reset and frontend-only release decisions
+are historical and do not govern this release.
 
-## Frontend-only ledger-counter release
+See the [pre-release report](../codex/pre-release-resume.md) for installed-version
+observations, historical fixture coverage, Jupiter prerequisites and blockers.
+Source completion does not prove live compatibility. No command in this guide
+is authorised by preparation or review alone.
 
-The landing ledger total is a browser feature. Only the separately controlled
-frontend is a deployment candidate after release gates and separate operator
-authorization. It requires no backend module, migration, settings change,
-pricing reset, reinstall, transfer or controller action. Do not apply the earlier
-exceptional backend pricing-reset procedure to this release. Compare the backend
-canonical hash with its reviewed baseline and retain its existing registry pin.
-No deployment is part of counter validation. See the
-[validation report](../codex/ledger-counter-validation.md).
+1. Clear security and CI blockers for the exact reviewed commit; verify source
+   manifest, canonical artifacts, production exports and reproducibility evidence.
+2. Inspect the existing mappings, live module hashes, immutable configuration,
+   ICP holdings, cycles, pricing and available financial/operational evidence.
+   Preserve pending CMC/surplus operations and both Ledger cursors. Production
+   has no financial-state or subscription enumeration API; record unknowns.
+3. Under separate Jupiter operator approval, install any required compatible
+   receivers (Faucet, Disburser, Historian and Relay) and Historian alias query
+   before activating Event Horizon's new sender. Use Jupiter's reviewed upgrade
+   plan: stop/drain and upgrade Historian in place, coordinate its matching
+   Jupiter frontend if Candid changed, and restart/verify publication. Upgrade
+   Faucet/Disburser only at their payout/maturity quiescence boundaries. Canonical
+   Relay requires reviewed full replacement InitArgs and a BaselineOnly first
+   ordinary tick; an embedded Relay update affects new factory children only,
+   not existing controllerless children. Verify each installed hash and any
+   required reward-context prerequisites; details are in the pre-release report.
+   Confirm published D/E bindings and the special E. route. D is an identity
+   alias only. Retain independent reconciliation during coordination.
+4. Under separate Event Horizon operator approval, upgrade the existing backend
+   with no constructor arguments; compare its live hash and configuration,
+   preserved pricing, logs and financial progress. Verify alias refresh and
+   ordinary modern callbacks before accepting new subscriptions.
+5. Separately upgrade the existing frontend using its reviewed canonical
+   artifact; verify the backend pin, certified assets, three application queries,
+   pricing, previews and browser behaviour.
+6. Begin the controlled observation period. Controller removal is a later,
+   separate irreversible decision under [its own runbook](controller-removal.md).
 
 ## Custom domain and social-preview operator checklist
 
@@ -148,43 +167,40 @@ authorise any of them.
    to the approved ICP API host and that the Ledger counter, operating status,
    pricing and memo builder work normally.
 
-## Exceptional prelaunch pricing-reset decision
+## Exceptional reinstall decision
 
-Before authorising reinstall, use read-only production records, current
-Historian route evidence, public logs/status, and operator records to verify all
-of the following:
+Reinstall is not the selected first-release procedure. It requires a separate
+explicit decision identifying why resetting existing state is desirable, plus
+an inventory of the state and obligations being discarded. It wipes immutable
+configuration/profile storage, subscriptions, pricing observations and freezes,
+Ledger cursors, pending CMC transfer/notify or surplus transfer identities and
+surplus policy. The external ICP account balance and canister cycles are not
+reset by erasing stable memory, but the journal needed to recover earlier
+transfers is lost. No-subscriber status alone cannot justify that loss.
 
-- no subscription has been admitted and no patron has an outstanding
-  expectation based on an existing endowment;
-- no retained CMC transfer, CMC notification, surplus transfer, or other
-  financial obligation needs preservation;
-- loss of pricing observations/frozen prices, Ledger cursors, discovered
-  profile, subscriptions, and all other stable state is explicitly accepted;
-- the immutable constructor tuple remains canonical ICP Ledger, no SNS Root,
-  and no surplus recipient;
-- a separate liquid-cycles bootstrap is ready for the intended cadence while
-  initial productive-endowment payouts are pending.
-
-Production deliberately exposes no subscription/debug status query. If those
-facts cannot be established from operational evidence, stop: this runbook does
-not make reinstall safe and no migration framework is supplied. Obtain a
-separate operator decision rather than upgrading old pricing state or assuming
-the earlier zero-subscriber observation is still current.
+If pending operations or obligations cannot be established from public and
+operator evidence, preserve state by upgrade or stop. Do not add production
+migration machinery for hypothetical subscribers. A separately approved
+reinstall uses the reviewed constructor in
+`canisters/event-horizon/mainnet-icp-install-args.did`; it must never be used to
+skip a Ledger backlog. Keep subscriptions closed until the fresh prospective
+reader/profile/pricing baseline is established. Earlier payouts are not replayed.
 
 ## Operator pre-deployment gate
 
 Before any mainnet install, run the behavioural, source-quality, security, reproducibility, and canonical artifact gates explicitly:
 
 ```bash
-POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
 cargo fmt --all -- --check
-cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 ./tools/scripts/security-scan
 npm run verify:reproducible-artifacts
 ./tools/scripts/docker-build
+DFX_IDENTITY=codex_local POCKET_IC_MUTE_SERVER=1 cargo run -p xtask -- test_all
 ```
 
-The test command prepares locked frontend dependencies automatically. The final canonical Docker build prints both uncompressed Wasm hashes and leaves:
+Build the canonical artifacts before the PocketIC suite on a fresh checkout;
+the historical-upgrade scenario checks those exact candidate bytes. The test command prepares locked frontend dependencies automatically. The final canonical Docker build prints both uncompressed Wasm hashes and leaves:
 
 ```text
 release-artifacts/event_horizon.wasm
@@ -203,69 +219,26 @@ different canister. Confirm the installed version and `icp deploy --help`
 before proceeding. If the option is unavailable, update or otherwise verify
 the deployment tooling; do not silently omit the flag.
 
-For this pricing-policy transition only, and only after the decision gate and
-explicit approval, reinstall the existing canonical backend with the reviewed
-constructor. Omitting `--yes` preserves the CLI's destructive-action
-confirmation:
+After separate authorisation, upgrade the existing backend, preserving state:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon -e ic --mode reinstall --no-create \
-  --args-file canisters/event-horizon/mainnet-icp-install-args.did
+  icp deploy event_horizon -e ic --mode upgrade --no-create
 ```
 
-This destroys all backend stable state. Preparing this release does not
-authorise that action. After this exceptional reset has been accepted and
-completed, ordinary backend releases take no constructor argument and use:
+No constructor or upgrade arguments are supplied. Then, after confirming the
+installed backend and its matching registry pin, separately upgrade the frontend:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon -e ic --mode upgrade
+  icp deploy event_horizon_frontend -e ic --mode upgrade --no-create
 ```
 
-After checking its live module hash, configuration, and production application
-surface, inspect the permanent frontend canister immediately before acting. Use
-the existing `event_horizon_frontend` mapping and check whether the canister has
-an installed module. If it does, deliberately select upgrade:
-
-```bash
-EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon_frontend -e ic --mode upgrade
-```
-
-If the permanent frontend canister exists but has no installed module,
-deliberately select install instead:
-
-```bash
-EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
-  icp deploy event_horizon_frontend -e ic --mode install
-```
-
-Do not assume either frontend state and do not automate this choice. The
-ordinary backend instruction above remains an argument-free upgrade. The
-exceptional reinstall is destructive and is not a backlog-recovery procedure.
-
-For a fresh additional instance, use `--mode install` and follow
-[Deploying an immutable instance](deploying-an-instance.md). For an SNS-aware
-instance, that guide owns the Root/Ledger/Governance verification procedure.
-
-The recommended lifecycle is:
-
-```text
-behavioural/source/security/reproducibility gates
-→ canonical Docker build
-→ review printed hashes
-→ inspect canister mapping/settings
-→ complete the pricing-reset decision gate
-→ separately approve and perform the exceptional backend reinstall
-→ wait for prospective reader/profile/pricing initialization
-→ verify fresh 10/20/1,000 pricing and new cursor baselines
-→ compare live module hash
-→ verify backend
-→ inspect frontend installed-module state
-→ install or upgrade frontend as applicable
-→ compare live module hash
-```
+Installing a genuinely new additional Ledger instance uses `--mode install`
+and its immutable constructor; follow [the instance guide](deploying-an-instance.md).
+An exceptional reinstall of the existing backend requires the decision above,
+`--mode reinstall --no-create` and the reviewed constructor; it is not part of
+the ordinary deployment sequence. Neither action is performed by this task.
 
 Event Horizon releases uncompressed `.wasm` files, so each SHA-256 printed by the canonical build helper is intended for direct comparison with the corresponding installed mainnet module hash. See [Reproducible builds](reproducible-builds.md) for independent manifest verification.
 
@@ -285,7 +258,7 @@ Canonical ICP requires `sns_root = null` and selects the fixed legacy
 `query_blocks` adapter. Any other principal selects the generic ICRC-3 adapter
 and must pass ICRC-1/ICRC-3/`1xfer` readiness. This is immutable dispatch, not
 fallback. `surplus_canister = null` keeps canonical ICP CMC-only unless the
-repository owner deliberately supplies a reviewed receiver before reinstall.
+repository owner deliberately supplies a reviewed receiver for a new instance or separately approved reinstall.
 SNS-aware instance deployment is covered by
 [Deploying an immutable instance](deploying-an-instance.md).
 
@@ -345,10 +318,10 @@ Continuous-mode entry requires 100 T liquid cycles and exits below 60 T.
 The production backend exposes public canister status. The simplest operational check is:
 
 ```bash
-icp canister status eo6ei-gaaaa-aaaar-qchra-cai -n ic
+node tools/scripts/public-management-query.mjs canister_status eo6ei-gaaaa-aaaar-qchra-cai
 ```
 
-The `Cycles:` field is the easiest public signal for estimating the active cadence tier. It is not an internal mode field, and `canister_status` does not expose Event Horizon's polling mode directly. Infer the likely tier from the current balance, the previous mode, and the hysteresis table above. Because the implementation decides from liquid cycles, outstanding-call reservations can make the immediately spendable input slightly lower than the reported balance.
+The `cycles` field is the easiest public signal for estimating the active cadence tier. It is not an internal mode field, and `canister_status` does not expose Event Horizon's polling mode directly. Infer the likely tier from the current balance, the previous mode, and the hysteresis table above. Because the implementation decides from liquid cycles, outstanding-call reservations can make the immediately spendable input slightly lower than the reported balance.
 
 ## Read current pricing
 
@@ -357,7 +330,7 @@ With the project canister mapping configured, query readable pricing by name:
 ```bash
 icp canister call event_horizon \
   get_pricing '()' \
-  -e ic \
+  -e ic --query --identity anonymous \
   --candid canisters/event-horizon/event_horizon.did
 ```
 
@@ -366,7 +339,7 @@ The raw-principal equivalent is:
 ```bash
 icp canister call eo6ei-gaaaa-aaaar-qchra-cai \
   get_pricing '()' \
-  -n ic \
+  -n ic --query --identity anonymous \
   --candid canisters/event-horizon/event_horizon.did
 ```
 
@@ -418,7 +391,7 @@ Controller removal is a separate operational decision. During the controlled obs
 7. actual cycle burn is compatible with the starting threshold table;
 8. the installed backend module hash matches the canonical reproducible artifact.
 9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
-10. the production export audit reports exactly `get_instance` and `get_pricing` as application methods;
+10. the production export audit reports exactly `get_instance`, `get_pricing`, and `preview_subscription` as application queries;
 11. global and specific-target poke volume is sustainable at the observed registry size, including validated 256-target range-expansion and callback bounds.
 12. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
 13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
@@ -453,7 +426,7 @@ runtime setter or upgrade argument. Verify `get_instance` and the initial
 CONFIG log against all three values; once controllers are removed, the entire
 instance is immutable.
 
-The Jupiter Faucet `X` alias must resolve to the actual deployed Event Horizon backend before subscription endowments are created.
+The published `E` alias must resolve to the actual Event Horizon backend before subscriber use. `D` identifies Disburser; only `E.` has the special Event Horizon payment route.
 
 ## Frontend backend binding
 
@@ -470,31 +443,11 @@ deployment identity only and is not compiled into executable code.
 
 ## Alias and cross-subject release coordination
 
-This source change authorizes no mainnet action. First deploy and independently
-verify Jupiter Historian's reviewed `list_canister_aliases` contract and E-only
-publication/routing. Source completion is not evidence that live prerequisites
-are installed. X was retired before alias adoption and must not be offered.
-
-Upgrade the backend in place with argument-free `post_upgrade()` to preserve
-financial state, pricing and both Ledger cursors; do not reinstall or reset
-unrelated state. Verify old subscriptions and funding before and after upgrade,
-the new additive stable stores, E-table revision and ordinary notification flow.
-Then deploy the reviewed frontend whose backend hash pin matches the installed
-reviewed backend. Verify the coordinated final module hashes. Deployment,
-controller changes, funding transfers and domain actions require separate
-express approval.
-
-Before relying on callbacks, coordinate a separate Jupiter Faucet/Disburser
-receiver update to the exact `poke(PokeNotification)` contract in
-[candid/subscriber.did](../../candid/subscriber.did). Presently deployed receiver
-ABIs are incompatible. New receivers must authenticate Event Horizon, select
-matches belonging to their own principals, and retain their existing local
-target/threshold filters. Disburser-to-Historian forwarding is separate and is
-not implicitly changed. No fallback callback is available.
-
-Final artifact identities and validation evidence are recorded in the
-[release report](../codex/permanent-aliases-subjects-release.md). The frontend's
-reviewed backend hash must match the canonical backend artifact. Require two
-independent clean Docker builds, both production export audits, manifest
-verification and agreement with the embedded frontend pin. None of these
-preparations installs a live module.
+Follow the first-release ordering above and the installed-version matrix in the
+[pre-release report](../codex/pre-release-resume.md). The required callback is
+[`poke(PokeNotification)`](../../candid/subscriber.did); no obsolete vector
+callback fallback is provided. Each receiver must authenticate Event Horizon,
+filter subjects/targets/thresholds, and retain its independent reconciliation.
+Historian must publish the reviewed D/E identity bindings through
+`list_canister_aliases`. Only E. is a payment route. Verify installed versions
+rather than treating current source or an earlier observation as live evidence.

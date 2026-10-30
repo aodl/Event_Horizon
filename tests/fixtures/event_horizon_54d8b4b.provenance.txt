@@ -1,0 +1,43 @@
+Historical installed-version compatibility fixture, not a current callback contract.
+Source: 54d8b4ba99e6392cfbfa3a5d064ce8f57f8378d7
+Rust/cargo 1.94.1, locked source dependencies, release z/LTO/codegen-units1/panic-abort.
+Build both backend and frontend packages (preserve feature unification), remap
+source root to /build and /home/codexdev/.cargo to /cargo, SOURCE_DATE_EPOCH1700000000.
+Transform: pinned ic-wasm0.9.7 shrink. Debug adds only debug_api.
+Production SHA256 e012e7138cfe2d251bd24edf868cb74aa5fd35856412facd926b65ad519cdcca
+Debug SHA256 43fb4206372a42c1ef30238101fdc41d7ef44ccc22945461c6eed28e56bfef7c
+Production matches public mainnet backend module hash read2026-10-28T21:31:20Z.
+Financial/pricing/config implementation unchanged from this source to dd4a889;
+new stable stores9–11 are additive. Fixture seeding/inspection is local only.
+
+Deterministic reproduction from repository root:
+  tests/fixtures/rebuild-54d8b4b.sh /home/codexdev/eh-historical-rebuild /absolute/path/to/ic-wasm
+Requires Rust 1.94.1 with wasm32-unknown-unknown and ic-wasm 0.9.7.
+The script exports the exact historical Git source, builds BOTH packages with
+locked dependencies (not backend alone), and verifies both output hashes.
+Historical source lock/config SHA256:
+  Cargo.lock 91400242fd8b3b9e1da2ddd302797812c5920441ce7d01aa8c89f972470cff64
+  Cargo.toml 7a0a397103879ec5e3b839f2def3706a65e321b2552a3f98fd0c5322e01f441d
+  rust-toolchain.toml 081815e5d42fd28c23c77fc1bba2c7c2fee495281ef9c1e04dc7091c56000679
+  package-lock.json f85a2206cca7a1c8f5f13151b1aad08802019a036655f623df600b6e7389eff3
+Profile: opt-level=z, lto=true, codegen-units=1, panic=abort, strip=symbols.
+Existing build receipts: observations/pre-release/old/{production,debug}.log
+and complete.json; both logs end with Finished release and hashes were checked
+again during resumed closure. The source worktree was clean at 54d8b4b.
+
+Historical production exports exactly get_instance/get_pricing queries plus
+lifecycle hooks; its Candid has the three-field immutable constructor and no
+application updates. Current preview_subscription is additive. Stable IDs0–8
+retain the historical Candid encodings, including FundingState planned_surplus;
+IDs9–11 are new. Debug fixture uses historical financial code to create real
+stable journal bytes through mocked Ledger/CMC responses, not current-type
+host serialization. Debug init/inspection remain local-only. Scheduler mode
+changes on entering production are checked explicitly against real liquidity.
+Run the isolated scenario after preparing canonical release-artifacts with
+./tools/scripts/docker-build from a clean manifested checkout. The test checks
+the exact canonical candidate hash and must not use a historical/debug artifact
+as the release candidate. Full Git history at the source SHA is needed only to
+rebuild fixtures; running the test uses the checked-in exact binaries.
+The retained Linux ic-wasm 0.9.7 executable used for the original reproduction
+has SHA256 defe628dfeadec9b53205f253c4895dfc8bbf01d1eb4f4c34c14e7eaa064ea4d.
+This is tool evidence, not a cross-platform executable identity requirement.
