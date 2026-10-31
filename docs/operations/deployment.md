@@ -70,38 +70,95 @@ state-preservation checks pass. Having no users or subscriptions is not a
 reason to reinstall. Earlier pricing-reset and frontend-only release decisions
 are historical and do not govern this release.
 
-See the [pre-release report](../codex/pre-release-resume.md) for installed-version
-observations, historical fixture coverage, Jupiter prerequisites and blockers.
-Source completion does not prove live compatibility. No command in this guide
-is authorised by preparation or review alone.
+There are currently no Event Horizon subscriptions (operator context; production
+does not enumerate them). Upgrading these existing canisters and observing the
+unsubscribed service is independent of Jupiter Faucet Suite's upgrade schedule.
+External integration readiness gates funded subscription activation, not this
+deployment. If that no-subscription assumption changes, review existing
+callback and admission dependencies before proceeding.
 
-1. Clear security and CI blockers for the exact reviewed commit; verify source
-   manifest, canonical artifacts, production exports and reproducibility evidence.
-2. Inspect the existing mappings, live module hashes, immutable configuration,
-   ICP holdings, cycles, pricing and available financial/operational evidence.
-   Preserve pending CMC/surplus operations and both Ledger cursors. Production
-   has no financial-state or subscription enumeration API; record unknowns.
-3. Under separate Jupiter operator approval, install any required compatible
-   receivers (Faucet, Disburser, Historian and Relay) and Historian alias query
-   before activating Event Horizon's new sender. Use Jupiter's reviewed upgrade
-   plan: stop/drain and upgrade Historian in place, coordinate its matching
-   Jupiter frontend if Candid changed, and restart/verify publication. Upgrade
-   Faucet/Disburser only at their payout/maturity quiescence boundaries. Canonical
-   Relay requires reviewed full replacement InitArgs and a BaselineOnly first
-   ordinary tick; an embedded Relay update affects new factory children only,
-   not existing controllerless children. Verify each installed hash and any
-   required reward-context prerequisites; details are in the pre-release report.
-   Confirm published D/E bindings and the special E. route. D is an identity
-   alias only. Retain independent reconciliation during coordination.
-4. Under separate Event Horizon operator approval, upgrade the existing backend
-   with no constructor arguments; compare its live hash and configuration,
-   preserved pricing, logs and financial progress. Verify alias refresh and
-   ordinary modern callbacks before accepting new subscriptions.
-5. Separately upgrade the existing frontend using its reviewed canonical
-   artifact; verify the backend pin, certified assets, three application queries,
-   pricing, previews and browser behaviour.
-6. Begin the controlled observation period. Controller removal is a later,
-   separate irreversible decision under [its own runbook](controller-removal.md).
+See the [pre-release report](../codex/pre-release-resume.md) for timestamped
+installed-version observations and historical upgrade evidence. Source
+completion does not prove live compatibility. No command in this guide is
+authorised by preparation or review alone.
+
+#### A. Pre-deployment checks
+
+1. Verify the actual `origin/main` revision and the reviewed release identity;
+   require successful security and behavioural CI on that exact mainline SHA.
+   Verify the source manifest, canonical artifact identities, production export
+   audits and applicable reproducible-build evidence under the gate below.
+2. Inspect the existing mappings and both installed module hashes. A changed
+   historical backend hash requires an upgrade-compatibility review. Check the
+   complete immutable instance tuple, ICP holdings, cycles, pricing and available
+   financial/operational evidence. Preserve financial state, pending CMC/surplus
+   recovery operations and both Ledger cursors. Production has no financial-state
+   or subscription enumeration API; record unknowns and preserve them by upgrade.
+
+#### B. Deploy Event Horizon
+
+Under separate Event Horizon operator approval, upgrade the existing backend
+using the argument-free, canonical-artifact command with `--no-create` in
+[Deploy canonical artifacts](#deploy-canonical-artifacts). No reinstall or
+migration machinery is required. Compare the installed backend module hash
+with the reviewed canonical artifact, and verify:
+
+- immutable configuration through `get_instance` and available CONFIG evidence;
+- preserved pricing through `get_pricing`, plus `preview_subscription` availability
+  (an unresolved alias may return a legitimate declaration error);
+- Ledger reader progress, pricing operation, cycles balance and polling mode;
+- financial-state preservation, pending recovery progress and available logs,
+  recording any state that public queries cannot expose.
+
+After backend verification, separately authorise and upgrade the existing
+frontend using its canonical artifact and `--no-create`. Compare its installed
+module hash, verify the reviewed backend hash pin, certified assets, direct
+instance/pricing/preview queries and browser behaviour. Neither upgrade requires
+a prior Jupiter upgrade while no existing subscriptions depend on callbacks or
+admission during the transition. Jupiter's deployment process is outside this
+Event Horizon procedure.
+
+#### C. Begin an unsubscribed observation period
+
+Observe Ledger progress, pricing, funding/recovery maintenance, cycles and the
+frontend using the [observation checks](#observation-period). No callback delivery
+is expected without an admitted subscriber. `ALIASES_UNAVAILABLE` may legitimately
+report a missing external alias query until that service supports the protocol.
+This is an external subscription-readiness limitation; it does not by itself
+establish a failure of independent Ledger observation. Do not suppress other
+errors: if alias failures stop polling or cause other operational problems,
+report a defect and investigate.
+
+#### D. Activate subscriptions separately — deferred gate
+
+Do not accept the first funded subscription merely because Event Horizon is
+deployed. First verify the relevant installed external integrations against the
+source-controlled protocol: successful Historian alias publication and canonical
+D/E identity resolution (E points to this backend), the special E. Faucet funding
+route, exact-route admission evidence at current prices, and each intended
+receiver's actual [`poke(PokeNotification)` contract](../../candid/subscriber.did),
+caller authentication, subject/target filtering and independent reconciliation.
+A missing alias publication or Historian route is not readiness for accepting
+funded subscriptions. Local `preview_subscription` success proves neither funding
+nor admission nor delivery. Verify installed versions; do not infer external
+upgrades from source or historical observations.
+
+Admission uses a prospective cursor. Confirm its established baseline before
+new funding; historical funding events must not be assumed to replay. Failed
+admission is not automatically retried when Historian or aliases recover; a later
+qualifying Faucet payout provides another opportunity. Separately assess whether
+observed polling cadence and cycle reserves provide the intended notification
+service level. Any live end-to-end subscription test, funding or activation needs
+separate operator authorisation.
+
+#### E. Consider controller removal separately
+
+Successful deployment or unsubscribed observation does not justify immutability.
+Retain backend controller access until the stricter operational, integration and
+funding requirements in the irreversible
+[controller-removal runbook](controller-removal.md) are satisfied. Controller
+removal is outside this initial deployment procedure; the frontend remains
+separately governable.
 
 ## Custom domain and social-preview operator checklist
 
@@ -373,31 +430,34 @@ the following are observed in order:
 6. the rebuilt frontend's static registry contains the installed backend hash
    and displays the same authoritative prices.
 
-Only then should new subscriber or protocol endowments be accepted. Reinstall
+Only then, and after the separate subscription-activation gate above, should new
+subscriber or protocol endowments be accepted. Reinstall
 does not replay historical Faucet payouts, so an endowment sent before the new
 prospective cursor was established might never provide the live payout event
 required for admission.
 
 ## Observation period
 
-Controller removal is a separate operational decision. During the controlled observation period verify at least:
+Begin with unsubscribed observation; controller removal remains a separate
+operational decision. Verify at least:
 
-1. the live Ledger reader remains caught up;
-2. no unexplained `HISTORY_GAP` appears under normal operation;
-3. ICP-to-cycles conversion regularly returns to `Idle` without operator intervention;
-4. the expected polling mode follows the public cycles balance;
+1. the live Ledger reader makes progress, with timestamped lag and processing evidence;
+2. every `HISTORY_GAP` is explicitly accounted for as documented archive skipping;
+   unexpected reader failures or lack of cursor progress require investigation;
+3. funding/recovery maintenance remains healthy, and ICP-to-cycles conversion
+   returns to `Idle` without operator intervention when work is present;
+4. the reported polling mode agrees with liquid cycles and hysteresis, distinguishing
+   public total cycles from the last reported liquid balance;
 5. public logs remain sparse enough to be useful in the configured 16 KiB (`16384` byte) rolling buffer;
-6. honest subscribers receive prompt pokes while their independent reconciliation remains sufficient when pokes are absent;
-7. actual cycle burn is compatible with the starting threshold table;
-8. the installed backend module hash matches the canonical reproducible artifact.
-9. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
-10. the production export audit reports exactly `get_instance`, `get_pricing`, and `preview_subscription` as application queries;
-11. global and specific-target poke volume is sustainable at the observed registry size, including validated 256-target range-expansion and callback bounds.
-12. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
-13. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance.
-14. Current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states.
-15. `get_instance.surplus_canister` and the CONFIG log match the reviewed install argument; if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified.
-16. A patch upgrade retains the pre-upgrade nonzero reader cursors,
+6. actual cycle burn is compatible with the starting threshold table;
+7. the installed backend module hash matches the canonical reproducible artifact;
+8. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
+9. the production export audit reports exactly `get_instance`, `get_pricing`, and `preview_subscription` as application queries;
+10. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
+11. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance;
+12. current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states;
+13. `get_instance.surplus_canister` and available CONFIG evidence match the reviewed immutable configuration; if surplus is enabled, observed policy transitions, retained-first ordering, both 150 T gates, and the immutable destination account have been verified;
+14. a patch upgrade retains the pre-upgrade nonzero reader cursors,
     subscriptions, pricing, immutable configuration, and pending financial
     state before ordinary catch-up resumes.
 
@@ -408,7 +468,18 @@ archive ranges, so equality between differently timed observations is neither
 required nor sufficient. Confirm fresh processing and failure-episode behavior
 as well; do not validate the patch solely by the absence of one log line.
 
-Only after that evidence is satisfactory should [controller removal](controller-removal.md) be followed.
+Archive skipping does not provide complete historical coverage. Distinguish
+explicitly proved archive gaps from failed reads, stalled cursors, reserve
+suspension and a cadence too slow for the intended future service. Before funded
+activation, decide whether measured cadence and cycle reserves are adequate.
+
+After separately authorised subscription activation, also verify that the live
+reader remains caught up, honest subscribers receive prompt pokes and independent
+reconciliation remains sufficient when pokes are absent. Confirm sustainable
+global/specific fan-out including the validated 256-target expansion and callback
+bounds. These live callback checks do not apply to the unsubscribed
+period. Only after the full evidence and its additional safeguards are satisfied
+should [controller removal](controller-removal.md) be considered.
 
 ## External dependencies
 
@@ -443,8 +514,12 @@ deployment identity only and is not compiled into executable code.
 
 ## Alias and cross-subject release coordination
 
-Follow the first-release ordering above and the installed-version matrix in the
-[pre-release report](../codex/pre-release-resume.md). The required callback is
+This is a subscription-activation gate, independent of deploying and observing
+an unsubscribed Event Horizon. Follow the first-release ordering above; the
+installed-version matrix in the [pre-release report](../codex/pre-release-resume.md)
+is timestamped historical evidence, not proof of current external readiness.
+Jupiter upgrades belong to its separately managed release process, not this
+deployment procedure. The required callback is
 [`poke(PokeNotification)`](../../candid/subscriber.did); no obsolete vector
 callback fallback is provided. Each receiver must authenticate Event Horizon,
 filter subjects/targets/thresholds, and retain its independent reconciliation.

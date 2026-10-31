@@ -4,6 +4,12 @@ Event Horizon uses **an empty controller list** for final immutability. It does 
 
 This procedure is intentionally manual and irreversible. There is no in-protocol administration or self-upgrade mechanism.
 
+These requirements are stricter than initial deployment. An unsubscribed backend
+and its separately controlled frontend may be upgraded and observed independently
+of Jupiter's schedule under the [deployment runbook](deployment.md). Successful
+deployment alone does not satisfy this finalisation gate; retain controller
+access while external integration or operational verification remains open.
+
 ## Preconditions
 
 Do not continue unless all of the following are true:

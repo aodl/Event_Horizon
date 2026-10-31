@@ -34,7 +34,13 @@ uses alias `E` only as an example; every instance uses its reviewed alias:
 The planned IO alias `I` is intended, not published. The full memo—including
 alias, dot, subscriber, scope or range, and optional threshold—must fit
 Jupiter's 32-byte memo limit; aliases are not assumed to be one character.
-Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand once at admission into indexed watched-account relations. `n<nonce>` selects a subject-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. One unified callback reports global activity and at most 256 subject-qualified specific matches together. This intentionally breaks Jupiter’s current receiving ABI; its Faucet and Disburser receivers require a coordinated update before rollout. Their separate forwarding mechanism is unaffected.
+Numeric targets are canonical decimal `u64`. Ranges may begin anywhere but contain at most 256 inclusive targets and expand once at admission into indexed watched-account relations. `n<nonce>` selects a subject-controlled NNS or verified-SNS neuron staking account. Overlaps retain the lowest permanent threshold. One unified callback reports global activity and at most 256 subject-qualified specific matches together. This changes the earlier Jupiter receiving ABI; compatible installed receivers, Historian alias publication and the Faucet funding route must be verified before funded subscription activation.
+
+With no subscriptions, the existing Event Horizon backend can be upgraded
+argument-free while preserving state, followed by a separately authorised
+frontend upgrade and unsubscribed observation, independently of Jupiter's
+upgrade schedule. Subscription activation and irreversible backend controller
+removal have separate gates in the [deployment runbook](docs/operations/deployment.md).
 
 A subscriber may use several Event Horizon instances for several ledgers. Once authenticated, the Event Horizon caller identifies the ledger context of each poke; see the [subscriber guide](docs/subscriber-guide.md). Exact protocol semantics are normative in [SPEC.md](SPEC.md).
 

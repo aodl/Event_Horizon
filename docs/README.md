@@ -41,6 +41,11 @@ component's identity and role.
 
 ## Operations and deployment
 
+With no subscriptions, the existing backend and frontend can be upgraded and
+observed independently of Jupiter's schedule. External integration readiness
+gates funded subscription activation. Backend controller removal is a later,
+irreversible decision with stricter requirements.
+
 - [Deployment — authoritative current first-release procedure](operations/deployment.md)
 - [Deploying another immutable instance](operations/deploying-an-instance.md)
 - [Acceptance observation](operations/acceptance-observation.md)
@@ -60,4 +65,4 @@ component's identity and role.
 - [`docs/codex/`](codex/)
 - [`docs/provenance/`](provenance/)
 
-The [resumed pre-release report](codex/pre-release-resume.md) distinguishes timestamped live observations from historical validation and lists unresolved release blockers.
+The [resumed pre-release report](codex/pre-release-resume.md) preserves timestamped observations and historical validation, with a dated clarification of deployment and activation gates. The [final documentation alignment verification](codex/final-release-alignment.md) records exact mainline CI and unchanged production inputs.

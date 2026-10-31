@@ -40,8 +40,9 @@ monthly CMC-rate formula and independent upward rounding. The stored `Price`
 shape is unchanged; range remains exactly derived from the 20 ICP basis using
 `ceil(global_icp / 50)`.
 
-The backend can be installed, initialize its observed-ledger profile, and
-observe the configured ledger without a Jupiter Faucet alias. A reviewed alias
+The backend can be installed, initialize its observed-ledger profile, and observe
+the configured ledger without a Jupiter Faucet alias. An existing backend can
+also be upgraded while preserving state and continue that observation. A reviewed alias
 is required before opening the instance for subscriber use: Faucet payout plus
 Historian route evidence is how subscriber declarations are funded and
 admitted.
@@ -143,4 +144,11 @@ the selected backend's local `preview_subscription` query. See the
 [subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
 local subject filtering, and authoritative reconciliation.
 
-For the current first release, follow the authoritative [deployment procedure](../../docs/operations/deployment.md): preserve the existing backend by upgrade, verify Jupiter prerequisites, then separately upgrade the frontend. Controller removal follows a separate observation period.
+For the current first release, follow the authoritative
+[deployment procedure](../../docs/operations/deployment.md): upgrade the existing
+backend argument-free while preserving state, then separately authorise the
+frontend upgrade and observe the unsubscribed service. Jupiter readiness is
+independent of those upgrades; verify alias publication, the funding/admission
+route and compatible receivers before accepting funded subscriptions. Controller
+removal remains a separate irreversible decision with stricter observation and
+integration requirements.

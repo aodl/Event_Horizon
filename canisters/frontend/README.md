@@ -327,4 +327,11 @@ the selected backend's local `preview_subscription` query. See the
 [subscriber guide](../../docs/subscriber-guide.md) for exact-route funding, unknown-cache admission, external-only callbacks,
 local subject filtering, and authoritative reconciliation.
 
-The current coordinated first-release sequence is owned by [Deployment](../../docs/operations/deployment.md). Upgrade this existing frontend only after the reviewed backend and Jupiter prerequisites are verified; retain controller access throughout the separate observation period.
+The current first-release sequence is owned by
+[Deployment](../../docs/operations/deployment.md). After verifying the reviewed
+backend, separately authorise this existing frontend's upgrade, compare its
+installed module hash and verify certification and the backend pin. With no
+subscriptions, these upgrades and observation are independent of Jupiter's
+schedule. External alias, funding/admission and receiver compatibility are
+required before funded subscription activation. Retain backend controller access
+until the separate, stricter controller-removal requirements are satisfied.
