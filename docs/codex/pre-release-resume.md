@@ -6,6 +6,36 @@ Both ignored historical fixtures exist and their actual SHA-256 values match sta
 
 Historical receipts are under observations/release-closure and live observations under observations/20261028T213120Z. Their existence alone is not test success; inspect statuses before reuse. New test validation remains to be established. No mainnet mutation authorised.
 
+## 2026-10-31 clarification — deployment and activation are separate
+
+The timestamped observations, installed hashes, tests and historical conclusions
+below are preserved. The earlier Jupiter incompatibility finding blocks funded
+subscription activation, not upgrading Event Horizon while it has no subscriptions.
+The existing backend can receive the reviewed argument-free, state-preserving
+upgrade, followed by a separately authorised frontend upgrade and unsubscribed
+observation, independently of Jupiter's schedule. No reinstall or migration is
+needed. This clarification supersedes the historical Jupiter-first ordering
+below; it does not claim that any external canister has since been upgraded.
+Jupiter's own deployment process remains outside this task.
+
+Alias refresh runs independently of Ledger polling. Existing PocketIC scenarios
+`aliases_paging_failures_daily_cache_and_upgrade` and
+`historian_outage_does_not_halt_observation_or_create_admission_retry` establish
+cursor progress through alias failures and observation/callbacks for an already
+admitted subscriber during a Historian outage. They do not establish readiness
+for new funded subscriptions: alias publication, canonical resolution, Faucet
+routing, exact Historian admission evidence and compatible receiver contracts
+must be verified first. No callbacks are expected during unsubscribed observation.
+If alias failure stalls polling or causes other operational problems, investigate
+it as a defect. Historical funding does not automatically replay on recovery.
+
+Use the [current deployment runbook](../operations/deployment.md) and revised
+operator checklist below. Controller removal remains a separate irreversible
+decision subject to its full operational/integration safeguards. Exact mainline
+CI and production-input comparison are recorded in the
+[final alignment verification](final-release-alignment.md); this is not a new
+413-test PocketIC claim.
+
 ## Release findings
 
 Starting commit: `dd4a88993b92f522a08296786e9afd453b4a3101` on
@@ -145,8 +175,10 @@ deployment approvals. Full values and local build metadata are retained in the
 and independent reconciliation of the intended new release remain **unverified**.
 No update call to a receiver and no funding transfer was used to test mainnet.
 
-Jupiter operator ordering, from its `docs/operations/deployment.md` and
-`docs/relay-setup-recovery.md` at the inspected revision:
+Historical Jupiter operator ordering, recorded from its
+`docs/operations/deployment.md` and `docs/relay-setup-recovery.md` at the inspected
+revision (retained as evidence, not current Event Horizon instructions; item 5
+is superseded by the 2026-10-31 clarification above):
 
 1. Complete Jupiter's own artifact/security/preflight review and inventory.
    Faucet requires an empty active-payout journal; Disburser requires its
@@ -198,27 +230,37 @@ new instance install, and later controller removal are separate decisions.
 Obsolete active pricing-reset instructions and retired X routing were removed;
 production query lists now include `preview_subscription`.
 
-Operator-only activation checklist (none performed here):
+Current operator-only deployment and deferred activation checklist (revised
+2026-10-31; none performed here):
 
 1. Verify security and behavioural CI at the exact release head. Review the
    source manifest and canonical artifacts.
 2. Reobserve mappings, installed hashes/configuration, cycles/ICP, pricing and
    operational evidence. Stop on a changed backend hash until its upgrade
    compatibility is reviewed; retain unknown financial obligations.
-3. Under separate Jupiter authorization, upgrade required receivers and
-   Historian alias publication first, following Jupiter's reviewed Relay
-   lifecycle/dependency plan. Verify resulting hashes, D/E bindings, E. route,
-   trusted caller, subject filters and independent timers before relying on hints.
-4. Under separate Event Horizon authorization, upgrade the existing backend
-   argument-free with the canonical Wasm. Preserve stable state; verify
-   hash/configuration, pricing, alias refresh, financial progress and callbacks.
-5. Separately upgrade the existing frontend with the matching backend pin;
-   verify certified assets, instance/pricing/preview queries and memo builder.
-6. For new instances or any separately approved reinstall, establish the
-   prospective cursor/profile/pricing baseline before new endowment activity.
-   Do not expect old payouts to replay. Funding is a distinct operator action.
-7. Observe while controlled. Only after the separate observation period and
-   controller-removal checklist, consider irreversible backend controller removal.
+3. With no subscriptions, under separate Event Horizon authorization, upgrade
+   the existing backend argument-free with the canonical Wasm. Preserve stable state; verify
+   hash/configuration, pricing/preview availability, Ledger progress, cycles,
+   polling mode, financial recovery and logs. Jupiter readiness is not a
+   prerequisite for this unsubscribed upgrade.
+4. Separately authorise and upgrade the existing frontend with the matching
+   backend pin; compare its installed hash and verify certified assets,
+   instance/pricing/preview queries and memo builder.
+5. Observe the unsubscribed service while controlled. Assess Ledger progress,
+   pricing, cycles and reader health, accounting for documented archive gaps.
+   Record alias-refresh failures as external readiness limits; investigate
+   unexpected polling failures. Do not demand live callback evidence without
+   admitted subscribers.
+6. Defer funded activation until installed external alias publication, canonical
+   D/E identities, E. funding route, exact-route admission evidence at current
+   prices and actual receiver ABI/authentication/filtering/reconciliation are
+   verified. Assess cadence and reserves for the intended service level.
+   Confirm the prospective cursor/profile/pricing baseline before new endowment
+   activity; do not expect old payouts to replay. Funding and live end-to-end
+   subscription testing require separate operator authorization.
+7. Only after the full operational observation and stricter
+   [controller-removal checklist](../operations/controller-removal.md), consider
+   irreversible backend controller removal. Deployment alone is insufficient.
 
 ### Validation, artifacts and release blockers
 
