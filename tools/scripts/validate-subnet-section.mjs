@@ -71,7 +71,8 @@ try {
     await page.keyboard.press('Tab');
     assert.ok(await section.getByRole('link',{name:'View subnet details'}).evaluate(n=>n===document.activeElement));
     await section.scrollIntoViewIfNeeded();
-    if(!process.argv.includes('--no-screenshots'))await section.screenshot({path:resolve(output,`section-${width}x${height}.png`),timeout:60000});
+    await section.evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
+    await shot(page,`section-${width}x${height}`);
     await page.locator('.manifesto').scrollIntoViewIfNeeded();
     assert.equal(await frame.getAttribute('src'),SUBNET_EMBED_URL);
     assert.equal(evidence.requests.slice(requestsBefore).filter(r=>r.url===SUBNET_EMBED_URL).length,1,'one iframe navigation per document');
@@ -118,8 +119,33 @@ try {
       if(mobile)await country.tap();else await country.click();
       await map.getByText(/machines in .*data centers/).waitFor();
       live.controls='Country selection opened data-centre details';
+      const countrySnapshot=await map.locator('body').ariaSnapshot();
+      const centre=map.getByRole('button',{name:/^Show /}).first();
+      live.dataCentreControl=await centre.getAttribute('aria-label');
+      // A short screen needs ordinary parent scrolling to reach the frame's lower panel.
+      const centreBounds=await centre.boundingBox();
+      await livePage.evaluate(y=>scrollBy({top:y-innerHeight/2,behavior:'instant'}),centreBounds.y+centreBounds.height/2);
+      if(mobile)await centre.tap();else await centre.click();
+      await livePage.waitForTimeout(250);
+      assert.equal(await centre.getAttribute('aria-expanded'),'true');
+      assert.notEqual(await map.locator('body').ariaSnapshot(),countrySnapshot,'data-centre control updates the real map');
       await writeFile(resolve(output,`live-${label}.yml`),await map.locator('body').ariaSnapshot());
-      if(!process.argv.includes('--no-screenshots'))await livePage.locator('#subnet-map').screenshot({path:resolve(output,`live-${label}.png`),timeout:60000});
+      await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
+      await shot(livePage,`live-${label}`);
+      await livePage.locator('iframe').scrollIntoViewIfNeeded();
+      await shot(livePage,`live-map-${label}`);
+      if(!mobile) {
+        await map.getByRole('button',{name:'About this map',exact:true}).focus();
+        live.keyboardExit=false;
+        for(let step=0;step<120;step++) {
+          await livePage.keyboard.press('Tab');
+          if(await livePage.getByRole('link',{name:'View subnet details'}).evaluate(n=>n===document.activeElement)) {
+            live.keyboardExit=true;break;
+          }
+        }
+        assert.ok(live.keyboardExit,'native Tab navigation leaves the real frame for the parent sources');
+        await livePage.locator('iframe').scrollIntoViewIfNeeded();
+      }
       const mapBounds=await livePage.locator('iframe').boundingBox();
       await livePage.mouse.move(mapBounds.x+mapBounds.width/2,Math.max(10,Math.min(viewport.height-10,mapBounds.y+100)));
       const overBefore=await livePage.evaluate(()=>scrollY);

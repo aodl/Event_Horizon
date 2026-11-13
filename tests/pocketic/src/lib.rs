@@ -7452,12 +7452,14 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn production_wasm_exposes_only_approved_read_only_queries() -> Result<()> {
+        // Keep a cold production build outside the replica's idle lifetime.
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
         pic.install_canister(
             id,
-            wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?,
+            production_wasm,
             encode_one(InitArgs {
                 observed_ledger: id,
                 sns_root: None,
@@ -7483,14 +7485,15 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn same_production_wasm_supports_distinct_immutable_surplus_recipients() -> Result<()> {
+        // As with the frontend fixtures, compile before starting PocketIC.
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
+        let module_hash = Sha256::digest(&production_wasm);
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let instance_a = pic.create_canister();
         let instance_b = pic.create_canister();
         let instance_none = pic.create_canister();
         let recipient_a = pic.create_canister();
         let recipient_b = pic.create_canister();
-        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
-        let module_hash = Sha256::digest(&production_wasm);
 
         for (instance, recipient) in [
             (instance_a, Some(recipient_a)),
