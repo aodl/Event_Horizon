@@ -7452,12 +7452,14 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn production_wasm_exposes_only_approved_read_only_queries() -> Result<()> {
+        // Keep a cold production build outside the replica's idle lifetime.
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
         pic.install_canister(
             id,
-            wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?,
+            production_wasm,
             encode_one(InitArgs {
                 observed_ledger: id,
                 sns_root: None,
@@ -7483,14 +7485,15 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn same_production_wasm_supports_distinct_immutable_surplus_recipients() -> Result<()> {
+        // As with the frontend fixtures, compile before starting PocketIC.
+        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
+        let module_hash = Sha256::digest(&production_wasm);
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let instance_a = pic.create_canister();
         let instance_b = pic.create_canister();
         let instance_none = pic.create_canister();
         let recipient_a = pic.create_canister();
         let recipient_b = pic.create_canister();
-        let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
-        let module_hash = Sha256::digest(&production_wasm);
 
         for (instance, recipient) in [
             (instance_a, Some(recipient_a)),
@@ -7854,10 +7857,18 @@ mod tests {
         assert!(html.contains("id=\"operating-tier\""));
         assert!(html.contains("id=\"operating-balance\""));
         assert!(html.contains("id=\"operating-progress\""));
-        assert!(html.contains("<aside id=\"subnet-widget\""));
-        assert!(html.contains("<dialog id=\"subnet-dialog\""));
+        assert!(html.contains("<section id=\"subnet-map\""));
+        assert!(!html.contains("subnet-widget"));
+        assert!(!html.contains("<dialog"));
+        let main = html.find("<main id=\"main-content\"").unwrap();
+        let subnet = html.find("<section id=\"subnet-map\"").unwrap();
+        let manifesto = html.find("<section class=\"manifesto\"").unwrap();
+        assert!(main < subnet && subnet < manifesto);
+        assert_eq!(html.matches("<iframe").count(), 1);
+        assert!(html.contains("loading=\"lazy\""));
+        assert!(html.contains("referrerpolicy=\"no-referrer\""));
         assert!(html.contains("sandbox=\"allow-scripts allow-same-origin\""));
-        assert!(!html.contains("src=\"https://dashboard.internetcomputer.org"));
+        assert!(html.contains("src=\"https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae\""));
         assert!(html.contains("ICP ledger transactions"));
         assert_eq!(
             html.matches("<link rel=\"canonical\" href=\"https://www.event-horizon-icp.com/\">")

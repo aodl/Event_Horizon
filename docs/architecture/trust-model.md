@@ -26,15 +26,15 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - For a subscriber trusting multiple Event Horizon instances, the authenticated caller defines the observed-ledger context of every poke.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
-- The optional “Fully on-chain” widget embeds a separately maintained ICP
-  Dashboard application only after explicit expansion, and unloads it on
-  minimisation or dismissal. Event Horizon certifies the launcher, static subnet
-  URL and parent controls, not the external iframe's assets or runtime data.
-  The dashboard is trusted for display; its subnet composition does not prove
-  controller removal, deployed source or a matching Wasm hash. The frontend
-  remains separately controlled. Both canonical canisters were verified on the
-  displayed subnet on 2026-11-13; this reviewed static relationship may need
-  updating after a network move. No runtime subnet discovery is introduced.
+- The “Fully on-chain” section embeds a separately maintained ICP Dashboard
+  application through one static, natively lazy-loaded iframe above “The protocol”.
+  Event Horizon certifies its section markup, static subnet URL and source links,
+  not the external application's assets or registry-derived runtime data. The map
+  is trusted for display; subnet composition does not prove controller removal,
+  deployed source or a matching Wasm hash. The frontend remains independently
+  upgradeable. Both canonical canisters were verified on the displayed subnet on
+  2026-11-13; review the static URL after a network move. No runtime subnet discovery,
+  custom iframe lifecycle or additional backend requests are introduced.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 
