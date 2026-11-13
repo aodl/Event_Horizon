@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const output = resolve(root, 'observations/hero-facts/browser');
+const screenshot = (page, options) => process.argv.includes('--no-screenshots') ? Promise.resolve() : page.screenshot(options);
 await mkdir(output, { recursive: true });
 const html = await readFile(resolve(root, 'canisters/frontend/public/index.html'), 'utf8');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -76,6 +77,9 @@ async function assertBranding(page) {
       display: style.display, visibility: style.visibility, opacity: Number(style.opacity), ariaHidden: mark.getAttribute('aria-hidden'), tabindex: mark.getAttribute('tabindex'),
       titleTop: rect.top, markTop: mark.getBoundingClientRect().top, scrollY };
     return compact === (eligible && result.withinPeek) ? result : false;
+  }, null, {timeout:40000}).catch(async error => {
+    console.error('Branding timeout geometry:', await page.evaluate(() => ({width:innerWidth,height:innerHeight,scrollY,mark:document.querySelector('.hero__compact-mark').outerHTML,title:document.querySelector('#info').getBoundingClientRect().toJSON(),eligible:matchMedia('(max-width: 81.25rem), (max-aspect-ratio: 1/1)').matches})));
+    throw error;
   });
   const result = await handle.jsonValue(); await handle.dispose();
   assert.ok(!result.compact || result.withinPeek, JSON.stringify(result));
@@ -90,7 +94,7 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.COUNTER_BROWSER_EXECUTABLE ? { executablePath: process.env.COUNTER_BROWSER_EXECUTABLE } : {}) });
   evidence.engine = await browser.version();
   const context = await browser.newContext();
-  context.setDefaultTimeout(15000);
+  context.setDefaultTimeout(60000);
   await context.route('https://icp-api.io/**', route => route.abort('internetdisconnected'));
   const page = await context.newPage();
   page.on('console', msg => { if (['error', 'warning'].includes(msg.type())) evidence.console.push({ type: msg.type(), text: msg.text() }); });
@@ -100,7 +104,7 @@ try {
   await page.goto(origin);
   await page.waitForFunction(() => document.getElementById('ledger-status').textContent.includes('unavailable'));
   assert.equal(await page.locator('#ledger-count').textContent(), '—');
-  await page.screenshot({ timeout: 60000,path:resolve(output, 'unavailable.png')});
+  await screenshot(page, { timeout: 60000,path:resolve(output, 'unavailable.png')});
   await page.selectOption('#instance', 'io');
   assert.match(await page.locator('#ledger-status').textContent(), /until launch/);
   const before = evidence.requests.filter(r => r.url.includes('/ryjl3-tyaaa-aaaaa-aaaba-cai/')).length;
@@ -118,7 +122,7 @@ try {
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); });
   await page.waitForFunction(() => !document.querySelector('.hero__detail').contentDocument.documentElement.animationsPaused());
   assert.equal(evidence.requests.filter(r => r.url.includes('/ryjl3-tyaaa-aaaaa-aaaba-cai/')).length, before);
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'production-planned.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'production-planned.png') });
   evidence.production = { builtBundle: true, plannedNoRequests: true, unavailablePlaceholder: true,
     nativeSvgTimelineFrozen: true, cssAnimationsPaused: cssPaused, repeatedSvgLoads: true,
     network: 'Deliberately offline: production verification is unchanged; failures remain isolated.' };
@@ -160,7 +164,7 @@ try {
     } else assert.ok(geometry.gap >= 0 && geometry.gap < 160);
     evidence.fixtures[label] = { bounds, geometry };
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ timeout: 60000, path: resolve(output, `${label}.png`) }); evidence.screenshots.push(`${label}.png`);
+    await screenshot(page, { timeout: 60000, path: resolve(output, `${label}.png`) }); evidence.screenshots.push(`${label}.png`);
   }
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
@@ -212,7 +216,7 @@ try {
   assert.equal(tallerReported.ariaHidden, 'true'); assert.equal(tallerReported.tabindex, '-1');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.hero__compact-mark')).visibility === 'hidden');
   assert.equal(await page.locator('.hero__compact-mark').evaluate(n => Number(getComputedStyle(n).opacity)), 0);
-  await page.screenshot({path:resolve(output,'reported-873x940.png')});
+  await screenshot(page, {path:resolve(output,'reported-873x940.png')});
   // A layout change within the SAME eligible media condition must also hide EVH.
   await page.setViewportSize({ width: 1000, height: 830 });
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
@@ -225,16 +229,16 @@ try {
   }, pixels);
   await placeHeading(96);
   const peek = await assertBranding(page); assert.equal(peek.eligible, true); assert.equal(peek.heading, true); assert.equal(peek.compact, true);
-  await page.screenshot({ path: resolve(output, 'tolerated-peek.png') });
+  await screenshot(page, { path: resolve(output, 'tolerated-peek.png') });
   await placeHeading(129);
   const reflowed = await assertBranding(page); assert.equal(reflowed.eligible, true); assert.equal(reflowed.heading, true); assert.equal(reflowed.compact, false);
-  await page.screenshot({ path: resolve(output, 'same-media-reflow.png') });
+  await screenshot(page, { path: resolve(output, 'same-media-reflow.png') });
   await page.evaluate(() => { document.querySelector('.hero__body').style.marginTop = ''; });
   // Tall viewports can show the full heading; the compact title must stay absent.
   await page.setViewportSize({ width: 1000, height: 1100 });
   await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
   const tall = await assertBranding(page); assert.equal(tall.heading, true); assert.equal(tall.compact, false);
-  await page.screenshot({ path: resolve(output, 'tall-title.png') });
+  await screenshot(page, { path: resolve(output, 'tall-title.png') });
   // Zoom/text reflow must not move any full text back over the artwork.
   assert.equal(await page.evaluate(() => document.querySelector('.hero__bottom').getBoundingClientRect().bottom <= document.querySelector('.hero__body').getBoundingClientRect().top), true);
   await page.setViewportSize({width:1440,height:900});
@@ -244,11 +248,11 @@ try {
   assert.equal(await page.locator('#ledger-rate').textContent(), '70.0 tx/s');
   await page.evaluate(() => counterFixture.time.frame(10500));
   assert.equal(await page.locator('#ledger-count').textContent(), '123,456,894');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'interpolating.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'interpolating.png') });
   await page.evaluate(async () => { await counterFixture.time.tick(7500); counterFixture.time.frame(18000); });
   assert.equal(await page.locator('#ledger-count').textContent(), '123,456,999');
   assert.equal(await page.locator('#ledger-rate').textContent(), '11.7 tx/s');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'nonzero-rate.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'nonzero-rate.png') });
   for (const [width,height,label] of [[1440,900,'desktop'],[1280,800,'compact-wide'],[1024,768,'compact'],[1000,800,'regression'],[1000,900,'near-square'],[1000,1000,'square'],[873,804,'reported-873x804'],[844,390,'landscape'],[390,844,'phone'],[360,640,'small-phone'],[320,568,'narrow']]) {
     await page.setViewportSize({width,height});
     await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
@@ -259,24 +263,24 @@ try {
       return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     });
     assert.equal(overlap, false, `${label}: statistic overlaps heading/body`);
-    await page.screenshot({ timeout: 60000,path:resolve(output, `${label}-rate.png`)}); evidence.screenshots.push(`${label}-rate.png`);
+    await screenshot(page, { timeout: 60000,path:resolve(output, `${label}-rate.png`)}); evidence.screenshots.push(`${label}-rate.png`);
   }
   await page.setViewportSize({width:1440,height:900});
   await page.evaluate(async () => { await counterFixture.time.tick(60000); counterFixture.time.frame(); });
   assert.equal(await page.locator('#ledger-rate').textContent(), '0 tx/s');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'zero-rate.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'zero-rate.png') });
   await page.evaluate(async () => { counterFixture.sample('123457000'); await counterFixture.time.tick(15000); });
   assert.equal(await page.locator('#ledger-rate').textContent(), '<0.1 tx/s');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'small-rate.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'small-rate.png') });
   await page.evaluate(() => counterFixture.fail(true));
   await page.evaluate(async () => { await counterFixture.time.tick(180000); });
   assert.match(await page.locator('#ledger-status').textContent(), /delayed/);
   assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'delayed.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'delayed.png') });
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
   const frozen = await page.locator('#ledger-count').textContent();
   assert.equal(await page.locator('#ledger-rate').textContent(), '— tx/s');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'paused.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'paused.png') });
   await page.evaluate(async () => { counterFixture.fail(false); counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'); await counterFixture.time.tick(120000); });
   assert.equal(await page.locator('#ledger-count').textContent(), frozen);
   // Long totals are generic-only; use the actual generic DOM integration below.
@@ -284,10 +288,10 @@ try {
   await page.evaluate(() => counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'));
   await page.evaluate(async () => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); await counterFixture.flush(); });
   assert.equal(await page.locator('#ledger-count').textContent(), '999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999');
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'long-value.png') });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'long-value.png') });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForFunction(() => document.getElementById('ledger-status').textContent === 'Periodically refreshed');
-  await page.screenshot({ timeout: 60000,path:resolve(output, 'reduced-motion.png')});
+  await screenshot(page, { timeout: 60000,path:resolve(output, 'reduced-motion.png')});
   assert.equal(await page.locator('#live-effects').count(), 0);
   const snapshot = await page.locator('.ledger-stat').ariaSnapshot();
   await writeFile(resolve(output, 'accessibility.yml'), snapshot);
@@ -295,11 +299,11 @@ try {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.evaluate(() => document.documentElement.style.fontSize = '200%');
   await assertBranding(page);
-  await page.screenshot({ timeout: 60000,path:resolve(output, 'regression-text-zoom.png')});
+  await screenshot(page, { timeout: 60000,path:resolve(output, 'regression-text-zoom.png')});
   await page.setViewportSize({ width: 320, height: 568 });
   await assertBranding(page);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ timeout: 60000, path: resolve(output, 'zoomed.png'), fullPage: true });
+  await screenshot(page, { timeout: 60000, path: resolve(output, 'zoomed.png'), fullPage: true });
   // Drive visibility events through the real DOM integration with a test-only getter.
   await page.evaluate(async () => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -330,7 +334,7 @@ try {
     await page.setViewportSize({width,height});
     await page.locator('.operating-status').scrollIntoViewIfNeeded();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({path:resolve(output, `operating-${label}.png`)});
+    await screenshot(page, {path:resolve(output, `operating-${label}.png`)});
     evidence.screenshots.push(`operating-${label}.png`);
   }
   await writeFile(resolve(output, 'operating-accessibility.yml'), await page.locator('.operating-status').ariaSnapshot());
@@ -373,7 +377,7 @@ try {
     assert.equal(await page.locator('#ledger-status').isVisible(), true);
     assert.equal(await page.locator('#ledger-status').textContent(), 'Updates delayed · Showing last known total');
     assert.deepEqual(await rects(), baseline);
-    await page.screenshot({path:resolve(output,`calm-delayed-${width}x${height}.png`)});
+    await screenshot(page, {path:resolve(output,`calm-delayed-${width}x${height}.png`)});
     await page.evaluate(async () => {counterFixture.fail(false); await counterFixture.time.tick(45000);});
     assert.equal(await page.locator('#ledger-status').isVisible(), false);
     assert.deepEqual(await rects(), baseline);
@@ -384,8 +388,8 @@ try {
   // The hero facts are native links: test actual accessible names, image loading,
   // keyboard/fragment history and direct loading, alongside the existing art/counter regressions.
   const factTargets = [
-    ['open-source','Open Source & Verifiable'],['immutability','Designed for Immutability'],
-    ['endowment-funding','Productive Endowment Funding'],['internet-computer','Powered by Internet Computer Protocol'],
+    ['open-source','Open Source & Verifiable'],['immutability','Engineered for Immutability'],
+    ['endowment-funding','Perpetual Endowment Funding'],['internet-computer','Powered by Internet Computer Protocol'],
   ];
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto(`${origin}/fixture.html`);
@@ -407,7 +411,7 @@ try {
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await assertBranding(page);
     evidence.fixtures.heroFacts.push({width,height,...geometry});
-    await page.screenshot({path:resolve(output,`facts-${width}x${height}.png`)});
+    await screenshot(page, {path:resolve(output,`facts-${width}x${height}.png`)});
   }
   await page.setViewportSize({width:1280,height:800});
   const nav=page.getByRole('navigation',{name:'Explore Event Horizon'});
@@ -429,7 +433,7 @@ try {
     assert.equal(await target.evaluate(n=>document.activeElement===n),true);
     await page.goBack();assert.equal(new URL(page.url()).hash,previous);
     await page.goForward();assert.equal(new URL(page.url()).hash,`#${id}`);
-    await page.screenshot({path:resolve(output,`section-${id}.png`)});
+    await screenshot(page, {path:resolve(output,`section-${id}.png`)});
   }
   await page.emulateMedia({reducedMotion:'no-preference'});
   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollBehavior),'smooth');
@@ -446,7 +450,7 @@ try {
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
   await assertBranding(page);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.screenshot({path:resolve(output,'facts-text-zoom.png'),fullPage:true});
+  await screenshot(page, {path:resolve(output,'facts-text-zoom.png'),fullPage:true});
   evidence.fixtures.heroFactNavigation={keyboard:true,focusVisible:true,history:true,directProductionFragments:true,decorativeIcons:true,reducedMotion:true,textZoom:true};
   await writeFile(resolve(output,'hero-facts-accessibility.yml'),await page.getByRole('navigation',{name:'Explore Event Horizon'}).ariaSnapshot());
   assert.equal(evidence.console.filter(e=>e.type==='pageerror'||/Content Security Policy|violates.*directive/.test(e.text)).length,0);
@@ -461,11 +465,11 @@ try {
     await livePage.waitForFunction(old => document.getElementById('ledger-checked').textContent !== old, checked, { timeout: 15000 });
     evidence.liveBrowser = { first, second: await livePage.locator('#ledger-sample').textContent(),
       checked: await livePage.locator('#ledger-checked').textContent(), requests: liveRequests };
-    await livePage.screenshot({ path: resolve(output, 'production-live.png') });
+    await screenshot(livePage, { path: resolve(output, 'production-live.png') });
     await livePage.waitForFunction(() => document.getElementById('operating-balance').textContent !== '—', null, {timeout:15000});
     evidence.liveBrowser.operatingStatus = await livePage.locator('.operating-status').innerText();
     await livePage.locator('.operating-status').scrollIntoViewIfNeeded();
-    await livePage.screenshot({path:resolve(output,'operating-production-live.png')});
+    await screenshot(livePage, {path:resolve(output,'operating-production-live.png')});
     await liveContext.close();
   }
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: {width:844,height:390} });

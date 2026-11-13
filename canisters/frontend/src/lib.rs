@@ -17,7 +17,7 @@ thread_local! {
 static ASSETS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/public");
 const NO_CACHE: &str = "public, no-cache, no-store";
 const REVALIDATE: &str = "public, no-cache";
-const PAGE_CSP: &str = "default-src 'self'; connect-src 'self' https://icp-api.io; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'";
+const PAGE_CSP: &str = "default-src 'self'; connect-src 'self' https://icp-api.io; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'self'; frame-src 'self' https://dashboard.internetcomputer.org; base-uri 'none'; frame-ancestors 'none'";
 const SVG_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'";
 
 #[init]

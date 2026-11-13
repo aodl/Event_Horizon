@@ -177,6 +177,74 @@ npm run test:frontend-unit
 
 See the [architecture overview](../../docs/architecture/overview.md), [production surface](../../docs/architecture/production-surface.md), [deployment guide](../../docs/operations/deployment.md), and [subscriber guide](../../docs/subscriber-guide.md).
 
+## Fully on-chain subnet widget
+
+The fixed lower-left launcher opens the genuine ICP Dashboard placement map in
+a native modal dialog. Its decorative local SVG illustrates a network, without
+claiming live locations or node counts. A continuously running thumbnail map is
+deliberately avoided: it would load the external application before consent and
+consume resources while visitors use the landing page.
+
+The reviewed static source is exactly:
+
+```text
+https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae
+```
+
+Certificate-checked mainnet `read_state` observations on 2026-11-13 placed both
+canonical canisters (`eo6ei-gaaaa-aaaar-qchra-cai` backend and
+`ej7c4-lyaaa-aaaar-qchrq-cai` frontend) on that subnet. This is a reviewed
+observation, not runtime discovery or a promise against future subnet moves.
+The modal links to [subnet details](https://dashboard.internetcomputer.org/network/subnets/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae)
+and [the dashboard methodology](https://dashboard.internetcomputer.org/methodology#embeddable-subnet-map).
+
+`subnet-widget.js` owns three states: `collapsed` initially, `expanded` after
+Explore subnet, and `dismissed` after either Close control. Minimise and parent
+Escape return to collapsed; dismissal lasts until reload, without browser
+storage. Initial markup has no iframe `src`. Expansion alone assigns the fixed
+HTTPS URL; minimise, close, disposal and pagehide remove it, releasing the
+external document. Reopening loads a fresh map in the same iframe. Initial
+focus goes to Minimise, minimisation restores the expand button, and dismissal
+focuses the existing fixed skip link (visible on focus) without scrolling. Native dialog provides modality;
+body locking preserves the page's scroll offset. Parent Escape cannot reliably
+intercept keys originating in a cross-origin dashboard, so Minimise stays visible.
+
+The launcher is 232×140 CSS pixels at the normal desktop font size, 192×108
+on narrow or short screens. It respects safe-area insets and stays visible
+and keyboard reachable while page controls have focus. Its independent Close
+control clears the overlay when visitors need the space. The modal uses 90vw × 88dvh, capped
+at 90rem × 62rem; mobile and short layouts use almost the full viewport.
+Its header stays outside the scrolling content during internal overflow, including enlarged text.
+Without JavaScript or native dialog support, a conventional subnet link works.
+
+The separately maintained dashboard is trusted for display. Its assets and
+network data are outside Event Horizon's static certificate tree and can change
+independently. The iframe uses `sandbox="allow-scripts allow-same-origin"` and
+`referrerpolicy="no-referrer"`, without forms, popups or top-navigation grants.
+There is no iframe DOM access, message protocol, proxy or backend call. Only
+`frame-src 'self' https://dashboard.internetcomputer.org` is added to the certified
+page CSP; all prior directives, including `frame-ancestors 'none'`, remain.
+The explicit `'self'` retains the SVG object's existing same-origin browsing
+context permission; Chromium also checks that object against `frame-src`.
+The SVG-specific CSP is unchanged. Dashboard subrequests use the dashboard's
+own policy; Event Horizon's connection allowlist remains unchanged.
+
+A map is evidence about subnet composition, not canister source, controller
+status or an installed Wasm hash. The frontend remains separately controlled.
+The parent cannot reliably detect every cross-origin failure; controls and the
+external fallback link remain available when the map fails.
+
+Run `npm run test:frontend-unit` and
+`node tools/scripts/validate-subnet-widget.mjs` after rebuilding the bundle.
+Add `--live` for real desktop/mobile dashboard smoke tests, separately from the
+deterministic mocked frame tests. The harness uses the production bundle and
+serves the Rust CSP as an HTTP header; PocketIC's
+`frontend_transition_urls_are_certified_and_require_revalidation` separately
+checks actual certified canister responses. Run the existing
+`node tools/scripts/validate-ledger-counter.mjs` for hero, counter, operating
+status and navigation regressions. Browser evidence is written under ignored
+`observations/`; see the [validation report](../../docs/codex/subnet-widget-validation.md).
+
 ## Landing ledger total
 
 The hero's **ICP ledger transactions** total is the entire ICP ledger history,

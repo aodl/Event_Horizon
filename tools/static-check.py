@@ -306,7 +306,7 @@ assert 'animation-range: 0 100svh;' in frontend_styles
 assert '.hero__art { animation-range: 0 80.398vw; }' in frontend_styles
 assert 'background: linear-gradient(180deg, rgba(4, 3, 3, .78)' not in frontend_styles
 assert '.hero::after' not in frontend_styles
-assert "object-src 'self'; base-uri 'none'; frame-ancestors 'none'" in frontend
+assert "object-src 'self'; frame-src 'self' https://dashboard.internetcomputer.org; base-uri 'none'; frame-ancestors 'none'" in frontend
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '>Open deployment</p>' in frontend_index
 assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index

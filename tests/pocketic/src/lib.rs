@@ -7608,15 +7608,12 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn frontend_serves_embedded_svg_with_certificate() -> Result<()> {
+        // A cold Wasm build must not leave the test replica idle while compiling.
+        let frontend_wasm = wasm(&FRONTEND_WASM, "event-horizon-frontend", None)?;
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
-        pic.install_canister(
-            id,
-            wasm(&FRONTEND_WASM, "event-horizon-frontend", None)?,
-            vec![],
-            None,
-        );
+        pic.install_canister(id, frontend_wasm, vec![], None);
         for (url, source) in [
             (
                 "/event-horizon.svg",
@@ -7815,15 +7812,11 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn frontend_transition_urls_are_certified_and_require_revalidation() -> Result<()> {
+        let frontend_wasm = wasm(&FRONTEND_WASM, "event-horizon-frontend", None)?;
         let pic = PocketIcBuilder::new().with_application_subnet().build();
         let id = pic.create_canister();
         pic.add_cycles(id, 200_000_000_000_000);
-        pic.install_canister(
-            id,
-            wasm(&FRONTEND_WASM, "event-horizon-frontend", None)?,
-            vec![],
-            None,
-        );
+        pic.install_canister(id, frontend_wasm, vec![], None);
         let request = |url: &str| -> Result<HttpResponse> {
             query(
                 &pic,
@@ -7843,6 +7836,13 @@ mod tests {
         assert!(index.headers.iter().any(|(name, value)| {
             name.eq_ignore_ascii_case("content-security-policy")
                 && value.contains("object-src 'self'")
+                && value.contains("frame-src 'self' https://dashboard.internetcomputer.org;")
+                && value.contains("default-src 'self'")
+                && value.contains("connect-src 'self' https://icp-api.io;")
+                && value.contains("img-src 'self' data:;")
+                && value.contains("style-src 'self';")
+                && value.contains("script-src 'self';")
+                && value.contains("base-uri 'none';")
                 && value.contains("frame-ancestors 'none'")
         }));
         let html = String::from_utf8(index.body)?;
@@ -7854,6 +7854,10 @@ mod tests {
         assert!(html.contains("id=\"operating-tier\""));
         assert!(html.contains("id=\"operating-balance\""));
         assert!(html.contains("id=\"operating-progress\""));
+        assert!(html.contains("<aside id=\"subnet-widget\""));
+        assert!(html.contains("<dialog id=\"subnet-dialog\""));
+        assert!(html.contains("sandbox=\"allow-scripts allow-same-origin\""));
+        assert!(!html.contains("src=\"https://dashboard.internetcomputer.org"));
         assert!(html.contains("ICP ledger transactions"));
         assert_eq!(
             html.matches("<link rel=\"canonical\" href=\"https://www.event-horizon-icp.com/\">")
