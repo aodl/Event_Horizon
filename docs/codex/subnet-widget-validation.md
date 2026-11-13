@@ -1,6 +1,7 @@
 # Fully on-chain subnet widget validation
 
 Validation date: 2026-11-13. Frontend presentation change; no deployment.
+Implementation and canonical build source: `c3c122671f8379e4a74b77ba1ad04a704e9d370c`.
 
 ## Design and boundaries
 
@@ -41,7 +42,10 @@ and [frontend record](https://ic-api.internetcomputer.org/api/v3/canisters/ej7c4
 independently reported the same subnet (index observations dated October 20).
 The certificate observations supply fresher evidence. This reviewed static
 wording must be reconsidered after a network subnet move; it does not infer
-ownership or controller status from placement.
+ownership or controller status from placement. A repeat certificate-checked
+read including `module_hash` at 11:59:49/50 UTC confirmed both installed
+canisters on the same subnet. The live backend hash matched the existing
+canonical backend artifact; the live frontend retained its pre-change hash.
 
 The exact [embed endpoint](https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae)
 returned HTTP 200 without redirects or X-Frame-Options. Its CSP allowed
@@ -51,6 +55,8 @@ Chromium 149 rendered the actual map inside a localhost cross-origin frame with
 network data loaded, displaying “Subnet Fiduciary pzp6e” and country controls;
 the preflight had no console errors. The fleet snapshot was dated November 12.
 These runtime values are evidence from testing, not copied into the product.
+The supplied full-subnet link also opened the correct details page, redirecting
+from `/network/subnets/<id>` to the dashboard's `/network/subnet/<id>` route.
 
 Current DFINITY static-site and canister-security Skills were consulted from
 `dfinity/icskills` before changing the serving CSP. The existing custom Rust
@@ -86,9 +92,32 @@ including `frame-ancestors 'none'`, the self-only scripts/styles and the
 
 ## Validation results
 
-Canonical security and reproducibility gates run after the implementation is
-committed and the working tree is clean. Their results are recorded in the
-completion receipt and retained logs; no deployment is part of validation.
+After committing the implementation with a clean tree, both requested gates
+ran against the exact source revision above. `source-manifest generate` and
+`source-manifest verify` passed, including tracked new source files and the
+frozen `git archive` context. `npm run verify:reproducible-artifacts` passed:
+all release outputs were byte-identical across two fresh, uncached Docker
+builds using the pinned recipe. Both Wasm export audits passed.
+
+```text
+f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970  event_horizon.wasm
+6010c28d0133fe3fb2d3941dbbe97eb3430dd760c78f95c7f75ce4eb9ae7fc77  event_horizon_frontend.wasm
+```
+
+The backend hash is unchanged and matches the certificate-checked live backend.
+The frontend hash differs from the prior/live
+`210d4de6587a19228801f1d97264cb87d0c8d1117632ecb6f7051829b3b441c8`.
+Backend source, Candid, installation arguments, stable memory and deployment
+mappings are unchanged. No backend upgrade or protocol change occurred.
+The reviewed frontend can be upgraded independently after the remaining release
+gate is resolved. This later documentation receipt changes no production input.
+
+The wrapper's temporary output from build A was retained under ignored
+`observations/subnet-widget/canonical-artifacts/`; its artifact manifest
+verifies and the completed comparison confirms it matches build B. The wrapper
+does not replace the existing `release-artifacts/` directory. Canonical logs and
+exit statuses are in `reproducible-committed.log` and `canonical-status.json`
+under `observations/subnet-widget/`.
 
 `cargo test --locked --workspace` passed: 146 tests passed, zero failed;
 129 intentionally ignored integration tests were outside that unit run.
@@ -103,7 +132,8 @@ rerun passed with that ordering. This changes test setup only.
 `cargo clippy --locked --workspace --all-targets -- -D warnings` passed;
 `cargo fmt --all -- --check` and `python3 tools/static-check.py` passed.
 
-Frontend build and all 145 Node tests passed, including seven new focused
+`cargo run -p xtask -- frontend_setup`, `npm run build:frontend`, and
+`npm run test:frontend-unit` passed: 145 Node tests, including seven focused
 widget tests. Browser state, focus, keyboard iframe entry/exit, parent Escape,
 rapid actions, dismissal, reload and scroll-restoration checks passed.
 
@@ -112,9 +142,9 @@ for the map integration. A final `--no-screenshots` run passed again after
 tightening dismissal focus to the existing fixed skip link, which becomes
 visible without scrolling even when the main landmark is off-screen.
 The launcher remains visible and in normal Tab order while page content has
-focus; a sequential footer → launcher Tab/Shift+Tab regression guards this. A preliminary canonical attempt was
-cancelled before artifact completion when this keyboard issue was found; the
-corrected implementation is the candidate for canonical validation.
+focus; a sequential footer → launcher Tab/Shift+Tab regression guards this.
+An earlier draft build was cancelled before artifact completion for this
+keyboard correction; it is not part of the final reproducibility evidence.
 All eight requested viewport sizes passed, plus 200% text,
 reduced motion and forced colours. The enlarged-text check scrolls to the source
 links and then rechecks that **both** controls remain in the viewport. A final
@@ -142,15 +172,17 @@ external request and no Event Horizon backend request. Evidence is in
 `observations/subnet-widget/browser/evidence.json`; the separately retained
 real-map run is `live-final-evidence.json` in the same directory.
 
-The preliminary security wrapper completed `cargo audit` with six existing
-warnings, then failed at `cargo deny` on `pin-utils` 0.1.0, an unmaintained
+The preliminary and post-commit `./tools/scripts/security-scan` runs completed
+`cargo audit` with six existing warnings, then failed at `cargo deny` on
+`pin-utils` 0.1.0, an unmaintained
 PocketIC tooling dependency (`RUSTSEC-2026-0441`). The unchanged lock also
 received the informational rustix xattr warning (`RUSTSEC-2026-0486`). No
 new dependency, exception or audit-policy change is introduced. The wrapper's
 later npm/OSV steps were run independently: `npm audit --omit=dev` passed with
 zero vulnerabilities; OSV reported the same existing `pin-utils` and `rustix`
-advisories (two unknown-severity findings). The wrapper will be rerun after the
-implementation commit as required.
+advisories (two unknown-severity findings). The post-commit wrapper returned
+exit 1; this existing dependency-policy failure remains a release blocker.
+No finding was suppressed to make the feature appear ready.
 
 ## Known limits
 
