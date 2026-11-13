@@ -12,7 +12,6 @@ import { createLedgerCounterClient } from './ledger-counter-client.js';
 import { createOperatingStatusClient } from './operating-status-client.js';
 import { initOperatingStatus } from './operating-status.js';
 import { initCompactHeading } from './compact-heading.js';
-import { initSubnetWidget } from './subnet-widget.js';
 
 import { createLedgerCounter, formatTotal } from './ledger-counter.js';
 
@@ -285,8 +284,6 @@ export function createApp({
 }
 
 if (typeof document !== 'undefined') {
-  let subnetWidget = null;
-  try { subnetWidget = initSubnetWidget(document, window); } catch { /* Optional external display. */ }
   const artwork = initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
   initHeroBackdrop(document, window);
   const compactHeading = initCompactHeading(document, window);
@@ -296,6 +293,6 @@ if (typeof document !== 'undefined') {
   try { operating = initOperatingStatus(document, window, {client:createOperatingStatusClient()}); } catch { /* Optional status must not break the builder. */ }
   const app = createApp({ documentRef: document, counter, operating });
   window.addEventListener('pagehide', event => {
-    if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); subnetWidget?.dispose(); }
+    if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); }
   });
 }

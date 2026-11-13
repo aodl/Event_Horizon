@@ -1,3 +1,5 @@
+> Superseded by the [integrated subnet section and security validation](subnet-section-security-validation.md). This report preserves the historical floating-widget implementation and its validation.
+
 # Fully on-chain subnet widget validation
 
 Validation date: 2026-11-13. Frontend presentation change; no deployment.

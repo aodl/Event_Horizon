@@ -96,6 +96,7 @@ try {
   const context = await browser.newContext();
   context.setDefaultTimeout(60000);
   await context.route('https://icp-api.io/**', route => route.abort('internetdisconnected'));
+  await context.route('https://dashboard.internetcomputer.org/embed/subnet-map?*', route => route.fulfill({contentType:'text/html', body:'<!doctype html><title>Subnet fixture</title>'}));
   const page = await context.newPage();
   page.on('console', msg => { if (['error', 'warning'].includes(msg.type())) evidence.console.push({ type: msg.type(), text: msg.text() }); });
   page.on('pageerror', error => evidence.console.push({ type: 'pageerror', text: error.message }));
@@ -324,7 +325,7 @@ try {
     reducedMotion: true, simulatedVisibilityReturn: true, rapidSelection: true, keyboard: true, accessibleExactSampleOnce: true, cleanup: pending };
   assert.equal(evidence.console.filter(e => e.type === 'pageerror').length, 0);
   assert.equal(evidence.console.filter(e => /Content Security Policy|violates.*directive/.test(e.text)).length, 0);
-  assert.ok(evidence.requests.every(r => r.url.startsWith(origin) || r.url.startsWith('https://icp-api.io/')));
+  assert.ok(evidence.requests.every(r => r.url.startsWith(origin) || r.url.startsWith('https://icp-api.io/') || r.url.startsWith('https://dashboard.internetcomputer.org/embed/subnet-map?subnet=')));
   await page.goto(`${origin}/fixture.html`);
   await page.waitForFunction(() => document.getElementById('operating-tier').textContent === 'Economy');
   assert.equal(await page.locator('#operating-balance').textContent(), '4.860 T');
