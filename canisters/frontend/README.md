@@ -181,7 +181,7 @@ See the [architecture overview](../../docs/architecture/overview.md), [productio
 
 The first section inside `main`, directly above “The protocol”, embeds the genuine
 ICP Dashboard subnet placement map in normal document flow. There is no floating
-launcher, decorative map, modal or JavaScript controller. A single static iframe
+launcher, decorative map or modal. A single static iframe
 uses native `loading="lazy"`; browser-specific heuristics determine when it loads.
 It remains loaded until navigation. No exact initial-request boundary is promised.
 
@@ -192,10 +192,31 @@ https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7
 ```
 
 Both canonical canisters were certificate-checked on this subnet on 2026-11-13.
-Review this static URL if either canister moves. The full-width frame shares the
-site's content gutters: desktop height is 600–750px, narrow screens use 520px.
-Short landscape screens scroll normally. Permanent subnet details, methodology
-and fallback links work without JavaScript. There is no custom error detection.
+Review this static URL if either canister moves. The section shares the site's content gutters. At 1024px and wider, concise copy
+and sources sit beside a 640×520px iframe; narrower screens stack the copy above
+a frame capped at 640px. At 390px and 320px page widths the frame measures
+350×520px and 280×520px respectively. No scaling, cropping or external DOM
+modification is used. Short landscape screens scroll normally. “Fully on-chain”
+is the semantic heading; the former large heading has been removed.
+
+An opaque dark loading layer is present before the bundle runs. CSS disables it
+when scripting is disabled. A small initializer listens for the document's load
+and removes the layer after a 500ms visual settling interval. This does **not**
+verify dashboard data readiness. There is no documented ready message or fluid
+width parameter in the [current embed guidance](https://dashboard.internetcomputer.org/methodology#embeddable-subnet-map).
+The indicator respects reduced motion. An observer starts a 12-second slow-load
+deadline near the frame, independently of native lazy navigation. On that deadline,
+the indicator and layer disappear and a polite status beside the permanent links
+explains that loading is taking longer; a late load clears that explanation.
+Timers, observer and load listener are disposed on non-persisted page exit.
+
+This is a bounded visual treatment, not error detection. The external document
+may still paint white or render data after the layer clears, including after
+an error-page load; the parent cannot inspect its readiness. The unchanged URL
+omits `theme`, so dashboard colours follow the visitor's device preference.
+Its internal new-tab links remain restricted by the reviewed sandbox; the parent
+source/fallback links work. Permanent subnet details, methodology and fallback
+links remain available with or without JavaScript.
 
 The separately maintained dashboard is trusted for display, outside Event Horizon's
 certified assets and direct backend reads. Its JavaScript and registry-derived data
@@ -216,7 +237,7 @@ After `npm run build:frontend`, run `npm run test:frontend-unit`,
 The section harness uses the production bundle and Rust response policies;
 PocketIC separately verifies certified HTML, routing and headers. Screenshots and
 network evidence are under ignored `observations/subnet-section/browser/`.
-See the [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
+See the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
 
 ## Landing ledger total
 

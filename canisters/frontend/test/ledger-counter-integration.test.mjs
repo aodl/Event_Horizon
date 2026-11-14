@@ -76,7 +76,8 @@ test('accessible sample exposes exact accepted value once while visual numeral i
   assert.equal(f.doc.nodes['ledger-count'].textContent, '550'); assert.match(f.doc.nodes['ledger-sample'].textContent, /1,000 \(latest retrieved total\)/);
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(html, /id="ledger-count"[^>]*aria-hidden="true"/); assert.doesNotMatch(html, /<(?:output|status)[^>]*id="ledger/);
-  assert.doesNotMatch(html, /aria-live/); assert.match(html, /aria-describedby="ledger-explanation"/);
+  const ledgerSection = html.match(/<section class="ledger-stat"[\s\S]*?<\/section>/)[0];
+  assert.doesNotMatch(ledgerSection, /aria-live/); assert.match(html, /aria-describedby="ledger-explanation"/);
   assert.doesNotMatch(html, /live-effects|Pause live effects/); f.app.dispose();
 });
 

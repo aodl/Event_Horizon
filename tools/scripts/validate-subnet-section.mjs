@@ -27,7 +27,17 @@ await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const SUBNET_EMBED_URL = 'https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae';
 const evidence = {utc:new Date().toISOString(),viewports:[],live:[],errors:[],requests:[]};
-const shot = (page,name) => process.argv.includes('--no-screenshots') ? Promise.resolve() : page.screenshot({path:resolve(output,`${name}.png`),timeout:60000});
+const shot = async (page,name,pendingDocument=false) => {
+  if(process.argv.includes('--no-screenshots')) return;
+  const path=resolve(output,`${name}.png`);
+  if(!pendingDocument) return page.screenshot({path,timeout:60000});
+  // Playwright waits for fonts in all frames, including the deliberately held document.
+  const session=await page.context().newCDPSession(page);
+  try {
+    const {data}=await session.send('Page.captureScreenshot',{format:'png'});
+    await writeFile(path,Buffer.from(data,'base64'));
+  } finally { await session.detach(); }
+};
 let browser;
 try {
   browser = await chromium.launch({headless:true});
@@ -44,7 +54,7 @@ try {
     const response=await page.goto(origin);
     assert.equal(response.headers()['content-security-policy'],csp);
     assert.equal(await page.locator('main > section:first-child#subnet-map + section.manifesto').count(),1);
-    assert.equal(await page.getByRole('region',{name:'Explore the subnet hosting Event Horizon.'}).count(),1);
+    assert.equal(await page.getByRole('region',{name:'Fully on-chain',exact:true}).count(),1);
     assert.equal(await page.locator('iframe').count(),1);
     assert.equal(await page.locator('dialog, #subnet-widget').count(),0);
     const section=page.locator('#subnet-map'),frame=section.locator('iframe');
@@ -52,24 +62,33 @@ try {
     await page.frameLocator('iframe').getByRole('button',{name:'Country fixture'}).waitFor();
     const geometry=await section.evaluate(n=>{
       const rect=n.getBoundingClientRect(),f=n.querySelector('iframe').getBoundingClientRect();
-      return {section:rect.toJSON(),frame:f.toJSON(),position:getComputedStyle(n).position,overflow:document.documentElement.scrollWidth>innerWidth};
+      return {section:rect.toJSON(),frame:f.toJSON(),position:getComputedStyle(n).position,framePosition:getComputedStyle(n.querySelector('iframe')).position,overflow:document.documentElement.scrollWidth>innerWidth};
     });
     assert.equal(geometry.overflow,false);
     assert.ok(!['fixed','sticky','absolute'].includes(geometry.position));
+    assert.ok(!['fixed','sticky','absolute'].includes(geometry.framePosition));
     assert.ok(geometry.frame.height>=500);
-    assert.ok(Math.abs(geometry.frame.width-geometry.section.width)<2);
+    assert.equal(geometry.frame.height,520);
+    assert.ok(Math.abs(geometry.frame.width-Math.min(640,geometry.section.width))<2);
+    if(width>=1024) {
+      assert.ok(geometry.section.height<660,'compact desktop section');
+      assert.ok(await section.locator('.subnet-section__intro').evaluate(n=>n.getBoundingClientRect().right)<geometry.frame.x);
+    } else {
+      assert.ok(await section.locator('.subnet-section__intro').evaluate(n=>n.getBoundingClientRect().bottom)<=geometry.frame.y);
+    }
+    await page.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
     const before=await section.boundingBox(),scrollBefore=await page.evaluate(()=>scrollY);
     await page.evaluate(()=>scrollBy({top:100,behavior:'instant'}));
     const scrollAfter=await page.evaluate(()=>scrollY),after=await section.boundingBox();
     assert.ok(Math.abs(before.y-after.y-(scrollAfter-scrollBefore))<2);
     await frame.scrollIntoViewIfNeeded();
-    await page.locator('.hero__facts a').last().focus();
+    await section.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).focus();
     await page.keyboard.press('Tab');
     assert.ok(await page.frameLocator('iframe').getByRole('button').evaluate(n=>n===document.activeElement));
     await page.keyboard.press('Tab');
     assert.ok(await page.frameLocator('iframe').getByRole('link').evaluate(n=>n===document.activeElement));
     await page.keyboard.press('Tab');
-    assert.ok(await section.getByRole('link',{name:'View subnet details'}).evaluate(n=>n===document.activeElement));
+    assert.ok(await page.locator('a[href="#open-deployment"]').evaluate(n=>n===document.activeElement));
     await section.scrollIntoViewIfNeeded();
     await section.evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
     await shot(page,`section-${width}x${height}`);
@@ -90,11 +109,48 @@ try {
   await shot(page,'forced-colours');
   assert.deepEqual(evidence.errors,[]);
   assert.ok(evidence.requests.filter(r=>r.parent).every(r=>r.url.startsWith(origin)||r.url.startsWith('https://icp-api.io/')));
+  // A pending navigation is held explicitly; load is only a document milestone.
+  for(const [label,viewport] of [['desktop',{width:1440,height:900}],['mobile',{width:390,height:844}]]) {
+    const loadingContext=await browser.newContext({viewport,reducedMotion:'reduce'});
+    await loadingContext.route('https://icp-api.io/**',r=>r.abort());
+    let release, requested;
+    const pending=new Promise(r=>requested=r);
+    const gate=new Promise(r=>release=r);
+    await loadingContext.route(SUBNET_EMBED_URL,async route=>{
+      requested(); await gate;
+      await route.fulfill({contentType:'text/html',body:`<!doctype html><button onclick="this.textContent='OK'">Country fixture</button>`});
+    });
+    const loadingPage=await loadingContext.newPage();
+    await loadingPage.goto(origin,{waitUntil:'domcontentloaded'});
+    await loadingPage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
+    await pending;
+    const layer=loadingPage.locator('.subnet-section__loading');
+    assert.ok(await layer.isVisible());
+    assert.equal(await layer.evaluate(n=>getComputedStyle(n).backgroundColor),'rgb(11, 9, 8)');
+    assert.equal(await loadingPage.locator('.subnet-section__indicator').evaluate(n=>getComputedStyle(n).animationName),'none');
+    assert.equal(await layer.getAttribute('role'),'status');
+    assert.match(await layer.innerText(),/Loading subnet map/);
+    assert.ok(await loadingPage.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
+    await shot(loadingPage,`loading-${label}`,true);
+    if(label==='desktop') {
+      await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__status').textContent.includes('Taking longer'),{},{timeout:16000});
+      assert.equal(await layer.isVisible(),false);
+      await shot(loadingPage,'slow-desktop',true);
+    }
+    release();
+    await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
+    await loadingPage.frameLocator('iframe').getByRole('button').click();
+    assert.equal(await loadingPage.frameLocator('iframe').getByRole('button').innerText(),'OK');
+    await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__status').textContent==='');
+    evidence[label+'Loading']='Dark pending document, reduced motion, load/settle release, interaction and late recovery passed';
+    await loadingContext.close();
+  }
   const fallbackContext=await browser.newContext({javaScriptEnabled:false});
   await fallbackContext.route(SUBNET_EMBED_URL,r=>r.abort());
   const fallback=await fallbackContext.newPage();await fallback.goto(origin);
   await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).scrollIntoViewIfNeeded();
   assert.ok(await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
+  assert.equal(await fallback.locator('.subnet-section__loading').isVisible(),false);
   await fallbackContext.close();
   const offlineContext=await browser.newContext();
   await offlineContext.route(SUBNET_EMBED_URL,r=>r.abort('internetdisconnected'));
@@ -102,10 +158,11 @@ try {
   const offline=await offlineContext.newPage();await offline.goto(origin);
   await offline.locator('#instance').selectOption('io');
   assert.ok(await offline.locator('#pricing').innerText().then(s=>s.includes('launch')));
+  assert.ok(await offline.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).count());
   await offlineContext.close();
   if(process.argv.includes('--live')) {
-    for(const [label,viewport,mobile] of [['desktop',{width:1440,height:900},false],['mobile',{width:390,height:844},true],['narrow',{width:320,height:568},true],['landscape',{width:844,height:390},true]]) {
-      const liveContext=await browser.newContext({viewport,hasTouch:mobile,isMobile:mobile,reducedMotion:'reduce'});
+    for(const [label,viewport,mobile] of [['desktop',{width:1440,height:900},false],['desktop-dark',{width:1440,height:900},false],['mobile',{width:390,height:844},true],['narrow',{width:320,height:568},true],['landscape',{width:844,height:390},true]]) {
+      const liveContext=await browser.newContext({viewport,hasTouch:mobile,isMobile:mobile,reducedMotion:'reduce',colorScheme:label==='desktop-dark'?'dark':'light'});
       const livePage=await liveContext.newPage(),live={label,viewport,mobile,errors:[],responses:[],requests:[]};
       livePage.on('pageerror',e=>live.errors.push(e.message));
       livePage.on('console',m=>{if(m.type()==='error')live.errors.push(m.text());});
@@ -116,6 +173,10 @@ try {
       await map.getByRole('heading',{name:'Subnet Fiduciary pzp6e',exact:true}).waitFor({timeout:90000});
       const country=map.getByRole('button',{name:/node machines? in this subnet/}).first();
       await country.waitFor({timeout:90000});
+      await livePage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
+      await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
+      await shot(livePage,`live-initial-${label}`);
+      if(!process.argv.includes('--no-screenshots')) await livePage.locator('iframe').screenshot({path:resolve(output,`live-frame-${label}.png`)});
       if(mobile)await country.tap();else await country.click();
       await map.getByText(/machines in .*data centers/).waitFor();
       live.controls='Country selection opened data-centre details';
@@ -139,13 +200,16 @@ try {
         live.keyboardExit=false;
         for(let step=0;step<120;step++) {
           await livePage.keyboard.press('Tab');
-          if(await livePage.getByRole('link',{name:'View subnet details'}).evaluate(n=>n===document.activeElement)) {
+          if(await livePage.locator('a[href="#open-deployment"]').evaluate(n=>n===document.activeElement)) {
             live.keyboardExit=true;break;
           }
         }
-        assert.ok(live.keyboardExit,'native Tab navigation leaves the real frame for the parent sources');
+        assert.ok(live.keyboardExit,'native Tab navigation leaves the real frame for the parent application');
         await livePage.locator('iframe').scrollIntoViewIfNeeded();
       }
+      live.geometry=await livePage.locator('#subnet-map').evaluate(n=>({section:n.getBoundingClientRect().toJSON(),frame:n.querySelector('iframe').getBoundingClientRect().toJSON()}));
+      live.internal=await map.locator('body').evaluate(n=>({width:innerWidth,height:innerHeight,scrollWidth:n.scrollWidth,scrollHeight:n.scrollHeight}));
+      assert.ok(live.internal.scrollWidth<=live.internal.width,'no internal horizontal clipping');
       const mapBounds=await livePage.locator('iframe').boundingBox();
       await livePage.mouse.move(mapBounds.x+mapBounds.width/2,Math.max(10,Math.min(viewport.height-10,mapBounds.y+100)));
       const overBefore=await livePage.evaluate(()=>scrollY);
