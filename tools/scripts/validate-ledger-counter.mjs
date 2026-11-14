@@ -186,6 +186,8 @@ try {
   });
   await page.mouse.click(arrowPoint.x, arrowPoint.y);
   await page.waitForFunction(() => location.hash === '#info' && document.querySelector('#info').getBoundingClientRect().top < innerHeight);
+  // Finish the native smooth anchor before resetting scroll for keyboard activation.
+  await page.waitForFunction(() => { const title = document.querySelector('#info'); return Math.abs(title.getBoundingClientRect().top - parseFloat(getComputedStyle(title).scrollMarginTop)) < 1; });
   await page.evaluate(() => { history.replaceState(null, '', location.pathname); scrollTo({ top: 0, behavior: 'instant' }); });
   await page.waitForFunction(() => scrollY === 0 && document.querySelector('.hero__compact-mark').classList.contains('hero__compact-mark--visible'));
   await page.locator('.hero__compact-mark').focus();

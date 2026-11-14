@@ -34,7 +34,11 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
   deployed source or a matching Wasm hash. The frontend remains independently
   upgradeable. Both canonical canisters were verified on the displayed subnet on
   2026-11-13; review the static URL after a network move. No runtime subnet discovery,
-  custom iframe lifecycle or additional backend requests are introduced.
+  iframe navigation controller or additional backend requests are introduced.
+  A bounded parent loading treatment clears after document load plus a short visual
+  settling interval, or after the slow-load deadline with explanatory status and
+  permanent fallback links. Neither event establishes external data readiness.
+  The parent cannot detect later white paints or verify dashboard completion.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 
