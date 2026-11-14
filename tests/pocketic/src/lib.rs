@@ -7867,7 +7867,13 @@ mod tests {
         assert_eq!(html.matches("<iframe").count(), 1);
         assert!(html.contains("loading=\"lazy\""));
         assert!(html.contains("referrerpolicy=\"no-referrer\""));
-        assert!(html.contains("sandbox=\"allow-scripts allow-same-origin\""));
+        assert!(html.contains("sandbox=\"allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox\""));
+        assert!(html
+            .contains("All Event Horizon canisters are hosted on one of the largest ICP subnets."));
+        assert!(!html.contains("View subnet details"));
+        assert!(!html.contains("How this data is sourced"));
+        assert!(html.contains(">view it on ICP Dashboard</a>"));
+        assert!(!html.contains("allow-top-navigation"));
         assert!(html.contains("src=\"https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae\""));
         assert!(html.contains("ICP ledger transactions"));
         assert_eq!(

@@ -191,9 +191,15 @@ The reviewed source is:
 https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae
 ```
 
-Both canonical canisters were certificate-checked on this subnet on 2026-11-13.
+Both deployed canonical canisters were certificate-checked on this 34-node
+Fiduciary subnet on 2026-11-14. The copy is “All Event Horizon canisters are hosted
+on one of the largest ICP subnets.” It covers the deployed frontend and ICP
+backend; the IO instance is planned, has no deployed canister ID and is excluded.
+The current dashboard lists one 40-node subnet and three 34-node subnets,
+including this one, among 42 listed mainnet subnets. Review the claim when adding
+a deployed instance or changing subnet placement.
 Review this static URL if either canister moves. The section shares the site's content gutters. At 1024px and wider, concise copy
-and sources sit beside a 640×520px iframe; narrower screens stack the copy above
+and attribution sit beside a 640×520px iframe; narrower screens stack the copy above
 a frame capped at 640px. At 390px and 320px page widths the frame measures
 350×520px and 280×520px respectively. No scaling, cropping or external DOM
 modification is used. Short landscape screens scroll normally. “Fully on-chain”
@@ -206,7 +212,7 @@ verify dashboard data readiness. There is no documented ready message or fluid
 width parameter in the [current embed guidance](https://dashboard.internetcomputer.org/methodology#embeddable-subnet-map).
 The indicator respects reduced motion. An observer starts a 12-second slow-load
 deadline near the frame, independently of native lazy navigation. On that deadline,
-the indicator and layer disappear and a polite status beside the permanent links
+the indicator and layer disappear and a polite status beside the permanent fallback link
 explains that loading is taking longer; a late load clears that explanation.
 Timers, observer and load listener are disposed on non-persisted page exit.
 
@@ -214,17 +220,38 @@ This is a bounded visual treatment, not error detection. The external document
 may still paint white or render data after the layer clears, including after
 an error-page load; the parent cannot inspect its readiness. The unchanged URL
 omits `theme`, so dashboard colours follow the visitor's device preference.
-Its internal new-tab links remain restricted by the reviewed sandbox; the parent
-source/fallback links work. Permanent subnet details, methodology and fallback
-links remain available with or without JavaScript.
+The retained attribution paragraph has one permanent external fallback link, with
+`target="_blank" rel="noopener noreferrer"`, available without JavaScript. The
+separate subnet-details and methodology navigation and its CSS were removed.
+The slow-loading message's “link above” still refers to this fallback paragraph,
+which precedes the status in the intro; loading code and timing are unchanged.
 
 The separately maintained dashboard is trusted for display, outside Event Horizon's
 certified assets and direct backend reads. Its JavaScript and registry-derived data
 can change independently. Subnet composition does not prove deployed source, a
 matching Wasm hash or controller removal. The frontend remains independently
-upgradeable. The iframe retains `sandbox="allow-scripts allow-same-origin"` and
-`referrerpolicy="no-referrer"`, with no top navigation, popups, forms, messages,
-proxy, runtime subnet lookup or additional Event Horizon backend requests.
+upgradeable. The iframe now uses:
+
+```text
+sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+```
+
+The dashboard's genuine full-page anchor uses `target="_blank"` and explicit
+`rel="noopener noreferrer"`. `allow-popups` permits that new browsing context;
+`allow-popups-to-escape-sandbox` gives the new dashboard tab normal site behavior
+instead of inheriting the embed's restrictions. Real click, Enter and mobile-touch
+checks require the expected subnet destination, a null JavaScript `window.opener`,
+working destination-page pagination and an unchanged Event Horizon page. The new
+permissions expand trust in the external dashboard's popup behavior: they are
+neither a destination allowlist nor an enforced noopener policy for arbitrary
+future `window.open()` calls. Recheck the live anchor on releases; these tests fail
+if its explicit opener protection or observed isolation changes. Browser popup
+blocking still applies. No top-navigation permission or extra form permission is
+granted to the iframe. The normal external tab is intentionally unsandboxed.
+
+`referrerpolicy="no-referrer"` and the exact embed URL are unchanged. No parent
+click interception, external DOM rewriting, message protocol, proxy, runtime
+subnet discovery or additional Event Horizon backend requests are introduced.
 
 The existing certified page CSP remains unchanged, including
 `frame-src 'self' https://dashboard.internetcomputer.org` and
@@ -236,8 +263,8 @@ After `npm run build:frontend`, run `npm run test:frontend-unit`,
 `node tools/scripts/validate-ledger-counter.mjs`.
 The section harness uses the production bundle and Rust response policies;
 PocketIC separately verifies certified HTML, routing and headers. Screenshots and
-network evidence are under ignored `observations/subnet-section/browser/`.
-See the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
+network evidence for navigation are under ignored `observations/subnet-navigation/browser/`.
+See the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
 
 ## Landing ledger total
 

@@ -28,17 +28,29 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
 - The “Fully on-chain” section embeds a separately maintained ICP Dashboard
   application through one static, natively lazy-loaded iframe above “The protocol”.
-  Event Horizon certifies its section markup, static subnet URL and source links,
+  Event Horizon certifies its section markup, static subnet URL and fallback link,
   not the external application's assets or registry-derived runtime data. The map
   is trusted for display; subnet composition does not prove controller removal,
   deployed source or a matching Wasm hash. The frontend remains independently
   upgradeable. Both canonical canisters were verified on the displayed subnet on
-  2026-11-13; review the static URL after a network move. No runtime subnet discovery,
+  2026-11-14 on the 34-node Fiduciary subnet; planned IO is excluded from the
+  copy’s deployed-canister claim. Review the claim and URL after a network move
+  or adding a deployed instance. No runtime subnet discovery,
   iframe navigation controller or additional backend requests are introduced.
   A bounded parent loading treatment clears after document load plus a short visual
   settling interval, or after the slow-load deadline with explanatory status and
   permanent fallback links. Neither event establishes external data readiness.
   The parent cannot detect later white paints or verify dashboard completion.
+  The sandbox additionally permits popups and lets them escape sandbox inheritance
+  so the dashboard's own full-page link works. The current `_blank` anchor has
+  explicit `noopener noreferrer`; real click, keyboard and touch checks require
+  a null `window.opener`, usable destination-page controls and an unchanged parent.
+  Top-navigation permission is not granted to the iframe. These popup permissions
+  expand trust in the externally maintained dashboard: popup destinations are not
+  restricted by the parent's frame-src policy, and the permissions do not force
+  arbitrary future popup code to use noopener. The external tab has normal browser
+  capabilities; it is outside Event Horizon's certification and CSP. Keep the
+  permanent parent fallback and recheck the external opener behavior on releases.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 
