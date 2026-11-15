@@ -3,13 +3,13 @@ export function initSectionDisclosures(documentRef, windowRef) {
   const disclosures = [...documentRef.querySelectorAll('main > section > details.section-disclosure[name="event-horizon-sections"]')];
   let pending;
   const reveal = hash => {
+    windowRef.cancelAnimationFrame(pending);
     let target;
     try { target = documentRef.getElementById(decodeURIComponent(hash.slice(1))); } catch { return; }
     const details = disclosures.find(node => node.parentElement.contains(target));
     if (!details) return;
     details.open = true;
     const summary = details.querySelector('summary');
-    windowRef.cancelAnimationFrame(pending);
     pending = windowRef.requestAnimationFrame(() => {
       // Let normal fragment navigation scroll; correct only a still-hidden target.
       const destination = target === details.parentElement ? summary : target;

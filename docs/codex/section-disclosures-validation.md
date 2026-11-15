@@ -17,7 +17,7 @@ is new and does not replace `protocol`.
 The 57-line fragment helper reveals the owning disclosure before normal anchor
 navigation, including initial links, repeated fragments, nested controls and
 Back/Forward. Section targets focus the summary without additional focus scrolling.
-Unknown/malformed fragments are harmless. Modified, external, download and
+Unknown/malformed fragments are harmless and cancel stale queued panel focus. Modified, external, download and
 new-tab links retain normal behavior. Ordinary toggles never change the URL.
 A demonstrated Chromium defect moved Choose from y≈387 to y≈−589 when the tall
 map closed above it. One queued check now scrolls that activated summary into view
@@ -32,7 +32,7 @@ URL, sandbox/popup permissions, no-referrer and fallback link are retained.
 
 ## Results
 
-- 152 frontend unit tests; 146 Rust unit tests; both certified frontend PocketIC
+- 153 frontend unit tests; 146 Rust unit tests; both certified frontend PocketIC
   scenarios pass. Certified HTML assertions cover the new order, disclosure
   membership, removed sentence, approved URL and retained security attributes.
 - Frontend setup/build, strict formatting and Clippy, static checks and dependency

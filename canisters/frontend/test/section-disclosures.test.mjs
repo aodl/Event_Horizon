@@ -58,3 +58,14 @@ test('closing hidden focused content returns focus to summary; disposal removes 
   f.events.get('toggle')({target:f.details});assert.equal(f.focused(),f.summary);
   f.app.dispose();assert.equal(f.events.size,0);assert.equal(f.frames.size,0);
 });
+
+test('later non-panel or malformed navigation cancels stale panel focus and positioning',()=>{
+  for(const hash of ['#top','#info','#main-content','#unknown','#%E0%A4%A']) {
+    const f=fixture();
+    f.click('https://example.com/#builder');
+    assert.equal(f.frames.size,1);
+    f.click(`https://example.com/${hash}`);
+    assert.equal(f.frames.size,0);
+    f.flush();assert.equal(f.focused(),undefined);
+  }
+});
