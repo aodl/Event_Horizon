@@ -209,15 +209,64 @@ try {
   page.on('request',r=>evidence.requests.push({url:r.url(),parent:r.frame()===page.mainFrame()}));
   const response=await page.goto(origin);
   assert.equal(response.headers()['content-security-policy'],csp);
-  assert.equal(await page.locator('main > section:first-child#subnet-map + section.manifesto').count(),1);
+  assert.equal(await page.locator('main > section:first-child.manifesto + section#subnet-map').count(),1);
   assert.equal(await page.getByRole('region',{name:'Fully on-chain',exact:true}).count(),1);
   assert.equal(await page.locator('iframe').count(),1);
+  const ids=['protocol-overview','subnet-map','network','builder','complete','protocol','open-source','immutability','endowment-funding','internet-computer','open-deployment'];
+  assert.deepEqual(await page.locator('main > section > details.section-disclosure').evaluateAll(nodes=>nodes.map(n=>n.parentElement.id)),ids);
+  assert.equal(await page.locator('details[open]').count(),0);
+  assert.equal(await page.locator('.section-disclosure__summary h2').count(),11);
+  for(const id of ids) {
+    const summary=page.locator(`#${id} > details > summary`),url=page.url();
+    await summary.focus();await page.keyboard.press('Enter');
+    assert.equal(await page.locator('details[open]').count(),1);
+    assert.equal(await page.locator(`#${id} > details`).evaluate(n=>n.open),true);
+    assert.notEqual(await summary.evaluate(n=>getComputedStyle(n).outlineStyle),'none');
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('details[open]').count(),0);
+    assert.equal(page.url(),url,'ordinary toggles never alter the URL');
+  }
+  await page.goto(`${origin}/#builder`);
+  await page.waitForFunction(()=>document.activeElement===document.querySelector('#builder summary'));
+  assert.equal(await page.locator('details[open]').count(),1);
+  await page.locator('#builder summary').click();
+  // A real existing workflow link must reopen even with the same fragment.
+  await page.locator('#complete summary').click();
+  await page.locator('.memo-result__edit a').click();
+  await page.waitForFunction(()=>document.activeElement===document.querySelector('#builder summary'));
+  assert.equal(await page.locator('#builder details').evaluate(n=>n.open),true);
+  await page.locator('.builder-card__footnote a').click();
+  assert.equal(await page.locator('#complete details').evaluate(n=>n.open),true);
+  for(const id of ['open-source','immutability','endowment-funding','internet-computer']) {
+    await page.locator(`.hero__facts a[href="#${id}"]`).click();
+    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id} summary`),id);
+    assert.equal(await page.locator('details[open]').count(),1);
+  }
+  await page.goBack();
+  await page.waitForFunction(()=>document.querySelector('#endowment-funding details').open);
+  await page.goForward();
+  await page.waitForFunction(()=>document.querySelector('#internet-computer details').open);
+  await page.locator('.hero__action').click();
+  assert.equal(await page.locator('#network details').evaluate(n=>n.open),true);
+  await page.goto(`${origin}/#instance`);
+  await page.waitForFunction(()=>document.activeElement===document.querySelector('#instance'));
+  assert.equal(await page.locator('#network details').evaluate(n=>n.open),true);
+  await page.goto(`${origin}/#%E0%A4%A`);
+  assert.equal(await page.locator('#network details').evaluate(n=>n.open),true,'unknown fragments preserve the current disclosure');
+  await page.goto(origin);await page.reload();
+  await page.locator('a[href="#main-content"]').focus();await page.keyboard.press('Enter');
+  assert.equal(await page.locator('details[open]').count(),0);
+  assert.equal(await page.evaluate(()=>document.activeElement.id),'main-content');
+  await page.goto(origin);
+  evidence.disclosures='11 native grouped disclosures; zero/one open; Enter/Space, focus, all hero/workflow links, initial/nested/repeated fragments, Back/Forward and skip link passed';
   const section=page.locator('#subnet-map'),frame=section.locator('iframe');
+  await section.locator('summary').click();
   await frame.scrollIntoViewIfNeeded();
   await page.frameLocator('iframe').getByRole('button',{name:'Country fixture'}).waitFor();
   await page.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
   const documents=()=>evidence.requests.filter(r=>r.url===SUBNET_EMBED_URL).length;
-  assert.equal(documents(),1);
+  const initialDocuments=documents();
+  assert.ok(initialDocuments>=1);
   for(const [width,height] of [[1920,1080],[1440,900],[1280,800],[1024,768],[768,1024],[390,844],[320,568],[844,390]]) {
     await page.setViewportSize({width,height});
     const geometry=await assertGeometry(page);
@@ -234,11 +283,19 @@ try {
     await page.setViewportSize({width,height:900});
     evidence.resize.push({width,...await assertGeometry(page)});
   }
-  assert.equal(documents(),1,'viewport changes never navigate the iframe');
+  await page.locator('#network summary').click();
+  await page.waitForFunction(()=>{const r=document.querySelector('#network summary').getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;});
+  await page.setViewportSize({width:1024,height:768});
+  await page.locator('#subnet-map summary').click();
+  await assertGeometry(page);
+  for(let i=0;i<6;i++) await page.locator('#subnet-map summary').click();
+  await assertGeometry(page);
+  assert.equal(documents(),initialDocuments,'resizing and disclosure toggles never navigate the iframe');
   assert.equal(await frame.getAttribute('src'),SUBNET_EMBED_URL);
   // Enter, leave and re-enter the frame using native browser focus order.
+  await page.setViewportSize({width:1440,height:900});
   const focusTargets=[section.getByRole('link'),page.frameLocator('iframe').getByRole('button'),
-    page.frameLocator('iframe').getByRole('link'),page.locator('a[href="#open-deployment"]')];
+    page.frameLocator('iframe').getByRole('link'),page.locator('#network summary')];
   await focusTargets[0].focus();
   for(const direction of [1,-1]) {
     for(let index=direction===1?1:2;index>=0&&index<4;index+=direction) {
@@ -250,16 +307,30 @@ try {
   for(const failure of ['missing','constructor']) {
     const safe=await context.newPage();
     await safe.addInitScript(failure=>{window.ResizeObserver=failure==='missing'?undefined:class {constructor(){throw Error('fixture');}};},failure);
-    await safe.goto(origin);await safe.locator('iframe').scrollIntoViewIfNeeded();
+    await safe.goto(origin);await safe.locator('#subnet-map summary').click();await safe.locator('iframe').scrollIntoViewIfNeeded();
     assert.equal(await safe.locator('.subnet-section__embed').getAttribute('data-scaled'),null);
     assert.equal(await safe.locator('iframe').evaluate(n=>getComputedStyle(n).transform),'none');
     assert.equal((await safe.locator('iframe').boundingBox()).height,520);
+    await safe.locator('#network summary').click();
     await safe.locator('#instance').selectOption('io');
     assert.match(await safe.locator('#pricing').innerText(),/launch/);
     await safe.close();
   }
+  const isolated=await context.newPage();
+  await isolated.addInitScript(()=>{
+    const query=document.querySelectorAll.bind(document);
+    document.querySelectorAll=selector=>{if(selector.includes('details.section-disclosure'))throw Error('navigation fixture');return query(selector);};
+  });
+  await isolated.goto(origin);
+  await isolated.locator('#network summary').click();
+  await isolated.locator('#instance').selectOption('io');
+  assert.match(await isolated.locator('#pricing').innerText(),/launch/);
+  await isolated.locator('#builder summary').click();
+  assert.equal(await isolated.locator('details[open]').count(),1,'native grouping survives a failed navigation initializer');
+  await isolated.close();
   await page.setViewportSize({width:320,height:568});await page.goto(origin);
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+  await page.locator('#subnet-map summary').click();
   await page.locator('#subnet-map').scrollIntoViewIfNeeded();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).scrollIntoViewIfNeeded();
@@ -282,6 +353,12 @@ try {
     });
     const loadingPage=await loadingContext.newPage();
     await loadingPage.goto(origin,{waitUntil:'domcontentloaded'});
+    if(label==='desktop') {
+      await loadingPage.waitForTimeout(12500);
+      assert.equal(await loadingPage.locator('.subnet-section__status').textContent(),'','collapsed time does not consume the visibility deadline');
+      assert.equal(await loadingPage.locator('details[open]').count(),0);
+    }
+    await loadingPage.locator('#subnet-map summary').click();
     await loadingPage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
     await pending;
     const layer=loadingPage.locator('.subnet-section__loading');
@@ -304,8 +381,13 @@ try {
       assert.ok(await loadingPage.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
       await shot(loadingPage,'slow-desktop');
     }
+    if(label==='desktop') await loadingPage.locator('#protocol-overview summary').click();
     release();
     await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
+    if(label==='desktop') {
+      assert.equal(await loadingPage.locator('#subnet-map details').evaluate(n=>n.open),false,'late loading never reopens the map');
+      await loadingPage.locator('#subnet-map summary').click();
+    }
     await loadingPage.frameLocator('iframe').getByRole('button').click();
     assert.equal(await loadingPage.frameLocator('iframe').getByRole('button').innerText(),'OK');
     await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__status').textContent==='');
@@ -315,6 +397,8 @@ try {
   const fallbackContext=await browser.newContext({javaScriptEnabled:false});
   await fallbackContext.route(SUBNET_EMBED_URL,r=>r.abort());
   const fallback=await fallbackContext.newPage();await fallback.goto(origin);
+  assert.equal(await fallback.locator('details[open]').count(),0);
+  await fallback.locator('#subnet-map summary').click();
   await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).scrollIntoViewIfNeeded();
   assert.ok(await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
   assert.equal(await fallback.locator('.subnet-section__loading').isVisible(),false);
@@ -326,8 +410,10 @@ try {
   await offlineContext.route(SUBNET_EMBED_URL,r=>r.abort('internetdisconnected'));
   await offlineContext.route('https://icp-api.io/**',r=>r.abort());
   const offline=await offlineContext.newPage();await offline.goto(origin);
+  await offline.locator('#network summary').click();
   await offline.locator('#instance').selectOption('io');
   assert.ok(await offline.locator('#pricing').innerText().then(s=>s.includes('launch')));
+  await offline.locator('#subnet-map summary').click();
   assert.ok(await offline.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).count());
   await offlineContext.close();
   if(process.argv.includes('--live')) {
@@ -339,7 +425,7 @@ try {
       livePage.on('console',m=>{if(m.type()==='error')live.errors.push(m.text());});
       livePage.on('request',r=>live.requests.push({url:r.url(),parent:r.frame()===livePage.mainFrame()}));
       livePage.on('response',r=>{if(r.request().resourceType()==='document')live.responses.push({url:r.url(),status:r.status(),headers:r.headers()});});
-      await livePage.goto(origin);await livePage.locator('iframe').scrollIntoViewIfNeeded();
+      await livePage.goto(origin);await livePage.locator('#subnet-map summary').click();await livePage.locator('iframe').scrollIntoViewIfNeeded();
       const map=livePage.frameLocator('iframe');
       await map.getByRole('heading',{name:'Subnet Fiduciary pzp6e',exact:true}).waitFor({timeout:90000});
       const country=map.getByRole('button',{name:/node machines? in this subnet/}).first();

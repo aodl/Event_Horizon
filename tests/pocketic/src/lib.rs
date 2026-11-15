@@ -7863,13 +7863,33 @@ mod tests {
         let main = html.find("<main id=\"main-content\"").unwrap();
         let subnet = html.find("<section id=\"subnet-map\"").unwrap();
         let manifesto = html.find("<section class=\"manifesto\"").unwrap();
-        assert!(main < subnet && subnet < manifesto);
+        assert!(main < manifesto && manifesto < subnet);
         assert_eq!(html.matches("<iframe").count(), 1);
         assert!(html.contains("loading=\"lazy\""));
         assert!(html.contains("referrerpolicy=\"no-referrer\""));
         assert!(html.contains("sandbox=\"allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox\""));
-        assert!(html
+        assert!(!html
             .contains("All Event Horizon canisters are hosted on one of the largest ICP subnets."));
+        assert_eq!(html.matches("name=\"event-horizon-sections\"").count(), 11);
+        assert!(!html.contains("<details open"));
+        let mut previous = main;
+        for id in [
+            "protocol-overview",
+            "subnet-map",
+            "network",
+            "builder",
+            "complete",
+            "protocol",
+            "open-source",
+            "immutability",
+            "endowment-funding",
+            "internet-computer",
+            "open-deployment",
+        ] {
+            let position = html.find(&format!("id=\"{id}\"")).unwrap();
+            assert!(position > previous);
+            previous = position;
+        }
         assert!(!html.contains("View subnet details"));
         assert!(!html.contains("How this data is sourced"));
         assert!(html.contains(">view it on ICP Dashboard</a>"));

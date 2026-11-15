@@ -27,15 +27,15 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
 - The “Fully on-chain” section embeds a separately maintained ICP Dashboard
-  application through one static, natively lazy-loaded iframe above “The protocol”.
+  application through one static, natively lazy-loaded iframe after the introductory “The protocol” disclosure.
   Event Horizon certifies its section markup, static subnet URL and fallback link,
   not the external application's assets or registry-derived runtime data. The map
   is trusted for display; subnet composition does not prove controller removal,
   deployed source or a matching Wasm hash. The frontend remains independently
   upgradeable. Both canonical canisters were verified on the displayed subnet on
-  2026-11-14 on the 34-node Fiduciary subnet; planned IO is excluded from the
-  copy’s deployed-canister claim. Review the claim and URL after a network move
-  or adding a deployed instance. No runtime subnet discovery,
+  2026-11-14 on the 34-node Fiduciary subnet. The general hosting claim is no
+  longer displayed. Review the static URL after a network move or adding a
+  deployed instance. No runtime subnet discovery,
   iframe navigation controller or additional backend requests are introduced.
   A bounded parent loading treatment clears after document load plus a short visual
   settling interval, or after the slow-load deadline with explanatory status and

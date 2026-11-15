@@ -119,225 +119,255 @@
   </header>
 
   <main id="main-content" tabindex="-1">
-    <section id="subnet-map" class="subnet-section" aria-labelledby="subnet-title">
-      <div class="subnet-section__intro">
-        <h2 id="subnet-title" class="section-label">Fully on-chain</h2>
-        <p class="subnet-section__description">All Event Horizon canisters are hosted on one of the largest ICP subnets.</p>
-        <p class="subnet-section__sources">Subnet map provided by ICP Dashboard. If the map does not load, <a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">view it on ICP Dashboard</a>.</p>
-        <p class="subnet-section__status" role="status" aria-live="polite"></p>
-      </div>
-      <div class="subnet-section__embed">
-        <iframe class="subnet-section__frame" title="ICP Dashboard subnet placement map for Event Horizon’s canonical backend and frontend" src="https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
-        <div class="subnet-section__loading" role="status" aria-live="polite">
-          <span class="subnet-section__indicator" aria-hidden="true"></span>
-          <span>Loading subnet map…</span>
+    <section class="manifesto" aria-labelledby="manifesto-title" id="protocol-overview">
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="manifesto-title"><span class="section-label">The protocol</span><span class="section-disclosure__title">A cost-effective path for ledger-aware canisters.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The ledger remains the source of truth.</p>
         </div>
-      </div>
+      </details>
     </section>
 
-    <section class="manifesto" aria-labelledby="manifesto-title">
-      <p class="section-label">The protocol</p>
-      <h2 id="manifesto-title">A cost-effective path for ledger-aware canisters.</h2>
-      <p>Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The ledger remains the source of truth.</p>
+    <section id="subnet-map" class="subnet-section" aria-labelledby="subnet-title">
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="subnet-title" class="section-label">Fully on-chain<span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <div class="subnet-section__intro">
+            <p class="subnet-section__sources">Subnet map provided by ICP Dashboard. If the map does not load, <a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">view it on ICP Dashboard</a>.</p>
+            <p class="subnet-section__status" role="status" aria-live="polite"></p>
+          </div>
+          <div class="subnet-section__embed">
+            <iframe class="subnet-section__frame" title="ICP Dashboard subnet placement map for Event Horizon’s canonical backend and frontend" src="https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+            <div class="subnet-section__loading" role="status" aria-live="polite">
+              <span class="subnet-section__indicator" aria-hidden="true"></span>
+              <span>Loading subnet map…</span>
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="section" id="network" aria-labelledby="network-title">
-      <header class="section__header">
-        <p class="section-label">01 / Choose</p>
-        <div>
-          <h2 id="network-title">Select a supported ledger.</h2>
-          <p>If the ledger you need is not yet supported you can <a href="#open-deployment">add it yourself</a>.</p>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="network-title"><span class="section-label">01 / Choose</span><span class="section-disclosure__title">Select a supported ledger.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">If the ledger you need is not yet supported you can <a href="#open-deployment">add it yourself</a>.</p>
+    <div class="network-grid">
+            <article class="panel instance-panel">
+              <div class="panel__topline">
+                <p class="panel__eyebrow">Event Horizon instance</p>
+                <span class="status"><span class="status__light"></span>Registry</span>
+              </div>
+              <label class="field field--select">Selected instance
+                <select id="instance"></select>
+              </label>
+              <section class="operating-status" aria-labelledby="operating-heading">
+                <div class="operating-status__heading"><h3 id="operating-heading">Operating status</h3><span id="operating-tier">—</span></div>
+                <p class="operating-status__balance"><span id="operating-balance">—</span> <span id="operating-balance-label">Cycles balance</span></p>
+                <p><span id="operating-mode-label">Polling tier</span> · <span id="operating-delay">—</span></p>
+                <progress id="operating-progress" max="100" value="0" aria-label="Balance toward the next tier entry threshold" hidden></progress>
+                <p id="operating-next">Operating status requires JavaScript and public canister status/logs.</p>
+                <p id="operating-checked" class="operating-status__note"></p>
+                <p class="operating-status__note">T = one trillion cycles. Polling uses liquid cycles and hysteresis; the total balance may differ. A reported tier is not proof of a completed poll or notification delivery.</p>
+              </section>
+              <div id="instance-info" class="instance-info"></div>
+            </article>
+
+            <article class="panel pricing-panel">
+              <div class="panel__topline">
+                <p class="panel__eyebrow">Authoritative pricing</p>
+                <span class="status"><span class="status__light"></span>Live query</span>
+              </div>
+              <div id="pricing" class="pricing">Loading current Event Horizon pricing…</div>
+              <p class="panel__note">The displayed values are minimum cumulative productive endowments, determined by the backend rather than the browser. Endowed principal remains in Jupiter’s productive stake; recurring maturity-derived ICP payouts enter Event Horizon’s common operating pool and are converted into cycles. Prices can vary monthly with Event Horizon’s retained ICP/XDR observations, and sustained service remains conditional on actual receipts and costs.</p>
+            </article>
+          </div>
         </div>
-      </header>
-
-      <div class="network-grid">
-        <article class="panel instance-panel">
-          <div class="panel__topline">
-            <p class="panel__eyebrow">Event Horizon instance</p>
-            <span class="status"><span class="status__light"></span>Registry</span>
-          </div>
-          <label class="field field--select">Selected instance
-            <select id="instance"></select>
-          </label>
-          <section class="operating-status" aria-labelledby="operating-heading">
-            <div class="operating-status__heading"><h3 id="operating-heading">Operating status</h3><span id="operating-tier">—</span></div>
-            <p class="operating-status__balance"><span id="operating-balance">—</span> <span id="operating-balance-label">Cycles balance</span></p>
-            <p><span id="operating-mode-label">Polling tier</span> · <span id="operating-delay">—</span></p>
-            <progress id="operating-progress" max="100" value="0" aria-label="Balance toward the next tier entry threshold" hidden></progress>
-            <p id="operating-next">Operating status requires JavaScript and public canister status/logs.</p>
-            <p id="operating-checked" class="operating-status__note"></p>
-            <p class="operating-status__note">T = one trillion cycles. Polling uses liquid cycles and hysteresis; the total balance may differ. A reported tier is not proof of a completed poll or notification delivery.</p>
-          </section>
-          <div id="instance-info" class="instance-info"></div>
-        </article>
-
-        <article class="panel pricing-panel">
-          <div class="panel__topline">
-            <p class="panel__eyebrow">Authoritative pricing</p>
-            <span class="status"><span class="status__light"></span>Live query</span>
-          </div>
-          <div id="pricing" class="pricing">Loading current Event Horizon pricing…</div>
-          <p class="panel__note">The displayed values are minimum cumulative productive endowments, determined by the backend rather than the browser. Endowed principal remains in Jupiter’s productive stake; recurring maturity-derived ICP payouts enter Event Horizon’s common operating pool and are converted into cycles. Prices can vary monthly with Event Horizon’s retained ICP/XDR observations, and sustained service remains conditional on actual receipts and costs.</p>
-        </article>
-      </div>
+      </details>
     </section>
 
     <section class="section builder-section" id="builder" aria-labelledby="builder-title">
-      <header class="section__header">
-        <p class="section-label">02 / Compose</p>
-        <div>
-          <h2 id="builder-title">Compose the subscription.</h2>
-          <p>A declaration identifies the subscriber canister, the subaccounts or neuron accounts it's interested in, and the ICP transaction significance threshold for triggering a notification.</p>
-        </div>
-      </header>
-
-      <div class="builder-card">
-        <div class="builder-card__intro">
-          <p class="panel__eyebrow">Subscription memo</p>
-          <p>Specific targets may be a single value or an inclusive contiguous range. Event Horizon’s displayed backend requirement is authoritative when permanent admission is evaluated.</p>
-        </div>
-        <form id="memo-form">
-          <label class="field field--wide">Subscriber canister (receives notifications)
-            <input id="principal" aria-label="Subscriber canister principal or registered alias" autocomplete="off" spellcheck="false" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai">
-          </label>
-          <label class="field field--wide">Watch accounts belonging to
-            <select id="subject-mode"><option value="self">Same canister</option><option value="external">Another subject canister</option></select>
-          </label>
-          <label id="subject-field" class="field field--wide" hidden>Subject canister principal or registered alias
-            <input id="subject" autocomplete="off" spellcheck="false" placeholder="E or a canister principal">
-          </label>
-          <label class="field field--wide">Subscription mode
-            <select id="scope">
-              <option value="global">Global Ledger</option>
-              <option value="account" selected>Single subaccount</option>
-              <option value="range">Subaccount range</option>
-              <option value="neuron">Single neuron nonce</option>
-              <option value="neuron-range">Neuron nonce range</option>
-            </select>
-          </label>
-          <span id="account-fields" class="account-fields">
-            <label id="single-field" class="field"><span id="single-label">Numbered subaccount</span>
-              <input id="subaccount" inputmode="numeric" value="0">
-            </label>
-            <span id="range-fields" class="range-fields" hidden>
-              <label class="field"><span id="range-start-label">Start subaccount</span>
-                <input id="range-start" inputmode="numeric" value="0">
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="builder-title"><span class="section-label">02 / Compose</span><span class="section-disclosure__title">Compose the subscription.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">A declaration identifies the subscriber canister, the subaccounts or neuron accounts it's interested in, and the ICP transaction significance threshold for triggering a notification.</p>
+    <div class="builder-card">
+            <div class="builder-card__intro">
+              <p class="panel__eyebrow">Subscription memo</p>
+              <p>Specific targets may be a single value or an inclusive contiguous range. Event Horizon’s displayed backend requirement is authoritative when permanent admission is evaluated.</p>
+            </div>
+            <form id="memo-form">
+              <label class="field field--wide">Subscriber canister (receives notifications)
+                <input id="principal" aria-label="Subscriber canister principal or registered alias" autocomplete="off" spellcheck="false" placeholder="r5m5y-diaaa-aaaaa-qanaa-cai">
               </label>
-              <label class="field"><span id="range-end-label">End subaccount</span>
-                <input id="range-end" inputmode="numeric" value="1">
+              <label class="field field--wide">Watch accounts belonging to
+                <select id="subject-mode"><option value="self">Same canister</option><option value="external">Another subject canister</option></select>
               </label>
-            </span>
-            <label id="amount-label" class="field">Minimum ICP amount (optional)
-              <input id="amount" inputmode="decimal" placeholder="blank = every transfer">
-            </label>
-          </span>
-        </form>
+              <label id="subject-field" class="field field--wide" hidden>Subject canister principal or registered alias
+                <input id="subject" autocomplete="off" spellcheck="false" placeholder="E or a canister principal">
+              </label>
+              <label class="field field--wide">Subscription mode
+                <select id="scope">
+                  <option value="global">Global Ledger</option>
+                  <option value="account" selected>Single subaccount</option>
+                  <option value="range">Subaccount range</option>
+                  <option value="neuron">Single neuron nonce</option>
+                  <option value="neuron-range">Neuron nonce range</option>
+                </select>
+              </label>
+              <span id="account-fields" class="account-fields">
+                <label id="single-field" class="field"><span id="single-label">Numbered subaccount</span>
+                  <input id="subaccount" inputmode="numeric" value="0">
+                </label>
+                <span id="range-fields" class="range-fields" hidden>
+                  <label class="field"><span id="range-start-label">Start subaccount</span>
+                    <input id="range-start" inputmode="numeric" value="0">
+                  </label>
+                  <label class="field"><span id="range-end-label">End subaccount</span>
+                    <input id="range-end" inputmode="numeric" value="1">
+                  </label>
+                </span>
+                <label id="amount-label" class="field">Minimum ICP amount (optional)
+                  <input id="amount" inputmode="decimal" placeholder="blank = every transfer">
+                </label>
+              </span>
+            </form>
 
-        <p class="builder-card__footnote">A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.<br><a href="#complete">Review your generated declaration in step 03 <span aria-hidden="true">&#8595;</span></a></p>
-      </div>
+            <p class="builder-card__footnote">A range subscription covers one contiguous inclusive range of specific targets and uses a 2× standard economic basis, regardless of range width.<br><a href="#complete">Review your generated declaration in step 03 <span aria-hidden="true">&#8595;</span></a></p>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="section" id="complete" aria-labelledby="complete-title">
-      <header class="section__header">
-        <p class="section-label">03 / Complete</p>
-        <div>
-          <h2 id="complete-title">Endow the subscription.</h2>
-          <p>Register the generated subscription memo with <a href="https://www.jupiter-faucet.com/">Jupiter Faucet</a></p>
-        </div>
-      </header>
-      <div class="network-grid completion-layout">
-        <div class="panel memo-result">
-          <div class="panel__topline"><p id="memo-result-label" class="memo-result__label">Generated declaration</p></div>
-          <output id="memo-output" class="memo" aria-labelledby="memo-result-label" aria-describedby="memo-help"></output>
-          <p id="memo-help" class="help"></p>
-          <p class="memo-result__edit"><a href="#builder">Edit inputs in 02 / Compose <span aria-hidden="true">&#8593;</span></a></p>
-        </div>
-        <div class="panel completion-guide">
-          <div class="panel__topline"><h3 class="panel__eyebrow">Register with Jupiter Faucet</h3></div>
-          <div class="pricing">
-          <p>Jupiter keeps the endowed ICP principal in its productive staking path. Recurring maturity-derived ICP payouts reach Event Horizon; retained payouts are converted into pooled operating cycles, helping fund notifications over time rather than spending the principal on each wake-up.</p>
-          <p>Creating the endowment does not immediately activate the subscription. Event Horizon must observe a qualifying Faucet payout and complete Historian evidence for the exact declaration before admitting it. Recognition and payout timing can delay admission; ongoing service depends on realised receipts and costs.</p>
-          <p><a href="https://www.jupiter-faucet.com/">Complete an endowment with Jupiter Faucet <span aria-hidden="true">↗</span></a> · <a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscriber guide <span aria-hidden="true">↗</span></a></p>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="complete-title"><span class="section-label">03 / Complete</span><span class="section-disclosure__title">Endow the subscription.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">Register the generated subscription memo with <a href="https://www.jupiter-faucet.com/">Jupiter Faucet</a></p>
+    <div class="network-grid completion-layout">
+            <div class="panel memo-result">
+              <div class="panel__topline"><p id="memo-result-label" class="memo-result__label">Generated declaration</p></div>
+              <output id="memo-output" class="memo" aria-labelledby="memo-result-label" aria-describedby="memo-help"></output>
+              <p id="memo-help" class="help"></p>
+              <p class="memo-result__edit"><a href="#builder">Edit inputs in 02 / Compose <span aria-hidden="true">&#8593;</span></a></p>
+            </div>
+            <div class="panel completion-guide">
+              <div class="panel__topline"><h3 class="panel__eyebrow">Register with Jupiter Faucet</h3></div>
+              <div class="pricing">
+              <p>Jupiter keeps the endowed ICP principal in its productive staking path. Recurring maturity-derived ICP payouts reach Event Horizon; retained payouts are converted into pooled operating cycles, helping fund notifications over time rather than spending the principal on each wake-up.</p>
+              <p>Creating the endowment does not immediately activate the subscription. Event Horizon must observe a qualifying Faucet payout and complete Historian evidence for the exact declaration before admitting it. Recognition and payout timing can delay admission; ongoing service depends on realised receipts and costs.</p>
+              <p><a href="https://www.jupiter-faucet.com/">Complete an endowment with Jupiter Faucet <span aria-hidden="true">↗</span></a> · <a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscriber guide <span aria-hidden="true">↗</span></a></p>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
 
     <section class="section" id="protocol" aria-labelledby="protocol-title">
-      <header class="section__header">
-        <p class="section-label">04 / Principles</p>
-        <div>
-          <h2 id="protocol-title">Small surface. Clear contract.</h2>
-          <p>Event Horizon adds a prompt signal path without taking ownership of application correctness.</p>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="protocol-title"><span class="section-label">04 / Principles</span><span class="section-disclosure__title">Small surface. Clear contract.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">Event Horizon adds a prompt signal path without taking ownership of application correctness.</p>
+    <div class="principles">
+            <article class="principle">
+              <p class="principle__number">01</p>
+              <h3>Fast path</h3>
+              <p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global subscription triggers one <code>poke(PokeNotification)</code> attempt per completed poll with observed Ledger activity, setting <code>global_activity = true</code>. The independent <code>matches</code> vector contains any qualifying specific targets and may be empty.</p>
+            </article>
+            <article class="principle">
+              <p class="principle__number">02</p>
+              <h3>Correctness stays yours</h3>
+              <p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p>
+            </article>
+            <article class="principle">
+              <p class="principle__number">03</p>
+              <h3>ICP-funded</h3>
+              <p>A patron productively endows an exact route through Jupiter Faucet. Event Horizon admits it permanently only after a qualifying Faucet payout and complete Historian evidence; recurring payouts, not endowed principal, fund pooled operating cycles.</p>
+            </article>
+            <article class="principle">
+              <p class="principle__number">04</p>
+              <h3>Specific hints win</h3>
+              <p>A non-empty poke reports each retained specific target, its first qualifying Ledger block index, and its maximum observed qualifying transfer amount; an empty poke reports global-only activity. Both are best-effort hints, and <code>max_amount</code> is not proof of payment. There are no acknowledgements, retries, or delivery guarantees.</p>
+            </article>
+          </div>
         </div>
-      </header>
-
-      <div class="principles">
-        <article class="principle">
-          <p class="principle__number">01</p>
-          <h3>Fast path</h3>
-          <p>Canonical ICP is read through its legacy block log; compatible non-ICP ledgers are read through ICRC-3. A global subscription triggers one <code>poke(PokeNotification)</code> attempt per completed poll with observed Ledger activity, setting <code>global_activity = true</code>. The independent <code>matches</code> vector contains any qualifying specific targets and may be empty.</p>
-        </article>
-        <article class="principle">
-          <p class="principle__number">02</p>
-          <h3>Correctness stays yours</h3>
-          <p>Your canister keeps its own authoritative ledger cursor and a slower independent reconciliation timer. An Index is optional application infrastructure.</p>
-        </article>
-        <article class="principle">
-          <p class="principle__number">03</p>
-          <h3>ICP-funded</h3>
-          <p>A patron productively endows an exact route through Jupiter Faucet. Event Horizon admits it permanently only after a qualifying Faucet payout and complete Historian evidence; recurring payouts, not endowed principal, fund pooled operating cycles.</p>
-        </article>
-        <article class="principle">
-          <p class="principle__number">04</p>
-          <h3>Specific hints win</h3>
-          <p>A non-empty poke reports each retained specific target, its first qualifying Ledger block index, and its maximum observed qualifying transfer amount; an empty poke reports global-only activity. Both are best-effort hints, and <code>max_amount</code> is not proof of payment. There are no acknowledgements, retries, or delivery guarantees.</p>
-        </article>
-      </div>
+      </details>
     </section>
 
     <section class="project-detail" id="open-source" aria-labelledby="open-source-title" tabindex="-1">
-      <h2 id="open-source-title"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span></h2>
-      <div>
-        <p>Event Horizon’s implementation is public and designed for independent verification. Reproduce the production Wasm from a reviewed source revision, then compare its SHA-256 with the module hash installed on the canister.</p>
-        <p>Also check the canister identity, instance configuration and current controllers. A matching build or the frontend’s reviewed backend-hash registry does not independently establish live controller status.</p>
-        <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/reproducible-builds.md">Reproduce the build <span aria-hidden="true">↗</span></a></p>
-      </div>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="open-source-title"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p>Event Horizon’s implementation is public and designed for independent verification. Reproduce the production Wasm from a reviewed source revision, then compare its SHA-256 with the module hash installed on the canister.</p>
+          <p>Also check the canister identity, instance configuration and current controllers. A matching build or the frontend’s reviewed backend-hash registry does not independently establish live controller status.</p>
+          <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/reproducible-builds.md">Reproduce the build <span aria-hidden="true">↗</span></a></p>
+        </div>
+      </details>
     </section>
 
     <section class="project-detail" id="immutability" aria-labelledby="immutability-title" tabindex="-1">
-      <h2 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span></h2>
-      <div>
-        <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
-        <p>Once controller removal is complete, the backend cannot ordinarily be upgraded or reconfigured. The frontend remains separately controlled and can continue to evolve.</p>
-        <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/architecture/trust-model.md">Read the trust model <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/acceptance-observation.md">Review operational acceptance <span aria-hidden="true">↗</span></a></p>
-      </div>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
+          <p>Once controller removal is complete, the backend cannot ordinarily be upgraded or reconfigured. The frontend remains separately controlled and can continue to evolve.</p>
+          <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/architecture/trust-model.md">Read the trust model <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/acceptance-observation.md">Review operational acceptance <span aria-hidden="true">↗</span></a></p>
+        </div>
+      </details>
     </section>
 
     <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title" tabindex="-1">
-      <h2 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span></h2>
-      <div>
-        <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
-        <p>Endowing principal does not immediately admit a subscription: admission requires a qualifying Faucet payout and Historian evidence. Ongoing operation depends on realised receipts and costs. Perpetual service is an objective, not a guarantee.</p>
-        <p class="project-detail__links"><a href="https://www.jupiter-faucet.com/">Visit Jupiter Faucet <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscription guide <span aria-hidden="true">↗</span></a></p>
-      </div>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
+          <p>Endowing principal does not immediately admit a subscription: admission requires a qualifying Faucet payout and Historian evidence. Ongoing operation depends on realised receipts and costs. Perpetual service is an objective, not a guarantee.</p>
+          <p class="project-detail__links"><a href="https://www.jupiter-faucet.com/">Visit Jupiter Faucet <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscription guide <span aria-hidden="true">↗</span></a></p>
+        </div>
+      </details>
     </section>
 
     <section class="project-detail" id="internet-computer" aria-labelledby="internet-computer-title" tabindex="-1">
-      <h2 id="internet-computer-title"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span></h2>
-      <div>
-        <p>The Internet Computer hosts Event Horizon’s backend canister and certified frontend assets. Ledger queries identify relevant activity, canister-to-canister notifications provide best-effort wake-up hints, and cycles converted from ICP pay for operation.</p>
-        <p>Independent instances can observe compatible non-ICP ledgers, while subscription funding and cycles conversion remain ICP-based. Subscribers still reconcile authoritative Ledger data; notifications are not a delivery guarantee.</p>
-        <p class="project-detail__links"><a href="https://internetcomputer.org/">Explore the Internet Computer <span aria-hidden="true">↗</span></a></p>
-      </div>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="internet-computer-title"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p>The Internet Computer hosts Event Horizon’s backend canister and certified frontend assets. Ledger queries identify relevant activity, canister-to-canister notifications provide best-effort wake-up hints, and cycles converted from ICP pay for operation.</p>
+          <p>Independent instances can observe compatible non-ICP ledgers, while subscription funding and cycles conversion remain ICP-based. Subscribers still reconcile authoritative Ledger data; notifications are not a delivery guarantee.</p>
+          <p class="project-detail__links"><a href="https://internetcomputer.org/">Explore the Internet Computer <span aria-hidden="true">↗</span></a></p>
+        </div>
+      </details>
     </section>
 
     <section class="instances-note" id="open-deployment" aria-labelledby="instances-title">
-      <p class="section-label">Open deployment</p>
-      <div>
-        <h2 id="instances-title">Additional immutable instances.</h2>
-        <p>Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p>
-      </div>
+      <details class="section-disclosure" name="event-horizon-sections">
+        <summary class="section-disclosure__summary">
+          <h2 id="instances-title"><span class="section-label">Open deployment</span><span class="section-disclosure__title">Additional immutable instances.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+        </summary>
+        <div class="section-disclosure__body">
+          <p class="section-disclosure__intro">Event Horizon’s backend is ledger-generic. Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers. Before final deployment, arrange a dedicated Jupiter Faucet alias through its community review process. Canonical frontend listing is reviewed rather than automatic and requires a verified instance with no controllers.</p>
+        </div>
+      </details>
     </section>
   </main>
 
