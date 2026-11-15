@@ -298,6 +298,7 @@ footer {
 .section-disclosure__summary:hover { color: var(--paper); background: var(--space-soft); }
 .section-disclosure__summary:focus-visible { outline: 2px solid var(--ember); outline-offset: 4px; }
 .section-disclosure__summary h2 {
+  overflow-wrap: anywhere;
   display: grid;
   grid-template-columns: minmax(9rem, 1fr) minmax(0, 3.9fr) 1rem;
   align-items: center;
@@ -449,7 +450,7 @@ code { color: #e6c8a6; font-family: "SFMono-Regular", Consolas, "Liberation Mono
 .project-detail h2 { margin: 0; font-size: clamp(1.7rem, 2.6vw, 2.8rem); font-weight: 300; line-height: 1.15; letter-spacing: -.025em; }
 /* Centre each image box on the first text line, including the ICP favicon's
    transparent square padding. A shared top offset misaligns its larger box. */
-.project-detail h2 .hero__fact-icon { margin-top: calc((1.15em - 24px) / 2); }
+.project-detail h2 .hero__fact-icon { align-self: start; margin-top: calc((1.15em - 24px) / 2); }
 .project-detail h2 .hero__fact-icon--wide { margin-top: calc((1.15em - 44px) / 2); }
 .project-detail h2 span { min-width: 0; }
 .project-detail p { max-width: 65ch; margin: 0 0 1rem; color: var(--paper-muted); font-size: .98rem; line-height: 1.75; }

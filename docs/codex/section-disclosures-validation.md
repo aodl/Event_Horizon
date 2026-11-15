@@ -62,7 +62,9 @@ URL, sandbox/popup permissions, no-referrer and fallback link are retained.
 - Actual headed Chromium page zoom (virtual display, `chrome.tabs.setZoom`, not
   DPR or CSS zoom) passes 100%, 125%, 150%, 175%, 200% and return to 100% after
   observer delivery, with no iframe reloads. Enlarged text, reduced motion,
-  forced colours and short landscape geometry pass.
+  forced colours and short landscape geometry pass. Rendered text ranges at
+  200% text/320px are checked, rather than relying only on page scroll width;
+  scoped heading wrapping prevents long words from being clipped.
 
 | Viewport | Visible iframe (CSS px) |
 |---|---:|

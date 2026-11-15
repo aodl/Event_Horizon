@@ -125,6 +125,19 @@ async function verifyDashboardNavigation(page, activation) {
     return {activation,...attributes,destination,functionalDestination:popup.url(),openerNull:true,referrer:'',dashboardPagination:true,parentUnchanged:true};
   } finally { await popup.close(); await page.bringToFront(); }
 }
+async function assertSummaryTextContained(page) {
+  const clipped=await page.locator('.section-disclosure__summary').evaluateAll(nodes=>nodes.filter(summary=>{
+    const bounds=summary.getBoundingClientRect(),walker=document.createTreeWalker(summary.querySelector('h2'),NodeFilter.SHOW_TEXT);
+    let text;
+    while(text=walker.nextNode()) {
+      if(!text.textContent.trim())continue;
+      const range=document.createRange();range.selectNodeContents(text);
+      if([...range.getClientRects()].some(r=>r.left<bounds.left-1||r.right>bounds.right+1))return true;
+    }
+    return false;
+  }).map(n=>n.closest('section').id));
+  assert.deepEqual(clipped,[],'heading text must remain inside each disclosure, including enlarged text');
+}
 async function assertGeometry(page) {
   await page.waitForFunction(()=>{
     const e=document.querySelector('.subnet-section__embed'),f=e.querySelector('iframe');
@@ -270,6 +283,7 @@ try {
   for(const [width,height] of [[1920,1080],[1440,900],[1280,800],[1024,768],[768,1024],[390,844],[320,568],[844,390]]) {
     await page.setViewportSize({width,height});
     const geometry=await assertGeometry(page);
+    await assertSummaryTextContained(page);
     assert.equal(await page.locator('.subnet-section__loading').isVisible(),false);
     evidence.viewports.push({width,height,...geometry});
     if(width===1440||width===390) {
@@ -330,6 +344,7 @@ try {
   await isolated.close();
   await page.setViewportSize({width:320,height:568});await page.goto(origin);
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+  await assertSummaryTextContained(page);
   await page.locator('#subnet-map summary').click();
   await page.locator('#subnet-map').scrollIntoViewIfNeeded();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -425,12 +440,24 @@ try {
       livePage.on('console',m=>{if(m.type()==='error')live.errors.push(m.text());});
       livePage.on('request',r=>live.requests.push({url:r.url(),parent:r.frame()===livePage.mainFrame()}));
       livePage.on('response',r=>{if(r.request().resourceType()==='document')live.responses.push({url:r.url(),status:r.status(),headers:r.headers()});});
-      await livePage.goto(origin);await livePage.locator('#subnet-map summary').click();await livePage.locator('iframe').scrollIntoViewIfNeeded();
+      await livePage.goto(origin);
+      await livePage.locator('#subnet-map summary')[mobile?'tap':'click']();
+      await livePage.locator('iframe').scrollIntoViewIfNeeded();
       const map=livePage.frameLocator('iframe');
       await map.getByRole('heading',{name:'Subnet Fiduciary pzp6e',exact:true}).waitFor({timeout:90000});
       const country=map.getByRole('button',{name:/node machines? in this subnet/}).first();
       await country.waitFor({timeout:90000});
       await livePage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
+      if(mobile) {
+        const documents=live.requests.filter(r=>r.url===SUBNET_EMBED_URL).length;
+        await livePage.locator('#network summary').tap();
+        assert.equal(await livePage.locator('#subnet-map details').evaluate(n=>n.open),false);
+        await livePage.locator('#subnet-map summary').tap();
+        assert.equal(await livePage.locator('details[open]').count(),1);
+        assert.equal(live.requests.filter(r=>r.url===SUBNET_EMBED_URL).length,documents);
+        live.touchDisclosures=true;
+      }
+
       await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
       await assertGeometry(livePage);
       if(label!=='scaled-touch') await shot(livePage,`live-${label}`);
