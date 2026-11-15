@@ -721,7 +721,6 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   top: 0;
   left: 0;
   width: 760px;
-  height: 520px;
   transform-origin: top left;
   transform: scale(var(--subnet-scale));
 }

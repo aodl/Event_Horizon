@@ -110,7 +110,7 @@ function layoutFixture({missing = false, fail = false} = {}) {
   const values = new Map(), attributes = new Map();
   const embed = {
     querySelector: () => ({}), getBoundingClientRect: () => ({width: 1000}),
-    style: {setProperty(k,v) { if (fail) throw Error('style failure'); writes++; values.set(k,v); }, removeProperty: k => values.delete(k)},
+    style: {setProperty(k,v) { writes++; if (fail && writes === 2) throw Error('partial style failure'); values.set(k,v); }, removeProperty: k => values.delete(k)},
     setAttribute: (k,v) => attributes.set(k,v), removeAttribute: k => attributes.delete(k),
   };
   const windowRef = missing ? {} : {ResizeObserver: class {
@@ -125,10 +125,13 @@ test('container resizing switches modes, ignores height-only reports and dispose
   assert.equal(f.values.get('--subnet-height'), `${520 * 1000 / 760}px`);
   assert.ok(f.attributes.has('data-scaled'));
   const initialWrites = f.writes();
+  f.resize(0); f.resize(NaN);
+  assert.equal(f.writes(), initialWrites, 'invalid measurements preserve valid geometry');
   f.resize(1000); f.resize(1000.1);
   assert.equal(f.writes(), initialWrites);
   f.resize(350); assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
   f.resize(759.95); f.resize(760.05); assert.ok(f.attributes.has('data-scaled'));
+  f.resize(759.95); assert.equal(f.attributes.size, 0);
   f.resize(1000); assert.ok(f.attributes.has('data-scaled'));
   f.layout.dispose(); assert.ok(f.disconnected());
   f.resize(1200); assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
@@ -137,6 +140,7 @@ test('missing observers and initializer failures preserve the untransformed resp
   for (const options of [{missing:true}, {fail:true}]) {
     const f = layoutFixture(options);
     assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
+    if (options.fail) assert.ok(f.disconnected());
     f.layout.dispose();
   }
   assert.doesNotThrow(() => initSubnetLayout({querySelector: () => null}, {}));
