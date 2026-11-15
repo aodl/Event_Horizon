@@ -198,12 +198,42 @@ backend; the IO instance is planned, has no deployed canister ID and is excluded
 The current dashboard lists one 40-node subnet and three 34-node subnets,
 including this one, among 42 listed mainnet subnets. Review the claim when adding
 a deployed instance or changing subnet placement.
-Review this static URL if either canister moves. The section shares the site's content gutters. At 1024px and wider, concise copy
-and attribution sit beside a 640×520px iframe; narrower screens stack the copy above
-a frame capped at 640px. At 390px and 320px page widths the frame measures
-350×520px and 280×520px respectively. No scaling, cropping or external DOM
-modification is used. Short landscape screens scroll normally. “Fully on-chain”
-is the semantic heading; the former large heading has been removed.
+Review this static URL if either canister moves. The section uses a vertical
+composition within the existing content gutters: semantic “Fully on-chain”
+heading, description and attribution/fallback, then one map immediately before
+“The protocol”. The fallback remains above the iframe in reading and keyboard order.
+
+`subnet-layout.js` observes the parent embed width W with one ResizeObserver.
+At W > 760px the iframe has a fixed 760×520px layout size and a uniform
+`transform: scale(W / 760)` from the top left. Its wrapper reserves
+`520 × W / 760` pixels of height. At W ≤ 760px it uses native responsive width
+and 520px height, without shrinking desktop text to fit a phone. The modes meet
+continuously at 760px. The taller desktop section is intentional and accepted.
+
+Resizing and browser page zoom update the observed container width. Height-only
+reports and subpixel noise do not cause repeated style writes. The controller
+does not poll, animate, recreate the iframe, change its source or inspect the
+external DOM. It disconnects on non-persisted pagehide. Missing ResizeObserver,
+initialization failure or disabled JavaScript leaves an untransformed full-width
+520px iframe. The loading layer stays outside the transform: its text retains
+normal parent size while its dark surface covers the reserved visual area.
+
+The dashboard has its own independently maintained responsive constraints.
+Measured geographic plot occupancy is approximately 97% with a fine pointer and
+77–79% on wide touch layouts. The operator accepts this difference; regression
+checks enforce iframe width, containment and usability rather than a 90% SVG
+occupancy threshold. No pointer-specific baseline or dashboard workaround is used.
+Wide auto-fit also offsets part of browser magnification until native mode resumes;
+it does not promise doubled map text at 200% page zoom. The external dashboard
+fallback offers its independent native layout and zoom.
+
+Keyboard order, focus, country/data-centre and geographic-marker interaction,
+isolated dashboard tabs, touch, enlarged parent text, reduced motion and forced
+colours are checked. Actual Chromium page-zoom evidence covers 100–200%.
+The available WebKit/WPE dashboard embed failed history initialization in both
+the unchanged baseline and scaled version; this is not evidence of a scaling
+regression or actual Safari compatibility. Physical Safari/device and manual
+screen-reader verification remain operator acceptance considerations.
 
 An opaque dark loading layer is present before the bundle runs. CSS disables it
 when scripting is disabled. A small initializer listens for the document's load
@@ -263,8 +293,12 @@ After `npm run build:frontend`, run `npm run test:frontend-unit`,
 `node tools/scripts/validate-ledger-counter.mjs`.
 The section harness uses the production bundle and Rust response policies;
 PocketIC separately verifies certified HTML, routing and headers. Screenshots and
-network evidence for navigation are under ignored `observations/subnet-navigation/browser/`.
-See the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
+evidence are written to ignored `observations/subnet-scaling/browser/` by default.
+The harness accepts `--live`, `--output=directory` and `--no-screenshots`. Without
+`--live` it runs deterministic geometry/loading/fallback checks; `--live` adds
+one shared real-dashboard smoke path for desktop, wide touch and native mobile.
+One-off zoom and engine research utilities are not part of the maintained suite.
+See the [full-width scaling validation](../../docs/codex/subnet-full-width-scaling-validation.md), the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
 
 ## Landing ledger total
 

@@ -41,6 +41,12 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
   settling interval, or after the slow-load deadline with explanatory status and
   permanent fallback links. Neither event establishes external data readiness.
   The parent cannot detect later white paints or verify dashboard completion.
+  The parent layout proportionally upscales a fixed 760×520 iframe
+  only when its container is wider than 760px, reserving the complete transformed
+  height. Narrow screens and failed/missing scaling initialization retain the
+  native responsive iframe. One parent ResizeObserver changes presentation only;
+  it never reads the external DOM, reloads the iframe or makes network calls.
+  The loading layer is outside the transform and retains its existing lifecycle.
   The sandbox additionally permits popups and lets them escape sandbox inheritance
   so the dashboard's own full-page link works. The current `_blank` anchor has
   explicit `noopener noreferrer`; real click, keyboard and touch checks require

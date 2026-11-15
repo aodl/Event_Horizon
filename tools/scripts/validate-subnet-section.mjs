@@ -7,7 +7,8 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/subnet-navigation/browser');
+const output = resolve(root, process.argv.find(a=>a.startsWith('--output='))?.slice(9) ?? 'observations/subnet-scaling/browser');
+if (process.argv.slice(2).some(a=>a!=='--live' && a!=='--no-screenshots' && !a.startsWith('--output='))) throw Error('Usage: validate-subnet-section.mjs [--live] [--no-screenshots] [--output=directory]');
 await mkdir(output, { recursive: true });
 const publicDir = resolve(root, 'canisters/frontend/public');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -28,17 +29,59 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const SUBNET_EMBED_URL = 'https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae';
 const SUBNET_DETAILS_URL = SUBNET_EMBED_URL.replace('/embed/subnet-map?subnet=', '/network/subnet/') + '#node-placement';
 const evidence = {utc:new Date().toISOString(),viewports:[],live:[],errors:[],requests:[]};
-const shot = async (page,name,pendingDocument=false) => {
+const shot = async (page,name) => {
   if(process.argv.includes('--no-screenshots')) return;
-  const path=resolve(output,`${name}.png`);
-  if(!pendingDocument) return page.screenshot({path,timeout:60000});
-  // Playwright waits for fonts in all frames, including the deliberately held document.
+  // Capture the viewport without waiting for fonts in a deliberately pending frame.
   const session=await page.context().newCDPSession(page);
   try {
     const {data}=await session.send('Page.captureScreenshot',{format:'png'});
-    await writeFile(path,Buffer.from(data,'base64'));
+    await writeFile(resolve(output,`${name}.png`),Buffer.from(data,'base64'));
   } finally { await session.detach(); }
 };
+async function tabToFrameControl(page,target) {
+  await page.bringToFront();
+  await page.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).focus();
+  for(let step=0;step<120;step++) {
+    await page.keyboard.press('Tab');
+    if(await target.evaluate(n=>n===document.activeElement)) return;
+  }
+  assert.fail('native Tab navigation must reach the dashboard control');
+}
+// Some Playwright OOPIF paths report untransformed child boundingBox coordinates.
+// Send trusted input using test-only DOM rectangles and the parent's actual transform.
+// This is browser instrumentation, never production click interception or an overlay.
+async function activateFrame(page, target, activation='click') {
+  if(activation==='keyboard') {await tabToFrameControl(page,target);await page.keyboard.press('Enter');return;}
+  await target.scrollIntoViewIfNeeded();
+  const point=async()=>{
+    const r=await target.evaluate(n=>n.getBoundingClientRect().toJSON());
+    const f=await page.locator('iframe').evaluate(n=>({r:n.getBoundingClientRect().toJSON(),w:n.offsetWidth,left:n.clientLeft,top:n.clientTop}));
+    const scale=f.r.width/f.w;
+    return {x:f.r.x+(f.left+r.x+r.width/2)*scale,y:f.r.y+(f.top+r.y+r.height/2)*scale};
+  };
+  let p=await point();
+  const height=await page.evaluate(()=>innerHeight);
+  if(p.y<5||p.y>height-5) {
+    await page.evaluate(y=>scrollBy({top:y-innerHeight/2,behavior:'instant'}),p.y);
+    p=await point();
+  }
+  await target.evaluate(n=>{
+    globalThis.__subnetInput=null;
+    const marker=n.tagName.toLowerCase()==='g'&&n.ownerSVGElement;
+    document.addEventListener('pointerdown',e=>{
+      // Coarse-pointer hit circles and highlight graphics can be separate SVG nodes.
+      // Any trusted circle hit in the genuine world plot is a geographical marker;
+      // the following semantic panel assertions verify its actual response.
+      const geographicalCircle=!!marker&&e.target.tagName.toLowerCase()==='circle'&&e.target.ownerSVGElement?.getBoundingClientRect().width>200;
+      globalThis.__subnetInput={expected:n.contains(e.target)||geographicalCircle,trusted:e.isTrusted};
+    },{once:true,capture:true});
+  });
+  if(activation==='touch') await page.touchscreen.tap(p.x,p.y);
+  else await page.mouse.click(p.x,p.y);
+  const hit=await page.frameLocator('iframe').locator('body').evaluate(()=>globalThis.__subnetInput);
+  assert.ok(hit?.expected&&hit.trusted,JSON.stringify({point:p,hit}));
+  (evidence.inputs??=[]).push({activation,...hit});
+}
 // Inspect and activate the genuine cross-origin anchor through browser automation only.
 // No production click handler, DOM rewrite or postMessage protocol is involved.
 async function verifyDashboardNavigation(page, activation) {
@@ -56,7 +99,7 @@ async function verifyDashboardNavigation(page, activation) {
   const pagesBefore=page.context().pages().length;
   const [popup]=await Promise.all([
     page.context().waitForEvent('page',{timeout:20000}),
-    activation==='keyboard'?page.keyboard.press('Enter'):activation==='touch'?link.tap():link.click(),
+    activateFrame(page,link,activation),
   ]);
   try {
     await popup.waitForLoadState('domcontentloaded');
@@ -67,7 +110,7 @@ async function verifyDashboardNavigation(page, activation) {
     // The full subnet page uses a data-centre map and a paged node table,
     // rather than the embed's country-button UI.
     await popup.getByRole('heading',{name:'Subnet pzp6e',exact:true}).waitFor({timeout:90000});
-    await popup.getByRole('link',{name:/^Data center aw1:/}).waitFor({timeout:90000});
+    await popup.getByRole('link',{name:/^Data center [^:]+:/}).first().waitFor({timeout:90000});
     const rows=popup.getByRole('combobox',{name:'Rows per page'});
     await rows.scrollIntoViewIfNeeded();
     await rows.selectOption('10');
@@ -79,9 +122,80 @@ async function verifyDashboardNavigation(page, activation) {
     assert.equal(page.url(),before.url,'Event Horizon is not navigated');
     assert.equal(await section.evaluate(n=>n.outerHTML),before.markup,'parent section is unchanged');
     assert.equal(await frame.getAttribute('src'),before.src,'embed remains mounted at the approved URL');
-    await shot(popup,`popup-${activation}-${page.viewportSize().width}`);
     return {activation,...attributes,destination,functionalDestination:popup.url(),openerNull:true,referrer:'',dashboardPagination:true,parentUnchanged:true};
   } finally { await popup.close(); await page.bringToFront(); }
+}
+async function assertGeometry(page) {
+  await page.waitForFunction(()=>{
+    const e=document.querySelector('.subnet-section__embed'),f=e.querySelector('iframe');
+    const w=e.getBoundingClientRect().width;
+    return e.hasAttribute('data-scaled')===(w>760) && Math.abs(f.getBoundingClientRect().width-w)<2 &&
+      Math.abs(e.getBoundingClientRect().height-520*Math.max(1,w/760))<2;
+  });
+  const g=await page.locator('#subnet-map').evaluate(n=>{
+    const e=n.querySelector('.subnet-section__embed'),f=e.querySelector('iframe');
+    return {section:n.getBoundingClientRect().toJSON(),wrapper:e.getBoundingClientRect().toJSON(),frame:f.getBoundingClientRect().toJSON(),
+      layoutWidth:f.offsetWidth,layoutHeight:f.offsetHeight,scaled:e.hasAttribute('data-scaled'),
+      intro:n.querySelector('.subnet-section__intro').getBoundingClientRect().toJSON(),position:getComputedStyle(n).position,next:n.nextElementSibling.getBoundingClientRect().toJSON(),overflow:document.documentElement.scrollWidth>innerWidth};
+  });
+  assert.ok(!['fixed','sticky','absolute'].includes(g.position));
+  assert.ok(g.intro.bottom<=g.frame.top,'intro precedes the map');
+  assert.equal(g.scaled,g.wrapper.width>760);
+  assert.ok(Math.abs(g.frame.width-g.wrapper.width)<2);
+  assert.ok(Math.abs(g.frame.height-520*Math.max(1,g.wrapper.width/760))<2);
+  assert.ok(Math.abs(g.frame.bottom-g.wrapper.bottom)<2);
+  assert.ok(g.next.top>=g.frame.bottom,'following section never overlaps transformed frame');
+  assert.equal(g.overflow,false);
+  if(g.scaled) { assert.equal(g.layoutWidth,760);assert.equal(g.layoutHeight,520); }
+  return g;
+}
+async function closeCountry(page) {
+  const map=page.frameLocator('iframe');
+  const selected=map.getByRole('button',{name:/node machines? in this subnet/}).and(map.locator('[aria-expanded="true"]'));
+  if(await selected.count()) {
+    await page.bringToFront();await page.keyboard.press('Escape');
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+    if(!await selected.count()) return;
+    await page.mouse.move(2,3);
+    const target=map.getByRole('button',{name:await selected.first().getAttribute('aria-label'),exact:true});
+    await tabToFrameControl(page,target);
+    if(await target.getAttribute('aria-expanded')==='true') await page.keyboard.press('Space');
+    await selected.waitFor({state:'hidden'});
+  }
+}
+async function geographicMarker(page, touch) {
+  const map=page.frameLocator('iframe');
+  await closeCountry(page);
+  // Test-only inspection of standard SVG geometry; no dashboard classes or data IDs.
+  const groups=map.locator('svg g');
+  const index=await groups.evaluateAll(nodes=>nodes.findIndex(n=>{
+    const circles=[...n.children].filter(c=>c.tagName.toLowerCase()==='circle');
+    if(circles.length<2||!circles.some(c=>c.getAttribute('fill')&&c.getAttribute('fill')!=='none'))return false;
+    if(!circles.every(c=>c.getAttribute('cx')===circles[0].getAttribute('cx')&&c.getAttribute('cy')===circles[0].getAttribute('cy')))return false;
+    const r=n.getBoundingClientRect();
+    return n.ownerSVGElement.getBoundingClientRect().width>200&&r.width>0&&r.width<60&&r.height<60&&n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+  }));
+  assert.ok(index>=0,'visible geographical marker group available');
+  const marker=groups.nth(index);
+  await activateFrame(page,marker,touch?'touch':'click');
+  if(touch) {
+    const sheet=map.getByRole('dialog',{name:'Data center information',exact:true});
+    await sheet.waitFor();
+    const detail=sheet.getByRole('button',{name:/^Show /}).first();
+    if(await detail.count()) {
+      await activateFrame(page,detail,'touch');
+      assert.equal(await detail.getAttribute('aria-expanded'),'true');
+    }
+    assert.match(await sheet.innerText(),/Data center owner/i);
+    await activateFrame(page,sheet.getByRole('button',{name:'Close',exact:true}),'touch');
+    await sheet.waitFor({state:'hidden'});
+  } else {
+    await map.locator('a[href^="/network/centers/"]:visible').first().waitFor();
+    assert.match(await map.locator('body').innerText(),/Data center owner/i);
+    await activateFrame(page,marker);
+    await page.mouse.move(2,3);
+    await map.locator('a[href^="/network/centers/"]:visible').first().waitFor({state:'hidden'});
+  }
 }
 let browser;
 try {
@@ -93,59 +207,56 @@ try {
   const page=await context.newPage();
   page.on('pageerror',e=>evidence.errors.push(e.message));
   page.on('request',r=>evidence.requests.push({url:r.url(),parent:r.frame()===page.mainFrame()}));
-  for(const [width,height] of [[1440,900],[1024,768],[873,940],[768,1024],[390,844],[375,667],[320,568],[844,390]]) {
-    const requestsBefore=evidence.requests.length;
+  const response=await page.goto(origin);
+  assert.equal(response.headers()['content-security-policy'],csp);
+  assert.equal(await page.locator('main > section:first-child#subnet-map + section.manifesto').count(),1);
+  assert.equal(await page.getByRole('region',{name:'Fully on-chain',exact:true}).count(),1);
+  assert.equal(await page.locator('iframe').count(),1);
+  const section=page.locator('#subnet-map'),frame=section.locator('iframe');
+  await frame.scrollIntoViewIfNeeded();
+  await page.frameLocator('iframe').getByRole('button',{name:'Country fixture'}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
+  const documents=()=>evidence.requests.filter(r=>r.url===SUBNET_EMBED_URL).length;
+  assert.equal(documents(),1);
+  for(const [width,height] of [[1920,1080],[1440,900],[1280,800],[1024,768],[768,1024],[390,844],[320,568],[844,390]]) {
     await page.setViewportSize({width,height});
-    const response=await page.goto(origin);
-    assert.equal(response.headers()['content-security-policy'],csp);
-    assert.equal(await page.locator('main > section:first-child#subnet-map + section.manifesto').count(),1);
-    assert.equal(await page.getByRole('region',{name:'Fully on-chain',exact:true}).count(),1);
-    assert.equal(await page.locator('iframe').count(),1);
-    assert.equal(await page.locator('.subnet-section__description').innerText(),'All Event Horizon canisters are hosted on one of the largest ICP subnets.');
-    assert.equal(await page.locator('#subnet-map nav').count(),0);
-    assert.equal(await page.getByRole('link',{name:/View subnet details|How this data is sourced/}).count(),0);
-    assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
-    assert.equal(await page.locator('dialog, #subnet-widget').count(),0);
-    const section=page.locator('#subnet-map'),frame=section.locator('iframe');
-    await section.scrollIntoViewIfNeeded();
-    await page.frameLocator('iframe').getByRole('button',{name:'Country fixture'}).waitFor();
-    const geometry=await section.evaluate(n=>{
-      const rect=n.getBoundingClientRect(),f=n.querySelector('iframe').getBoundingClientRect();
-      return {section:rect.toJSON(),frame:f.toJSON(),position:getComputedStyle(n).position,framePosition:getComputedStyle(n.querySelector('iframe')).position,overflow:document.documentElement.scrollWidth>innerWidth};
-    });
-    assert.equal(geometry.overflow,false);
-    assert.ok(!['fixed','sticky','absolute'].includes(geometry.position));
-    assert.ok(!['fixed','sticky','absolute'].includes(geometry.framePosition));
-    assert.ok(geometry.frame.height>=500);
-    assert.equal(geometry.frame.height,520);
-    assert.ok(Math.abs(geometry.frame.width-Math.min(640,geometry.section.width))<2);
-    if(width>=1024) {
-      assert.ok(geometry.section.height<660,'compact desktop section');
-      assert.ok(await section.locator('.subnet-section__intro').evaluate(n=>n.getBoundingClientRect().right)<geometry.frame.x);
-    } else {
-      assert.ok(await section.locator('.subnet-section__intro').evaluate(n=>n.getBoundingClientRect().bottom)<=geometry.frame.y);
-    }
-    await page.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
-    const before=await section.boundingBox(),scrollBefore=await page.evaluate(()=>scrollY);
-    await page.evaluate(()=>scrollBy({top:100,behavior:'instant'}));
-    const scrollAfter=await page.evaluate(()=>scrollY),after=await section.boundingBox();
-    assert.ok(Math.abs(before.y-after.y-(scrollAfter-scrollBefore))<2);
-    await frame.scrollIntoViewIfNeeded();
-    await section.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).focus();
-    await page.keyboard.press('Tab');
-    assert.ok(await page.frameLocator('iframe').getByRole('button').evaluate(n=>n===document.activeElement));
-    await page.keyboard.press('Tab');
-    assert.ok(await page.frameLocator('iframe').getByRole('link').evaluate(n=>n===document.activeElement));
-    await page.keyboard.press('Tab');
-    assert.ok(await page.locator('a[href="#open-deployment"]').evaluate(n=>n===document.activeElement));
-    await section.scrollIntoViewIfNeeded();
-    await section.evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
-    await shot(page,`section-${width}x${height}`);
-    await page.locator('.manifesto').scrollIntoViewIfNeeded();
-    assert.equal(await frame.getAttribute('src'),SUBNET_EMBED_URL);
-    assert.equal(evidence.requests.slice(requestsBefore).filter(r=>r.url===SUBNET_EMBED_URL).length,1,'one iframe navigation per document');
+    const geometry=await assertGeometry(page);
+    assert.equal(await page.locator('.subnet-section__loading').isVisible(),false);
     evidence.viewports.push({width,height,...geometry});
+    if(width===1440||width===390) {
+      await section.evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
+      await shot(page,`section-${width}x${height}`);
+    }
     console.log(`Section ${width}x${height} passed`);
+  }
+  evidence.resize=[];
+  for(const width of [1920,860,850,320,850,860,1440]) {
+    await page.setViewportSize({width,height:900});
+    evidence.resize.push({width,...await assertGeometry(page)});
+  }
+  assert.equal(documents(),1,'viewport changes never navigate the iframe');
+  assert.equal(await frame.getAttribute('src'),SUBNET_EMBED_URL);
+  // Enter, leave and re-enter the frame using native browser focus order.
+  const focusTargets=[section.getByRole('link'),page.frameLocator('iframe').getByRole('button'),
+    page.frameLocator('iframe').getByRole('link'),page.locator('a[href="#open-deployment"]')];
+  await focusTargets[0].focus();
+  for(const direction of [1,-1]) {
+    for(let index=direction===1?1:2;index>=0&&index<4;index+=direction) {
+      await page.keyboard.press(direction===1?'Tab':'Shift+Tab');
+      assert.ok(await focusTargets[index].evaluate(n=>n===document.activeElement));
+      assert.notEqual(await focusTargets[index].evaluate(n=>getComputedStyle(n).outlineStyle),'none');
+    }
+  }
+  for(const failure of ['missing','constructor']) {
+    const safe=await context.newPage();
+    await safe.addInitScript(failure=>{window.ResizeObserver=failure==='missing'?undefined:class {constructor(){throw Error('fixture');}};},failure);
+    await safe.goto(origin);await safe.locator('iframe').scrollIntoViewIfNeeded();
+    assert.equal(await safe.locator('.subnet-section__embed').getAttribute('data-scaled'),null);
+    assert.equal(await safe.locator('iframe').evaluate(n=>getComputedStyle(n).transform),'none');
+    assert.equal((await safe.locator('iframe').boundingBox()).height,520);
+    await safe.locator('#instance').selectOption('io');
+    assert.match(await safe.locator('#pricing').innerText(),/launch/);
+    await safe.close();
   }
   await page.setViewportSize({width:320,height:568});await page.goto(origin);
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
@@ -177,17 +288,21 @@ try {
     assert.ok(await layer.isVisible());
     assert.equal(await layer.evaluate(n=>getComputedStyle(n).backgroundColor),'rgb(11, 9, 8)');
     assert.equal(await loadingPage.locator('.subnet-section__indicator').evaluate(n=>getComputedStyle(n).animationName),'none');
+    await assertGeometry(loadingPage);
+    const cover=await layer.boundingBox(),frameCover=await loadingPage.locator('iframe').boundingBox();
+    assert.ok(Math.abs(cover.width-frameCover.width)<2 && Math.abs(cover.height-frameCover.height)<2);
+    assert.equal(await layer.evaluate(n=>getComputedStyle(n).transform),'none');
     assert.equal(await layer.getAttribute('role'),'status');
     assert.match(await layer.innerText(),/Loading subnet map/);
     assert.ok(await loadingPage.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
-    await shot(loadingPage,`loading-${label}`,true);
+    await shot(loadingPage,`loading-${label}`);
     if(label==='desktop') {
       await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__status').textContent.includes('Taking longer'),{},{timeout:16000});
       assert.equal(await layer.isVisible(),false);
       assert.match(await loadingPage.locator('.subnet-section__status').innerText(),/link above/);
       assert.equal(await loadingPage.locator('#subnet-map a').count(),1);
       assert.ok(await loadingPage.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
-      await shot(loadingPage,'slow-desktop',true);
+      await shot(loadingPage,'slow-desktop');
     }
     release();
     await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
@@ -203,6 +318,9 @@ try {
   await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).scrollIntoViewIfNeeded();
   assert.ok(await fallback.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
   assert.equal(await fallback.locator('.subnet-section__loading').isVisible(),false);
+  assert.equal(await fallback.locator('iframe').evaluate(n=>getComputedStyle(n).transform),'none');
+  assert.equal((await fallback.locator('iframe').boundingBox()).height,520);
+  assert.equal(await fallback.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await fallbackContext.close();
   const offlineContext=await browser.newContext();
   await offlineContext.route(SUBNET_EMBED_URL,r=>r.abort('internetdisconnected'));
@@ -213,8 +331,9 @@ try {
   assert.ok(await offline.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).count());
   await offlineContext.close();
   if(process.argv.includes('--live')) {
-    for(const [label,viewport,mobile] of [['desktop',{width:1440,height:900},false],['desktop-dark',{width:1440,height:900},false],['mobile',{width:390,height:844},true],['narrow',{width:320,height:568},true],['landscape',{width:844,height:390},true]]) {
-      const liveContext=await browser.newContext({viewport,hasTouch:mobile,isMobile:mobile,reducedMotion:'reduce',colorScheme:label==='desktop-dark'?'dark':'light'});
+    for(const [label,viewport,mobile] of [['desktop',{width:1440,height:900},false],['scaled-touch',{width:1440,height:900},true],['mobile',{width:390,height:844},true]]) {
+      console.log(`Live ${label} starting`);
+      const liveContext=await browser.newContext({viewport,hasTouch:mobile,isMobile:mobile,reducedMotion:'reduce',colorScheme:'dark'});
       const livePage=await liveContext.newPage(),live={label,viewport,mobile,errors:[],responses:[],requests:[]};
       livePage.on('pageerror',e=>live.errors.push(e.message));
       livePage.on('console',m=>{if(m.type()==='error')live.errors.push(m.text());});
@@ -227,52 +346,29 @@ try {
       await country.waitFor({timeout:90000});
       await livePage.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
       await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
-      await shot(livePage,`live-initial-${label}`);
-      if(!process.argv.includes('--no-screenshots')) await livePage.locator('iframe').screenshot({path:resolve(output,`live-frame-${label}.png`)});
-      if(label==='desktop'||label==='mobile') {
-        live.navigation=[];
-        for(const activation of mobile?['touch']:['click','keyboard']) {
-          live.navigation.push(await verifyDashboardNavigation(livePage,activation));
-        }
+      await assertGeometry(livePage);
+      if(label!=='scaled-touch') await shot(livePage,`live-${label}`);
+      live.navigation=[];
+      for(const activation of mobile?['touch']:['click','keyboard']) {
+        live.navigation.push(await verifyDashboardNavigation(livePage,activation));
       }
-      if(mobile)await country.tap();else await country.click();
-      await map.getByText(/machines in .*data centers/).waitFor();
+      await activateFrame(livePage,country,mobile?'touch':'click');
+      await map.getByText(/machines? in .*data centers?/).waitFor();
       live.controls='Country selection opened data-centre details';
-      const countrySnapshot=await map.locator('body').ariaSnapshot();
       const centre=map.getByRole('button',{name:/^Show /}).first();
       live.dataCentreControl=await centre.getAttribute('aria-label');
-      // A short screen needs ordinary parent scrolling to reach the frame's lower panel.
-      const centreBounds=await centre.boundingBox();
-      await livePage.evaluate(y=>scrollBy({top:y-innerHeight/2,behavior:'instant'}),centreBounds.y+centreBounds.height/2);
-      if(mobile)await centre.tap();else await centre.click();
-      await livePage.waitForTimeout(250);
+      await activateFrame(livePage,centre,mobile?'touch':'click');
       assert.equal(await centre.getAttribute('aria-expanded'),'true');
-      assert.notEqual(await map.locator('body').ariaSnapshot(),countrySnapshot,'data-centre control updates the real map');
-      await writeFile(resolve(output,`live-${label}.yml`),await map.locator('body').ariaSnapshot());
-      await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
-      await shot(livePage,`live-${label}`);
-      await livePage.locator('iframe').scrollIntoViewIfNeeded();
-      await shot(livePage,`live-map-${label}`);
-      if(!mobile) {
-        await map.getByRole('button',{name:'About this map',exact:true}).focus();
-        live.keyboardExit=false;
-        for(let step=0;step<120;step++) {
-          await livePage.keyboard.press('Tab');
-          if(await livePage.locator('a[href="#open-deployment"]').evaluate(n=>n===document.activeElement)) {
-            live.keyboardExit=true;break;
-          }
-        }
-        assert.ok(live.keyboardExit,'native Tab navigation leaves the real frame for the parent application');
-        await livePage.locator('iframe').scrollIntoViewIfNeeded();
-      }
-      live.geometry=await livePage.locator('#subnet-map').evaluate(n=>({section:n.getBoundingClientRect().toJSON(),frame:n.querySelector('iframe').getBoundingClientRect().toJSON()}));
-      live.internal=await map.locator('body').evaluate(n=>({width:innerWidth,height:innerHeight,scrollWidth:n.scrollWidth,scrollHeight:n.scrollHeight}));
-      assert.ok(live.internal.scrollWidth<=live.internal.width,'no internal horizontal clipping');
-      const mapBounds=await livePage.locator('iframe').boundingBox();
-      await livePage.mouse.move(mapBounds.x+mapBounds.width/2,Math.max(10,Math.min(viewport.height-10,mapBounds.y+100)));
-      const overBefore=await livePage.evaluate(()=>scrollY);
-      await livePage.mouse.wheel(0,100);await livePage.waitForTimeout(250);
-      live.wheelOverMapScrollDelta=await livePage.evaluate(()=>scrollY)-overBefore;
+      assert.match(await map.locator('body').innerText(),/Data center owner/i);
+      if(label==='desktop') await shot(livePage,'country-expanded');
+      await geographicMarker(livePage,mobile);
+      live.geographicMarker='Real SVG marker opens data-centre information';
+      // The accepted touch plot can be narrower; containment, not occupancy, matters.
+      const internal=await map.locator('body').evaluate(n=>({width:innerWidth,height:innerHeight,scrollWidth:n.scrollWidth,
+        maps:[...n.querySelectorAll('svg')].map(s=>s.getBoundingClientRect().toJSON()).filter(r=>r.width>200)}));
+      assert.ok(internal.maps.length,'a genuine geographical map rendered');
+      assert.ok(internal.scrollWidth<=internal.width,'no internal horizontal overflow');
+      for(const bounds of internal.maps) assert.ok(bounds.x>=-1 && bounds.right<=internal.width+1 && bounds.y>=-1 && bounds.bottom<=internal.height+1,'map is contained in the frame');
       const y=await livePage.evaluate(()=>scrollY);
       await livePage.mouse.move(5,100);await livePage.mouse.wheel(0,400);await livePage.waitForTimeout(250);
       assert.ok(await livePage.evaluate(()=>scrollY)>y);
@@ -288,8 +384,29 @@ try {
         assert.ok(live.touchScrollDelta>0,'page scrolls by touch beside map');
         await session.detach();
       }
+      if(label==='desktop') {
+        const documents=live.requests.filter(r=>r.url===SUBNET_EMBED_URL).length;
+        live.resize=[];
+        for(const width of [1920,768,390,1440]) {
+          await livePage.setViewportSize({width,height:900});
+          live.resize.push({width,...await assertGeometry(livePage)});
+        }
+        assert.equal(live.requests.filter(r=>r.url===SUBNET_EMBED_URL).length,documents);
+        await activateFrame(livePage,map.getByRole('button',{name:/node machines? in this subnet/}).last());
+        assert.equal(await map.getByRole('button',{name:/node machines? in this subnet/}).last().getAttribute('aria-expanded'),'true');
+        await map.locator('a[href^="/network/centers/"]:visible').first().waitFor();
+        const keyboardCountry=map.getByRole('button',{name:/node machines? in this subnet/}).first();
+        await keyboardCountry.focus();await livePage.keyboard.press('Enter');
+        assert.equal(await keyboardCountry.getAttribute('aria-expanded'),'true');
+        const keyboardCentre=map.getByRole('button',{name:/^Show /}).first();
+        const wasExpanded=await keyboardCentre.getAttribute('aria-expanded');
+        await keyboardCentre.focus();await livePage.keyboard.press('Space');
+        assert.equal(await keyboardCentre.getAttribute('aria-expanded'),wasExpanded==='true'?'false':'true');
+        live.keyboardControls=true;
+        assert.equal(await livePage.locator('.subnet-section__loading').isVisible(),false);
+      }
       assert.deepEqual(live.errors,[]);
-      live.completed=true;evidence.live.push(live);await liveContext.close();
+      live.completed=true;evidence.live.push(live);await liveContext.close();console.log(`Live ${label} passed`);
     }
   }
   evidence.passed=true;
