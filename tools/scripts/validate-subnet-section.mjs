@@ -7,7 +7,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const output = resolve(root, 'observations/subnet-section/browser');
+const output = resolve(root, 'observations/subnet-navigation/browser');
 await mkdir(output, { recursive: true });
 const publicDir = resolve(root, 'canisters/frontend/public');
 const rust = await readFile(resolve(root, 'canisters/frontend/src/lib.rs'), 'utf8');
@@ -26,6 +26,7 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const SUBNET_EMBED_URL = 'https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae';
+const SUBNET_DETAILS_URL = SUBNET_EMBED_URL.replace('/embed/subnet-map?subnet=', '/network/subnet/') + '#node-placement';
 const evidence = {utc:new Date().toISOString(),viewports:[],live:[],errors:[],requests:[]};
 const shot = async (page,name,pendingDocument=false) => {
   if(process.argv.includes('--no-screenshots')) return;
@@ -38,6 +39,50 @@ const shot = async (page,name,pendingDocument=false) => {
     await writeFile(path,Buffer.from(data,'base64'));
   } finally { await session.detach(); }
 };
+// Inspect and activate the genuine cross-origin anchor through browser automation only.
+// No production click handler, DOM rewrite or postMessage protocol is involved.
+async function verifyDashboardNavigation(page, activation) {
+  const frame=page.locator('iframe.subnet-section__frame');
+  const link=page.frameLocator('iframe.subnet-section__frame').getByRole('link',{name:/ICP Dashboard: Open/});
+  const attributes=await link.evaluate(n=>({href:n.href,target:n.target,rel:n.rel}));
+  assert.equal(attributes.href,SUBNET_DETAILS_URL);
+  assert.equal(attributes.target,'_blank');
+  assert.ok(attributes.rel.split(/\s+/).includes('noopener'),'dashboard must explicitly sever the opener');
+  assert.ok(attributes.rel.split(/\s+/).includes('noreferrer'));
+  await link.scrollIntoViewIfNeeded();
+  if(activation==='keyboard') await link.focus();
+  const section=page.locator('#subnet-map');
+  const before={url:page.url(),markup:await section.evaluate(n=>n.outerHTML),src:await frame.getAttribute('src')};
+  const pagesBefore=page.context().pages().length;
+  const [popup]=await Promise.all([
+    page.context().waitForEvent('page',{timeout:20000}),
+    activation==='keyboard'?page.keyboard.press('Enter'):activation==='touch'?link.tap():link.click(),
+  ]);
+  try {
+    await popup.waitForLoadState('domcontentloaded');
+    const destination=popup.url();
+    assert.equal(destination,SUBNET_DETAILS_URL,'actual embedded link opens this subnet, not a parent fallback');
+    assert.equal(await popup.evaluate(()=>window.opener===null),true,'new tab cannot reach the parent through an opener');
+    assert.equal(await popup.evaluate(()=>document.referrer),'');
+    // The full subnet page uses a data-centre map and a paged node table,
+    // rather than the embed's country-button UI.
+    await popup.getByRole('heading',{name:'Subnet pzp6e',exact:true}).waitFor({timeout:90000});
+    await popup.getByRole('link',{name:/^Data center aw1:/}).waitFor({timeout:90000});
+    const rows=popup.getByRole('combobox',{name:'Rows per page'});
+    await rows.scrollIntoViewIfNeeded();
+    await rows.selectOption('10');
+    await popup.getByRole('status').filter({hasText:/Showing 1 to 10 of \d+ node machines/}).waitFor();
+    assert.equal(await rows.inputValue(),'10','new dashboard tab pagination is functional');
+    assert.equal(await popup.evaluate(()=>window.opener===null),true);
+    assert.equal(page.context().pages().length,pagesBefore+1);
+    assert.equal(page.isClosed(),false);
+    assert.equal(page.url(),before.url,'Event Horizon is not navigated');
+    assert.equal(await section.evaluate(n=>n.outerHTML),before.markup,'parent section is unchanged');
+    assert.equal(await frame.getAttribute('src'),before.src,'embed remains mounted at the approved URL');
+    await shot(popup,`popup-${activation}-${page.viewportSize().width}`);
+    return {activation,...attributes,destination,functionalDestination:popup.url(),openerNull:true,referrer:'',dashboardPagination:true,parentUnchanged:true};
+  } finally { await popup.close(); await page.bringToFront(); }
+}
 let browser;
 try {
   browser = await chromium.launch({headless:true});
@@ -56,6 +101,10 @@ try {
     assert.equal(await page.locator('main > section:first-child#subnet-map + section.manifesto').count(),1);
     assert.equal(await page.getByRole('region',{name:'Fully on-chain',exact:true}).count(),1);
     assert.equal(await page.locator('iframe').count(),1);
+    assert.equal(await page.locator('.subnet-section__description').innerText(),'All Event Horizon canisters are hosted on one of the largest ICP subnets.');
+    assert.equal(await page.locator('#subnet-map nav').count(),0);
+    assert.equal(await page.getByRole('link',{name:/View subnet details|How this data is sourced/}).count(),0);
+    assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
     assert.equal(await page.locator('dialog, #subnet-widget').count(),0);
     const section=page.locator('#subnet-map'),frame=section.locator('iframe');
     await section.scrollIntoViewIfNeeded();
@@ -102,7 +151,7 @@ try {
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
   await page.locator('#subnet-map').scrollIntoViewIfNeeded();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.getByRole('link',{name:'How this data is sourced'}).scrollIntoViewIfNeeded();
+  await page.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).scrollIntoViewIfNeeded();
   await shot(page,'text-200-percent');
   await page.emulateMedia({forcedColors:'active'});
   assert.notEqual(await page.locator('iframe').evaluate(n=>getComputedStyle(n).borderTopStyle),'none');
@@ -135,6 +184,9 @@ try {
     if(label==='desktop') {
       await loadingPage.waitForFunction(()=>document.querySelector('.subnet-section__status').textContent.includes('Taking longer'),{},{timeout:16000});
       assert.equal(await layer.isVisible(),false);
+      assert.match(await loadingPage.locator('.subnet-section__status').innerText(),/link above/);
+      assert.equal(await loadingPage.locator('#subnet-map a').count(),1);
+      assert.ok(await loadingPage.getByRole('link',{name:'view it on ICP Dashboard',exact:true}).isVisible());
       await shot(loadingPage,'slow-desktop',true);
     }
     release();
@@ -177,6 +229,12 @@ try {
       await livePage.locator('#subnet-map').evaluate(n=>n.scrollIntoView({block:'start',behavior:'instant'}));
       await shot(livePage,`live-initial-${label}`);
       if(!process.argv.includes('--no-screenshots')) await livePage.locator('iframe').screenshot({path:resolve(output,`live-frame-${label}.png`)});
+      if(label==='desktop'||label==='mobile') {
+        live.navigation=[];
+        for(const activation of mobile?['touch']:['click','keyboard']) {
+          live.navigation.push(await verifyDashboardNavigation(livePage,activation));
+        }
+      }
       if(mobile)await country.tap();else await country.click();
       await map.getByText(/machines in .*data centers/).waitFor();
       live.controls='Country selection opened data-centre details';

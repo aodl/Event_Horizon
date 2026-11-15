@@ -15,14 +15,19 @@ test('one accessible subnet section immediately precedes the unchanged manifesto
   assert.match(html, /A cost-effective path for ledger-aware canisters\./);
   assert.match(html, /<section class="section" id="network"/);
 });
-test('one real lazy iframe retains the reviewed security boundary and permanent source links', async () => {
+test('one real lazy iframe permits dashboard popups while retaining its sandbox and fallback', async () => {
   const html = await publicFile('index.html');
   const frames = html.match(/<iframe\b[^>]*>/g);
   assert.equal(frames.length, 1);
-  for (const attribute of [`src="${embed}"`, 'loading="lazy"', 'sandbox="allow-scripts allow-same-origin"', 'referrerpolicy="no-referrer"']) assert.ok(frames[0].includes(attribute), attribute);
+  for (const attribute of [`src="${embed}"`, 'loading="lazy"', 'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"', 'referrerpolicy="no-referrer"']) assert.ok(frames[0].includes(attribute), attribute);
   assert.match(frames[0], /title="ICP Dashboard subnet placement map[^\"]+"/);
   assert.ok(html.includes(embed.replace('/embed/subnet-map?subnet=', '/network/subnet/')));
-  assert.match(html, /methodology#embeddable-subnet-map/);
+  const section = html.match(/<section id="subnet-map"[\s\S]*?<\/section>/)[0];
+  assert.match(section, /<p class="subnet-section__description">All Event Horizon canisters are hosted on one of the largest ICP subnets\.<\/p>/);
+  assert.doesNotMatch(section, /<nav|View subnet details|How this data is sourced|methodology#embeddable-subnet-map/);
+  assert.equal(section.match(/<a\b/g).length, 1);
+  assert.match(section, /<p class="subnet-section__sources">Subnet map provided by ICP Dashboard\. If the map does not load, <a[^>]*target="_blank" rel="noopener noreferrer">view it on ICP Dashboard<\/a>\.<\/p>/);
+  assert.doesNotMatch(frames[0], /allow-top-navigation|allow-forms|allow-modals|allow-downloads/);
   assert.match(html, /If the map does not load/);
   assert.match(html, /Subnet map provided by ICP Dashboard/);
 });
@@ -73,6 +78,7 @@ test('slow documents get an explanation and cannot leave the map permanently cov
   const f = loadingFixture(); f.enter(); f.tick(12000);
   assert.equal(f.layer.hidden, true);
   assert.match(f.status.textContent, /Taking longer than expected/);
+  assert.match(f.status.textContent, /link above/);
   f.load(); f.tick(500);
   assert.equal(f.status.textContent, '');
   assert.equal(f.layer.hidden, true);

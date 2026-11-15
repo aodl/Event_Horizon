@@ -725,9 +725,7 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
   background: var(--space-soft);
 }
 .subnet-section__sources { margin-top: 1.25rem; color: var(--paper-muted); font-size: .85rem; line-height: 1.7; }
-.subnet-section__sources nav { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
 .subnet-section__sources a { text-underline-offset: .25em; }
-.subnet-section__sources p { margin-top: .75rem; }
 .subnet-section__status { margin-top: 1rem; color: var(--paper-muted); font-size: .85rem; line-height: 1.7; }
 .subnet-section__status:empty { display: none; }
 .subnet-section__loading {
