@@ -130,7 +130,7 @@ The final CSS was also checked at genuine 100/125/150/175/200% browser zoom and
 back. A short compositor-settling interval was needed in the disposable zoom
 verification utility; it is not runtime logic or a permanent harness feature.
 Final screenshots were visually inspected. The maintained harness is 417 lines,
-down from 579; only two representative PNGs remain committed.
+down from 578; only two representative PNGs remain committed.
 
 Final source-specific test, security, CI and canonical build receipts are recorded
 in the PR and ignored observations/subnet-production, so post-commit hashes do
