@@ -1,5 +1,6 @@
 import test from 'node:test';
 import { initSubnetLoading } from '../public/app.js';
+import { subnetGeometry, initSubnetLayout } from '../public/subnet-layout.js';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 const publicFile = name => readFile(new URL(`../public/${name}`, import.meta.url), 'utf8');
@@ -91,4 +92,52 @@ test('disposal cancels pending and settling work and removes the load listener',
     assert.equal(f.layer.hidden, true); assert.equal(f.status.textContent, '');
     f.tick(20000); assert.equal(f.status.textContent, '');
   }
+});
+
+test('geometry keeps narrow controls native and reserves proportional height only above 760px', () => {
+  for (const width of [280, 350, 679, 759.9, 760, 760.1, 900, 1273, 1698]) {
+    const g = subnetGeometry(width);
+    assert.ok(Number.isFinite(g.scale) && g.scale >= 1);
+    assert.equal(g.scaled, width > 760);
+    assert.equal(g.height, width <= 760 ? 520 : 520 * width / 760);
+  }
+  for (const width of [0, -1, NaN, Infinity, undefined]) assert.equal(subnetGeometry(width), null);
+  assert.ok(Math.abs(subnetGeometry(760.1).height - 520) < .1, 'continuous crossover');
+});
+
+function layoutFixture({missing = false, fail = false} = {}) {
+  let callback, disconnected = false, writes = 0;
+  const values = new Map(), attributes = new Map();
+  const embed = {
+    querySelector: () => ({}), getBoundingClientRect: () => ({width: 1000}),
+    style: {setProperty(k,v) { if (fail) throw Error('style failure'); writes++; values.set(k,v); }, removeProperty: k => values.delete(k)},
+    setAttribute: (k,v) => attributes.set(k,v), removeAttribute: k => attributes.delete(k),
+  };
+  const windowRef = missing ? {} : {ResizeObserver: class {
+    constructor(fn) { callback = fn; } observe(node) { assert.equal(node, embed); }
+    disconnect() { disconnected = true; }
+  }};
+  const layout = initSubnetLayout({querySelector: () => embed}, windowRef);
+  return {layout, values, attributes, resize: width => callback?.([{contentRect:{width}}]), disconnected: () => disconnected, writes: () => writes};
+}
+test('container resizing switches modes, ignores height-only reports and disposes safely', () => {
+  const f = layoutFixture();
+  assert.equal(f.values.get('--subnet-height'), `${520 * 1000 / 760}px`);
+  assert.ok(f.attributes.has('data-scaled'));
+  const initialWrites = f.writes();
+  f.resize(1000); f.resize(1000.1);
+  assert.equal(f.writes(), initialWrites);
+  f.resize(350); assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
+  f.resize(759.95); f.resize(760.05); assert.ok(f.attributes.has('data-scaled'));
+  f.resize(1000); assert.ok(f.attributes.has('data-scaled'));
+  f.layout.dispose(); assert.ok(f.disconnected());
+  f.resize(1200); assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
+});
+test('missing observers and initializer failures preserve the untransformed responsive fallback', () => {
+  for (const options of [{missing:true}, {fail:true}]) {
+    const f = layoutFixture(options);
+    assert.equal(f.values.size, 0); assert.equal(f.attributes.size, 0);
+    f.layout.dispose();
+  }
+  assert.doesNotThrow(() => initSubnetLayout({querySelector: () => null}, {}));
 });

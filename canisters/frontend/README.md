@@ -198,12 +198,56 @@ backend; the IO instance is planned, has no deployed canister ID and is excluded
 The current dashboard lists one 40-node subnet and three 34-node subnets,
 including this one, among 42 listed mainnet subnets. Review the claim when adding
 a deployed instance or changing subnet placement.
-Review this static URL if either canister moves. The section shares the site's content gutters. At 1024px and wider, concise copy
-and attribution sit beside a 640×520px iframe; narrower screens stack the copy above
-a frame capped at 640px. At 390px and 320px page widths the frame measures
-350×520px and 280×520px respectively. No scaling, cropping or external DOM
-modification is used. Short landscape screens scroll normally. “Fully on-chain”
-is the semantic heading; the former large heading has been removed.
+Review this static URL if either canister moves. The experimental layout uses a
+vertical composition within the existing content gutters: semantic “Fully
+on-chain” heading, unchanged description and attribution/fallback, then one map.
+The fallback stays above the iframe in reading and keyboard order. The section
+remains immediately before “The protocol”.
+
+The dashboard still caps its own card at 760 CSS pixels. A naturally wider iframe
+therefore leaves internal side margins. `subnet-layout.js` instead observes the
+parent embed width W with one ResizeObserver. At W > 760px it renders the iframe
+at a fixed 760×520px layout size, applies `transform: scale(W / 760)` from the top
+left, and reserves `520 × W / 760` pixels of wrapper height. This scales both axes
+equally; it does not reflow, crop or inspect the external application. At W ≤
+760px the transform is removed and the iframe uses its native responsive width
+and 520px height. Scale is never below one. The two modes meet continuously at
+760px; the threshold uses the available container width, not window.innerWidth.
+
+Browser page zoom and ordinary resizing change the observed CSS width and update
+the geometry. Height-only observer reports and subpixel width noise are ignored;
+there is no polling, animation loop, source reassignment or iframe recreation.
+The observer disconnects on non-persisted pagehide. The width is measured before
+opting into scaling; missing ResizeObserver or initialization failure leaves a
+normal full-width, untransformed 520px iframe. JavaScript-disabled clients use the
+same usable native fallback, even at desktop widths.
+
+The loading layer remains outside the transformed iframe, so its text and
+indicator keep their parent-page size while its opaque surface covers the full
+reserved visual area. Scaling never restarts loading. Native keyboard order,
+focus rings, touch hit testing, country/data-centre controls, geographic markers,
+external tabs and the dashboard's own information panel are browser-tested.
+Parent accessibility-tree checks, enlarged text, actual Chromium page zoom,
+reduced motion and forced colours remain part of validation. Automated tests do
+not substitute for manual screen-reader or physical-device testing.
+
+This is an experiment, **not recommended for adoption**. Fine-pointer plots fill
+about 97% of the internal viewport, but wide touch emulation retains a 584px plot
+inside the 758px viewport (about 77%), even though its outer card is wider. The
+strict real-map occupancy test fails that adoption criterion. Smaller baselines
+were compared for evidence and are not selected here. Available WebKit/WPE also
+fails the dashboard's history initialization in both this and the unchanged
+baseline; actual Safari remains unverified.
+
+The deliberate cost is a taller, more prominent map on wide desktops: all its
+text and controls grow with the map. A 640px baseline was taller still; 760px
+better uses the card's natural width. CSS zoom was compared but not selected;
+transform has explicit geometry and unchanged iframe layout dimensions. Wide auto-fit offsets part of browser magnification until the native crossover;
+it is not a promise that the external map text doubles at 200% page zoom. The
+permanent full-dashboard tab retains independent native browser zoom. External
+content and raster/compositor interpolation can vary independently; recheck
+controls and sharpness on releases. See the experiment report for measured
+geometry, engine availability, genuine browser zoom and visual trade-offs.
 
 An opaque dark loading layer is present before the bundle runs. CSS disables it
 when scripting is disabled. A small initializer listens for the document's load
@@ -259,12 +303,12 @@ The existing certified page CSP remains unchanged, including
 The separate SVG policy and parent connection allowlist remain unchanged.
 
 After `npm run build:frontend`, run `npm run test:frontend-unit`,
-`node tools/scripts/validate-subnet-section.mjs --live`, and
+`node tools/scripts/validate-subnet-section.mjs --live --zoom --engines`, and
 `node tools/scripts/validate-ledger-counter.mjs`.
 The section harness uses the production bundle and Rust response policies;
 PocketIC separately verifies certified HTML, routing and headers. Screenshots and
-network evidence for navigation are under ignored `observations/subnet-navigation/browser/`.
-See the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
+network evidence for navigation are under ignored `observations/subnet-scaling/browser/`.
+See the [full-width scaling experiment](../../docs/codex/subnet-full-width-scaling-validation.md), the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
 
 ## Landing ledger total
 
