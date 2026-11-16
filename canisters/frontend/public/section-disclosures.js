@@ -1,30 +1,51 @@
 // Native details/name owns expansion. This helper only reveals fragment targets.
 export function initSectionDisclosures(documentRef, windowRef) {
   const disclosures = [...documentRef.querySelectorAll('main > section > details.section-disclosure[name="event-horizon-sections"]')];
-  let pending;
-  const reveal = hash => {
+  let pending, settling;
+  const cancelPositioning = () => {
     windowRef.cancelAnimationFrame(pending);
+    windowRef.clearTimeout?.(settling);
+  };
+  const reveal = hash => {
+    cancelPositioning();
     let target;
     try { target = documentRef.getElementById(decodeURIComponent(hash.slice(1))); } catch { return; }
     const details = disclosures.find(node => node.parentElement.contains(target));
     if (!details) return;
-    details.open = true;
     const summary = details.querySelector('summary');
-    pending = windowRef.requestAnimationFrame(() => {
-      // Let normal fragment navigation scroll; correct only a still-hidden target.
-      const destination = target === details.parentElement ? summary : target;
+    const destination = target === details.parentElement ? summary : target;
+    const startFocus = documentRef.activeElement;
+    const position = (forceScroll = false) => {
+      const active = documentRef.activeElement;
+      if (active && active !== startFocus && active !== destination && active !== documentRef.body) return;
       const rect = destination.getBoundingClientRect();
-      if (rect.top < 0 || rect.top >= windowRef.innerHeight) destination.scrollIntoView({ block: 'start', behavior: 'instant' });
+      if (forceScroll || rect.top < 0 || rect.top >= windowRef.innerHeight) destination.scrollIntoView({ block: 'start', behavior: 'instant' });
       if (destination === summary || summary.contains(target)) summary.focus({ preventScroll: true });
       else if (target.matches('input, select, textarea, button, a[href], [tabindex]')) target.focus({ preventScroll: true });
+    };
+    details.open = true;
+    pending = windowRef.requestAnimationFrame(() => {
+      position();
+      // details-content transitions are not exposed by getAnimations/events in
+      // every engine. One bounded correction uses the actual CSS duration.
+      const durations = windowRef.getComputedStyle?.(details, '::details-content').transitionDuration ?? '0s';
+      const duration = Math.max(0, ...durations.split(',').map(value => parseFloat(value) * (value.trim().endsWith('ms') ? 1 : 1000)).filter(Number.isFinite));
+      if (duration) pending = windowRef.requestAnimationFrame(() => {
+        settling = windowRef.setTimeout(() => {
+          pending = windowRef.requestAnimationFrame(() => {
+            if (details.open) position(true);
+          });
+        }, duration);
+      });
     });
   };
   const hashchange = () => reveal(windowRef.location.hash);
   const click = event => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    // A later interaction must not inherit an earlier fragment's focus correction.
+    cancelPositioning();
     const summary = event.target.closest?.('summary');
     if (summary && disclosures.includes(summary.parentElement)) {
-      windowRef.cancelAnimationFrame(pending);
       pending = windowRef.requestAnimationFrame(() => {
         // Closing a tall preceding panel can move the activated heading offscreen.
         const rect = summary.getBoundingClientRect();
@@ -49,7 +70,7 @@ export function initSectionDisclosures(documentRef, windowRef) {
   windowRef.addEventListener('hashchange', hashchange);
   hashchange();
   return { dispose() {
-    windowRef.cancelAnimationFrame(pending);
+    cancelPositioning();
     documentRef.removeEventListener('click', click);
     documentRef.removeEventListener('toggle', toggle, true);
     windowRef.removeEventListener('hashchange', hashchange);

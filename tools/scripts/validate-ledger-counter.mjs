@@ -71,6 +71,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 async function openSection(page,id) {
   if(!await page.locator(`#${id} > details`).evaluate(n=>n.open)) await page.locator(`#${id} > details > summary`).click();
+  await page.waitForFunction(id=>getComputedStyle(document.querySelector(`#${id} > details > .section-disclosure__body`)).opacity==='1',id);
 }
 async function assertBranding(page) {
   // Observe actual title visibility, including resize/scroll/reflow, before showing the compact brand.
@@ -150,6 +151,7 @@ try {
   const original=await workflow.locator('#memo-output').textContent();
   assert.notEqual(original,'—');
   await workflow.locator('.builder-card__footnote a').click();
+  await workflow.waitForFunction(()=>document.querySelector('#memo-output').innerText.length>0);
   assert.equal(await workflow.locator('#memo-output').innerText(),original);
   await workflow.locator('.memo-result__edit a').click();
   assert.equal(await workflow.locator('#principal').inputValue(),'uuc56-gyb');
@@ -475,12 +477,12 @@ try {
     await nav.getByRole('link',{name:label,exact:true}).focus(); await page.keyboard.press('Enter');
     await page.waitForFunction(id=>location.hash===`#${id}`,id);
     const target=page.getByRole('region',{name:label,exact:true});
-    assert.equal(await target.getByRole('heading',{name:label,exact:true,level:2}).count(),1);
-    const heading=await target.locator('h2').boundingBox();assert.ok(heading.y>=-1&&heading.y+heading.height<=801);
-    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id} summary`),id);
+    assert.equal(await target.getByRole('heading',{name:label,exact:true,level:3}).count(),1);
+    const heading=await target.locator('h3').boundingBox();assert.ok(heading.y>=-1&&heading.y+heading.height<=801);
+    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id}`),id);
     await page.goBack();assert.equal(new URL(page.url()).hash,previous);
     await page.goForward();assert.equal(new URL(page.url()).hash,`#${id}`);
-    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id} summary`),id);
+    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id}`),id);
     await screenshot(page, {path:resolve(output,`section-${id}.png`)});
   }
   await page.emulateMedia({reducedMotion:'no-preference'});
@@ -492,7 +494,7 @@ try {
     const target=page.getByRole('region',{name:label,exact:true});
     await page.waitForFunction(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=-1&&r.top<innerHeight;},id);
     assert.equal(new URL(page.url()).hash,`#${id}`);
-    assert.equal(await target.locator('h2').isVisible(),true);
+    assert.equal(await target.locator('h3').isVisible(),true);
   }
   await page.goto(`${origin}/fixture.html`, { timeout: 60000 }); await page.setViewportSize({width:320,height:568});
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');

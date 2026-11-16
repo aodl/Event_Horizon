@@ -11,6 +11,7 @@ export function subnetGeometry(width) {
 export function initSubnetLayout(documentRef, windowRef) {
   const embed = documentRef.querySelector('.subnet-section__embed');
   if (!embed?.querySelector('iframe') || !windowRef.ResizeObserver) return { dispose() {} };
+  const widget = documentRef.querySelector('#subnet-map');
   let observer, disposed = false, previousWidth = 0;
   const reset = () => {
     embed.removeAttribute('data-scaled');
@@ -23,7 +24,9 @@ export function initSubnetLayout(documentRef, windowRef) {
     reset();
   };
   const update = width => {
-    if (disposed || (Math.abs(width - previousWidth) < .25 && (width > BASE_WIDTH) === (previousWidth > BASE_WIDTH))) return;
+    if (disposed) return;
+    if (widget?.dataset?.mode === 'compact') { reset(); previousWidth = 0; return; }
+    if ((Math.abs(width - previousWidth) < .25 && (width > BASE_WIDTH) === (previousWidth > BASE_WIDTH))) return;
     const geometry = subnetGeometry(width);
     if (!geometry) return;
     previousWidth = width;
@@ -41,5 +44,8 @@ export function initSubnetLayout(documentRef, windowRef) {
     observer.observe(embed);
     update(embed.getBoundingClientRect().width);
   } catch { dispose(); }
-  return { dispose };
+  return { dispose, update() {
+    previousWidth = 0;
+    update(embed.getBoundingClientRect().width);
+  } };
 }

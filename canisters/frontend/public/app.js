@@ -13,56 +13,11 @@ import { createOperatingStatusClient } from './operating-status-client.js';
 import { initOperatingStatus } from './operating-status.js';
 import { initCompactHeading } from './compact-heading.js';
 import { initSectionDisclosures } from './section-disclosures.js';
-import { initSubnetLayout } from './subnet-layout.js';
+import { initSubnetWidget } from './subnet-widget.js';
 
 import { createLedgerCounter, formatTotal } from './ledger-counter.js';
 
 const COMPACT_HERO_QUERY = '(max-width: 81.25rem), (max-aspect-ratio: 1/1)';
-
-// The external document's load event is not a dashboard-data readiness signal.
-export function initSubnetLoading(documentRef, windowRef) {
-  const section = documentRef.querySelector('#subnet-map');
-  const frame = section?.querySelector('iframe');
-  const layer = section?.querySelector('.subnet-section__loading');
-  const status = section?.querySelector('.subnet-section__status');
-  if (!frame || !layer || !status) return { dispose() {} };
-  let slowTimer, settleTimer;
-  layer.hidden = false;
-  const clearTimers = () => {
-    windowRef.clearTimeout(slowTimer);
-    windowRef.clearTimeout(settleTimer);
-  };
-  const loaded = () => {
-    clearTimers();
-    observer?.disconnect();
-    // A brief visual settling interval, not a claim about cross-origin data.
-    settleTimer = windowRef.setTimeout(() => {
-      layer.hidden = true;
-      status.textContent = '';
-    }, 500);
-  };
-  const start = () => {
-    observer?.disconnect();
-    slowTimer = windowRef.setTimeout(() => {
-      // Never leave an already usable (or subsequently recovering) map covered.
-      layer.hidden = true;
-      status.textContent = 'Taking longer than expected. You can also view the subnet on ICP Dashboard using the link above.';
-    }, 12000);
-  };
-  const observer = windowRef.IntersectionObserver
-    ? new windowRef.IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) start(); }, { rootMargin: '300px' })
-    : null;
-  frame.addEventListener('load', loaded);
-  if (observer) observer.observe(frame);
-  else start();
-  return { dispose() {
-    clearTimers();
-    observer?.disconnect();
-    frame.removeEventListener('load', loaded);
-    layer.hidden = true;
-    status.textContent = '';
-  } };
-}
 
 export function initHeroArtwork(documentRef, windowRef, schedule = callback => callback()) {
   const detail = documentRef.querySelector('.hero__detail');
@@ -333,8 +288,6 @@ export function createApp({
 if (typeof document !== 'undefined') {
   let disclosures;
   try { disclosures = initSectionDisclosures(document, window); } catch { /* Navigation enhancement must not prevent application startup. */ }
-  const subnetLoading = initSubnetLoading(document, window);
-  const subnetLayout = initSubnetLayout(document, window);
   const artwork = initHeroArtwork(document, window, callback => window.requestAnimationFrame(callback));
   initHeroBackdrop(document, window);
   const compactHeading = initCompactHeading(document, window);
@@ -343,7 +296,8 @@ if (typeof document !== 'undefined') {
   let operating = null;
   try { operating = initOperatingStatus(document, window, {client:createOperatingStatusClient()}); } catch { /* Optional status must not break the builder. */ }
   const app = createApp({ documentRef: document, counter, operating });
+  const subnetWidget = initSubnetWidget(document, window);
   window.addEventListener('pagehide', event => {
-    if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); subnetLoading.dispose(); subnetLayout.dispose(); disclosures?.dispose(); }
+    if (!event.persisted) { app.dispose(); artwork.dispose(); compactHeading.dispose(); subnetWidget.dispose(); disclosures?.dispose(); }
   });
 }

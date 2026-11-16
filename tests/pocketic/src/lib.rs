@@ -7857,33 +7857,30 @@ mod tests {
         assert!(html.contains("id=\"operating-tier\""));
         assert!(html.contains("id=\"operating-balance\""));
         assert!(html.contains("id=\"operating-progress\""));
-        assert!(html.contains("<section id=\"subnet-map\""));
-        assert!(!html.contains("subnet-widget"));
-        assert!(!html.contains("<dialog"));
+        assert!(html.contains("<dialog id=\"subnet-map\""));
+        assert!(html.contains("class=\"subnet-widget\" data-mode=\"compact\""));
+        assert!(html.contains("class=\"subnet-section__embed\" inert aria-hidden=\"true\""));
         let main = html.find("<main id=\"main-content\"").unwrap();
-        let subnet = html.find("<section id=\"subnet-map\"").unwrap();
-        let manifesto = html.find("<section class=\"manifesto\"").unwrap();
-        assert!(main < manifesto && manifesto < subnet);
+        assert!(html.find("</main>").unwrap() < html.find("<dialog").unwrap());
         assert_eq!(html.matches("<iframe").count(), 1);
-        assert!(html.contains("loading=\"lazy\""));
+        assert!(html.contains("data-src=\"https://dashboard.internetcomputer.org/embed/"));
         assert!(html.contains("referrerpolicy=\"no-referrer\""));
         assert!(html.contains("sandbox=\"allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox\""));
         assert!(!html
             .contains("All Event Horizon canisters are hosted on one of the largest ICP subnets."));
-        assert_eq!(html.matches("name=\"event-horizon-sections\"").count(), 11);
+        assert_eq!(html.matches("name=\"event-horizon-sections\"").count(), 6);
         assert!(!html.contains("<details open"));
         let mut previous = main;
         for id in [
             "protocol-overview",
-            "subnet-map",
-            "network",
-            "builder",
-            "complete",
-            "protocol",
             "open-source",
             "immutability",
             "endowment-funding",
             "internet-computer",
+            "network",
+            "builder",
+            "complete",
+            "protocol",
             "open-deployment",
         ] {
             let position = html.find(&format!("id=\"{id}\"")).unwrap();
@@ -7894,7 +7891,7 @@ mod tests {
         assert!(!html.contains("How this data is sourced"));
         assert!(html.contains(">view it on ICP Dashboard</a>"));
         assert!(!html.contains("allow-top-navigation"));
-        assert!(html.contains("src=\"https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae\""));
+        assert!(html.contains("data-src=\"https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae\""));
         assert!(html.contains("ICP ledger transactions"));
         assert_eq!(
             html.matches("<link rel=\"canonical\" href=\"https://www.event-horizon-icp.com/\">")

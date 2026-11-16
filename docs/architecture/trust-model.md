@@ -26,37 +26,23 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - For a subscriber trusting multiple Event Horizon instances, the authenticated caller defines the observed-ledger context of every poke.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
-- The “Fully on-chain” section embeds a separately maintained ICP Dashboard
-  application through one static, natively lazy-loaded iframe after the introductory “The protocol” disclosure.
-  Event Horizon certifies its section markup, static subnet URL and fallback link,
-  not the external application's assets or registry-derived runtime data. The map
-  is trusted for display; subnet composition does not prove controller removal,
-  deployed source or a matching Wasm hash. The frontend remains independently
-  upgradeable. Both canonical canisters were verified on the displayed subnet on
-  2026-11-14 on the 34-node Fiduciary subnet. The general hosting claim is no
-  longer displayed. Review the static URL after a network move or adding a
-  deployed instance. No runtime subnet discovery,
-  iframe navigation controller or additional backend requests are introduced.
-  A bounded parent loading treatment clears after document load plus a short visual
-  settling interval, or after the slow-load deadline with explanatory status and
-  permanent fallback links. Neither event establishes external data readiness.
-  The parent cannot detect later white paints or verify dashboard completion.
-  The parent layout proportionally upscales a fixed 760×520 iframe
-  only when its container is wider than 760px, reserving the complete transformed
-  height. Narrow screens and failed/missing scaling initialization retain the
-  native responsive iframe. One parent ResizeObserver changes presentation only;
-  it never reads the external DOM, reloads the iframe or makes network calls.
-  The loading layer is outside the transform and retains its existing lifecycle.
-  The sandbox additionally permits popups and lets them escape sandbox inheritance
-  so the dashboard's own full-page link works. The current `_blank` anchor has
-  explicit `noopener noreferrer`; real click, keyboard and touch checks require
-  a null `window.opener`, usable destination-page controls and an unchanged parent.
-  Top-navigation permission is not granted to the iframe. These popup permissions
-  expand trust in the externally maintained dashboard: popup destinations are not
-  restricted by the parent's frame-src policy, and the permissions do not force
-  arbitrary future popup code to use noopener. The external tab has normal browser
-  capabilities; it is outside Event Horizon's certification and CSP. Keep the
-  permanent parent fallback and recheck the external opener behavior on releases.
+- The floating “Fully on-chain” widget embeds one independently maintained ICP
+  Dashboard application. Event Horizon certifies its markup, URL and fallback,
+  not external assets or runtime data. The compact 600×520 iframe scales uniformly
+  to 25%; it still runs the full external application after frontend bootstrap.
+  The inert, aria-hidden preview has no independent dashboard controls. Expansion
+  restores interaction in a native modal; minimisation preserves the same mounted
+  document. Dismissal releases it until reload. A single parent ResizeObserver
+  handles expanded responsive geometry without network calls or external DOM access.
+  Load/settling and slow-load status are not external data-readiness evidence.
+  The permanent fallback is available without JavaScript. No backend query or runtime
+  subnet discovery is added. The static URL must be reviewed after a subnet move.
+  Subnet composition does not establish source, controller removal or module hash.
+  Sandbox and page/SVG CSP are unchanged. Popup permissions permit external tabs
+  outside parent certification and frame-src restrictions; the live dashboard link
+  must preserve explicit noopener/noreferrer and observed null opener. These
+  permissions do not enforce opener isolation for arbitrary future popup code.
+  See the [frontend documentation](../../canisters/frontend/README.md#floating-fully-on-chain-map).
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 
