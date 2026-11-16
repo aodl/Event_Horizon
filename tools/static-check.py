@@ -309,9 +309,9 @@ assert '.hero::after' not in frontend_styles
 assert "object-src 'self'; frame-src 'self' https://dashboard.internetcomputer.org; base-uri 'none'; frame-ancestors 'none'" in frontend
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '<span class="section-label">Open deployment</span>' in frontend_index
-assert frontend_index.count('name="event-horizon-sections"') == 11
+assert frontend_index.count('name="event-horizon-sections"') == 6
 assert 'All Event Horizon canisters are hosted on one of the largest ICP subnets.' not in frontend_index
-assert frontend_index.index('id="protocol-overview"') < frontend_index.index('id="subnet-map"') < frontend_index.index('id="network"')
+assert frontend_index.index('id="protocol-overview"') < frontend_index.index('id="open-source"') < frontend_index.index('id="network"') < frontend_index.index('<dialog id="subnet-map"')
 assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index
 assert '>EVH<span class="wordmark__dot">.</span></a>' in frontend_index
 assert 'Return to top &#8593;' in frontend_index

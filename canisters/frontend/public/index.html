@@ -126,27 +126,39 @@
         </summary>
         <div class="section-disclosure__body">
           <p class="section-disclosure__intro">Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The ledger remains the source of truth.</p>
-        </div>
-      </details>
-    </section>
-
-    <section id="subnet-map" class="subnet-section" aria-labelledby="subnet-title">
-      <details class="section-disclosure" name="event-horizon-sections">
-        <summary class="section-disclosure__summary">
-          <h2 id="subnet-title" class="section-label">Fully on-chain<span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
-        </summary>
-        <div class="section-disclosure__body">
-          <div class="subnet-section__intro">
-            <p class="subnet-section__sources">Subnet map provided by ICP Dashboard. If the map does not load, <a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">view it on ICP Dashboard</a>.</p>
-            <p class="subnet-section__status" role="status" aria-live="polite"></p>
-          </div>
-          <div class="subnet-section__embed">
-            <iframe class="subnet-section__frame" title="ICP Dashboard subnet placement map for Event Horizon’s canonical backend and frontend" src="https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
-            <div class="subnet-section__loading" role="status" aria-live="polite">
-              <span class="subnet-section__indicator" aria-hidden="true"></span>
-              <span>Loading subnet map…</span>
+          <section class="project-detail" id="open-source" aria-labelledby="open-source-title" tabindex="-1">
+            <h3 id="open-source-title"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span></h3>
+            <div>
+              <p>Event Horizon’s implementation is public and designed for independent verification. Reproduce the production Wasm from a reviewed source revision, then compare its SHA-256 with the module hash installed on the canister.</p>
+              <p>Also check the canister identity, instance configuration and current controllers. A matching build or the frontend’s reviewed backend-hash registry does not independently establish live controller status.</p>
+              <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/reproducible-builds.md">Reproduce the build <span aria-hidden="true">↗</span></a></p>
             </div>
-          </div>
+          </section>
+          <section class="project-detail" id="immutability" aria-labelledby="immutability-title" tabindex="-1">
+            <h3 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span></h3>
+            <div>
+              <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
+              <p>Once controller removal is complete, the backend cannot ordinarily be upgraded or reconfigured. The frontend remains separately controlled and can continue to evolve.</p>
+              <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/architecture/trust-model.md">Read the trust model <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/acceptance-observation.md">Review operational acceptance <span aria-hidden="true">↗</span></a></p>
+            </div>
+          </section>
+          <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title" tabindex="-1">
+            <h3 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span></h3>
+            <div>
+              <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
+              <p>Endowing principal does not immediately admit a subscription: admission requires a qualifying Faucet payout and Historian evidence. Ongoing operation depends on realised receipts and costs. Perpetual service is an objective, not a guarantee.</p>
+              <p class="project-detail__links"><a href="https://www.jupiter-faucet.com/">Visit Jupiter Faucet <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscription guide <span aria-hidden="true">↗</span></a></p>
+            </div>
+          </section>
+          <section class="project-detail" id="internet-computer" aria-labelledby="internet-computer-title" tabindex="-1">
+            <h3 id="internet-computer-title"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span></h3>
+            <div>
+              <p>The Internet Computer hosts Event Horizon’s backend canister and certified frontend assets. Ledger queries identify relevant activity, canister-to-canister notifications provide best-effort wake-up hints, and cycles converted from ICP pay for operation.</p>
+              <p>Independent instances can observe compatible non-ICP ledgers, while subscription funding and cycles conversion remain ICP-based. Subscribers still reconcile authoritative Ledger data; notifications are not a delivery guarantee.</p>
+              <p class="project-detail__links"><a href="https://internetcomputer.org/">Explore the Internet Computer <span aria-hidden="true">↗</span></a></p>
+            </div>
+          </section>
+
         </div>
       </details>
     </section>
@@ -277,7 +289,7 @@
     <section class="section" id="protocol" aria-labelledby="protocol-title">
       <details class="section-disclosure" name="event-horizon-sections">
         <summary class="section-disclosure__summary">
-          <h2 id="protocol-title"><span class="section-label">04 / Principles</span><span class="section-disclosure__title">Small surface. Clear contract.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
+          <h2 id="protocol-title"><span class="section-label">Design</span><span class="section-disclosure__title">Small surface. Clear contract.</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
         </summary>
         <div class="section-disclosure__body">
           <p class="section-disclosure__intro">Event Horizon adds a prompt signal path without taking ownership of application correctness.</p>
@@ -307,57 +319,7 @@
       </details>
     </section>
 
-    <section class="project-detail" id="open-source" aria-labelledby="open-source-title" tabindex="-1">
-      <details class="section-disclosure" name="event-horizon-sections">
-        <summary class="section-disclosure__summary">
-          <h2 id="open-source-title"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
-        </summary>
-        <div class="section-disclosure__body">
-          <p>Event Horizon’s implementation is public and designed for independent verification. Reproduce the production Wasm from a reviewed source revision, then compare its SHA-256 with the module hash installed on the canister.</p>
-          <p>Also check the canister identity, instance configuration and current controllers. A matching build or the frontend’s reviewed backend-hash registry does not independently establish live controller status.</p>
-          <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/reproducible-builds.md">Reproduce the build <span aria-hidden="true">↗</span></a></p>
-        </div>
-      </details>
-    </section>
 
-    <section class="project-detail" id="immutability" aria-labelledby="immutability-title" tabindex="-1">
-      <details class="section-disclosure" name="event-horizon-sections">
-        <summary class="section-disclosure__summary">
-          <h2 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
-        </summary>
-        <div class="section-disclosure__body">
-          <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
-          <p>Once controller removal is complete, the backend cannot ordinarily be upgraded or reconfigured. The frontend remains separately controlled and can continue to evolve.</p>
-          <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/architecture/trust-model.md">Read the trust model <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/acceptance-observation.md">Review operational acceptance <span aria-hidden="true">↗</span></a></p>
-        </div>
-      </details>
-    </section>
-
-    <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title" tabindex="-1">
-      <details class="section-disclosure" name="event-horizon-sections">
-        <summary class="section-disclosure__summary">
-          <h2 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
-        </summary>
-        <div class="section-disclosure__body">
-          <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
-          <p>Endowing principal does not immediately admit a subscription: admission requires a qualifying Faucet payout and Historian evidence. Ongoing operation depends on realised receipts and costs. Perpetual service is an objective, not a guarantee.</p>
-          <p class="project-detail__links"><a href="https://www.jupiter-faucet.com/">Visit Jupiter Faucet <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscription guide <span aria-hidden="true">↗</span></a></p>
-        </div>
-      </details>
-    </section>
-
-    <section class="project-detail" id="internet-computer" aria-labelledby="internet-computer-title" tabindex="-1">
-      <details class="section-disclosure" name="event-horizon-sections">
-        <summary class="section-disclosure__summary">
-          <h2 id="internet-computer-title"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span><span class="section-disclosure__indicator" aria-hidden="true"></span></h2>
-        </summary>
-        <div class="section-disclosure__body">
-          <p>The Internet Computer hosts Event Horizon’s backend canister and certified frontend assets. Ledger queries identify relevant activity, canister-to-canister notifications provide best-effort wake-up hints, and cycles converted from ICP pay for operation.</p>
-          <p>Independent instances can observe compatible non-ICP ledgers, while subscription funding and cycles conversion remain ICP-based. Subscribers still reconcile authoritative Ledger data; notifications are not a delivery guarantee.</p>
-          <p class="project-detail__links"><a href="https://internetcomputer.org/">Explore the Internet Computer <span aria-hidden="true">↗</span></a></p>
-        </div>
-      </details>
-    </section>
 
     <section class="instances-note" id="open-deployment" aria-labelledby="instances-title">
       <details class="section-disclosure" name="event-horizon-sections">
@@ -376,6 +338,28 @@
     <p>Event Horizon / Internet Computer</p>
     <a href="#top">Return to top &#8593;</a>
   </footer>
+  <dialog id="subnet-map" class="subnet-widget" data-mode="compact" aria-labelledby="subnet-title">
+    <div class="subnet-widget__toolbar">
+      <h2 id="subnet-title">Fully on-chain</h2>
+      <button type="button" class="subnet-minimise" aria-label="Minimise subnet map">Minimise</button>
+      <button type="button" class="subnet-dismiss" aria-label="Dismiss subnet map">×</button>
+    </div>
+    <div class="subnet-widget__preview">
+      <div class="subnet-section__embed" inert aria-hidden="true">
+        <iframe class="subnet-section__frame" title="ICP Dashboard subnet placement map for Event Horizon’s canonical backend and frontend" data-src="https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" tabindex="-1" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+        <div class="subnet-section__loading" role="status" aria-live="polite">
+          <span class="subnet-section__indicator" aria-hidden="true"></span>
+          <span>Loading subnet map…</span>
+        </div>
+      </div>
+      <button type="button" class="subnet-expand" aria-label="Expand subnet map"><span aria-hidden="true">↗</span></button>
+    </div>
+    <div class="subnet-widget__attribution">
+      <p class="subnet-section__sources">Subnet map provided by ICP Dashboard. If the map does not load, <a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">view it on ICP Dashboard</a>.</p>
+      <p class="subnet-section__status" role="status" aria-live="polite"></p>
+    </div>
+  </dialog>
+  <noscript><p class="subnet-fallback"><a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">View Event Horizon’s subnet on ICP Dashboard</a>.</p></noscript>
   <script src="app.bundle.js?v=3"></script>
 </body>
 </html>

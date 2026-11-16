@@ -18,7 +18,7 @@ test('how-it-works flow links to ledger selection and completes the declaration 
   assert.match(html, /<a href="#open-deployment">add it yourself<\/a>/);
   assert.equal([...html.matchAll(/id="open-deployment"/g)].length, 1);
   const steps = [...html.matchAll(/<span class="section-label">(0[1-4] \/ [^<]+)<\/span>/g)].map(match => match[1]);
-  assert.deepEqual(steps, ['01 / Choose', '02 / Compose', '03 / Complete', '04 / Principles']);
+  assert.deepEqual(steps, ['01 / Choose', '02 / Compose', '03 / Complete']);
   assert.ok(html.indexOf('id="builder"') < html.indexOf('id="complete"'));
   assert.ok(html.indexOf('id="complete"') < html.indexOf('id="protocol"'));
   const complete = html.match(/<section class="section" id="complete"[\s\S]*?<\/section>/)?.[0];
@@ -48,7 +48,7 @@ test('four hero fact links retain their order, labels, local icons and native fr
   assert.ok(anchors.every(([,href]) => href.startsWith('#')));
 });
 
-test('every hero destination is a unique labelled section after Principles and before additional instances', () => {
+test('every hero destination is a unique labelled section inside The protocol before workflow steps', () => {
   const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)[1];
   const order = expected.map(([id,label,icon]) => {
     assert.equal([...html.matchAll(new RegExp(`id="${id}"`, 'g'))].length, 1);
@@ -56,7 +56,7 @@ test('every hero destination is a unique labelled section after Principles and b
     assert.ok(section, id);
     const [,headingId,content] = section;
     assert.equal([...html.matchAll(new RegExp(`id="${headingId}"`, 'g'))].length, 1);
-    const heading = content.match(new RegExp(`<h2 id="${headingId}">([\\s\\S]*?)<\\/h2>`))?.[1];
+    const heading = content.match(new RegExp(`<h3 id="${headingId}">([\\s\\S]*?)<\\/h3>`))?.[1];
     assert.ok(heading);
     assert.ok(heading.includes(`src="${icon}"`));
     assert.match(heading, /<img [^>]*alt=""/);
@@ -66,9 +66,9 @@ test('every hero destination is a unique labelled section after Principles and b
     assert.ok(links.length > 0); assert.ok(links.every(([,href]) => href.startsWith('https://')));
     return main.indexOf(`id="${id}"`);
   });
-  assert.ok(order[0] > main.indexOf('id="protocol"'));
+  assert.ok(order[0] > main.indexOf('id="protocol-overview"'));
   assert.deepEqual(order, [...order].sort((a,b)=>a-b));
-  assert.ok(order.at(-1) < main.indexOf('class="instances-note"'));
+  assert.ok(order.at(-1) < main.indexOf('id="network"'));
 });
 
 test('brand icons preserve the downloaded bytes, use local certified media, and contain no active/remote SVG content', async () => {

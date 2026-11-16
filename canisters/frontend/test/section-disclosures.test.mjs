@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initSectionDisclosures } from '../public/section-disclosures.js';
-const order = ['protocol-overview','subnet-map','network','builder','complete','protocol','open-source','immutability','endowment-funding','internet-computer','open-deployment'];
-test('exactly eleven explicit, initially closed, native grouped disclosures retain headings and anchors', async () => {
+const order = ['protocol-overview','network','builder','complete','protocol','open-deployment'];
+test('exactly six explicit, initially closed, native grouped disclosures retain headings and anchors', async () => {
   const html = await readFile(new URL('../public/index.html',import.meta.url),'utf8');
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
   assert.equal(new Set(ids).size,ids.length);
   const members = [...html.matchAll(/<section\b([^>]*)>\s*<details class="section-disclosure" name="event-horizon-sections">\s*<summary class="section-disclosure__summary">\s*(<h2[\s\S]*?<\/h2>)\s*<\/summary>\s*<div class="section-disclosure__body">/g)];
   assert.deepEqual(members.map(m=>m[1].match(/id="([^"]+)"/)[1]),order);
-  assert.equal(html.match(/<details\b/g).length,11);
+  assert.equal(html.match(/<details\b/g).length,6);
   for(const [,outer,heading] of members) {
     assert.ok(heading.includes(`id="${outer.match(/aria-labelledby="([^"]+)"/)[1]}"`));
     assert.doesNotMatch(heading,/<a\b|<button\b|<input\b|aria-expanded/);
@@ -19,8 +19,8 @@ test('exactly eleven explicit, initially closed, native grouped disclosures reta
   assert.match(app,/if \(!event.persisted\) \{[^}]*disclosures\?\.dispose\(\)/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b|All Event Horizon canisters are hosted on one of the largest ICP subnets\./);
 });
-function fixture(hash='') {
-  const events=new Map(), frames=new Map();let serial=0,focused,scrolled;
+function fixture(hash='', motion=false) {
+  const events=new Map(), frames=new Map(), timers=new Map();let serial=0,focused,scrolled;
   const summary={contains:n=>n===summary,focus:()=>focused=summary,getBoundingClientRect:()=>({top:500})};
   const control={matches:()=>true,focus:()=>focused=control,getBoundingClientRect:()=>({top:1100}),scrollIntoView:()=>scrolled=control};
   const section={contains:n=>[section,summary,control].includes(n)};
@@ -29,9 +29,10 @@ function fixture(hash='') {
     addEventListener:(n,f)=>events.set(n,f),removeEventListener:n=>events.delete(n)};
   const win={innerHeight:900,location:{href:`https://example.com/${hash}`,hash},addEventListener:(n,f)=>events.set(n,f),removeEventListener:n=>events.delete(n),
     requestAnimationFrame:f=>{frames.set(++serial,f);return serial;},cancelAnimationFrame:id=>frames.delete(id)};
+  if(motion) Object.assign(win,{getComputedStyle:()=>({transitionDuration:'0.3s, 280ms'}),setTimeout:fn=>{timers.set(++serial,fn);return serial;},clearTimeout:id=>timers.delete(id)});
   const app=initSectionDisclosures(doc,win);
   const click=(href,extra={},attrs={})=>events.get('click')({button:0,target:{closest:()=>({href,target:'',hasAttribute:()=>false,...attrs})},...extra});
-  return {app,details,doc,summary,control,events,frames,click,focused:()=>focused,scrolled:()=>scrolled,flush:()=>{for(const f of frames.values())f();frames.clear();}};
+  return {app,details,doc,summary,control,events,frames,timers,settle:()=>{for(const f of timers.values())f();timers.clear();},click,focused:()=>focused,scrolled:()=>scrolled,flush:()=>{for(const f of frames.values())f();frames.clear();}};
 }
 test('initial deep link reveals and focuses the summary, while fresh visits preserve the native default',()=>{
   const fresh=fixture();assert.equal(fresh.details.open,false);assert.equal(fresh.frames.size,0);
@@ -68,4 +69,23 @@ test('later non-panel or malformed navigation cancels stale panel focus and posi
     assert.equal(f.frames.size,0);
     f.flush();assert.equal(f.focused(),undefined);
   }
+});
+
+test('animated reveals make one finite correction and later navigation cancels it',()=>{
+  const f=fixture('#principal',true);f.flush();
+  assert.equal(f.timers.size,1);
+  f.settle();f.flush();assert.equal(f.scrolled(),f.control);assert.equal(f.focused(),f.control);
+  assert.equal(f.timers.size+f.frames.size,0);
+  f.click('https://example.com/#principal');f.flush();assert.equal(f.timers.size,1);
+  f.click('https://example.com/#unknown');assert.equal(f.timers.size,0);
+  f.click('https://example.com/#principal');f.flush();assert.equal(f.timers.size,1);
+  f.events.get('click')({button:0,target:{closest:()=>null}});assert.equal(f.timers.size,0,'another control cancels stale fragment focus');
+  f.app.dispose();assert.equal(f.frames.size+f.timers.size,0);
+});
+
+test('later keyboard focus prevents the deferred fragment correction',()=>{
+  const f=fixture('#principal',true);f.flush();
+  let corrected=false;f.control.focus=()=>{corrected=true;};
+  f.doc.activeElement={}; // A different control reached with Tab.
+  f.settle();f.flush();assert.equal(corrected,false);f.app.dispose();
 });

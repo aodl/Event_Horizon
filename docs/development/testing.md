@@ -322,3 +322,14 @@ Production trust anchors and application exports are unchanged.
 The [release-closure report](../codex/cycle-optimisation-release-closure.md) records
 current hybrid compiler selection, complete final-source regression/reproducibility
 checks, all-public-asset comparisons, advisory correction evidence and PR/CI status.
+
+## Floating map and six-section landing page
+
+Build the frontend, then run both `node tools/scripts/validate-subnet-section.mjs --live`
+and `node tools/scripts/validate-ledger-counter.mjs`. The first runs deterministic
+Chromium, Firefox and available WebKit modal/lifecycle, geometry, accordion and
+fragment checks before separate genuine Dashboard checks. The second retains
+ledger, operating status, builder and hero navigation regressions. `--no-screenshots`
+limits evidence volume; the subnet harness also accepts `--output=directory`.
+Consult the current [validation report](../codex/floating-subnet-refinement-validation.md)
+for results; historical reports describe their original revisions.
