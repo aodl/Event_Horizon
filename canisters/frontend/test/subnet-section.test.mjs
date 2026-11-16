@@ -5,14 +5,14 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 const publicFile = name => readFile(new URL(`../public/${name}`, import.meta.url), 'utf8');
 const embed = 'https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae';
-test('one accessible subnet section immediately precedes the unchanged manifesto inside main', async () => {
+test('one accessible subnet section immediately follows the protocol introduction inside main', async () => {
   const html = await publicFile('index.html');
-  assert.match(html, /<\/header>\s*<main id="main-content" tabindex="-1">\s*<section id="subnet-map"/);
+  assert.match(html, /<\/header>\s*<main id="main-content" tabindex="-1">\s*<section class="manifesto" aria-labelledby="manifesto-title" id="protocol-overview"/);
   assert.equal(html.match(/id="subnet-map"/g).length, 1);
   assert.match(html, /class="subnet-section" aria-labelledby="subnet-title"/);
-  assert.match(html, /<h2 id="subnet-title" class="section-label">Fully on-chain<\/h2>/);
+  assert.match(html, /<h2 id="subnet-title" class="section-label">Fully on-chain<span class="section-disclosure__indicator" aria-hidden="true"><\/span><\/h2>/);
   assert.doesNotMatch(html, /Explore the subnet hosting Event Horizon/);
-  assert.match(html, /<\/section>\s*<section class="manifesto" aria-labelledby="manifesto-title">/);
+  assert.match(html, /<\/section>\s*<section id="subnet-map"/);
   assert.match(html, /A cost-effective path for ledger-aware canisters\./);
   assert.match(html, /<section class="section" id="network"/);
 });
@@ -24,7 +24,7 @@ test('one real lazy iframe permits dashboard popups while retaining its sandbox 
   assert.match(frames[0], /title="ICP Dashboard subnet placement map[^\"]+"/);
   assert.ok(html.includes(embed.replace('/embed/subnet-map?subnet=', '/network/subnet/')));
   const section = html.match(/<section id="subnet-map"[\s\S]*?<\/section>/)[0];
-  assert.match(section, /<p class="subnet-section__description">All Event Horizon canisters are hosted on one of the largest ICP subnets\.<\/p>/);
+  assert.doesNotMatch(html, /All Event Horizon canisters are hosted on one of the largest ICP subnets/);
   assert.doesNotMatch(section, /<nav|View subnet details|How this data is sourced|methodology#embeddable-subnet-map/);
   assert.equal(section.match(/<a\b/g).length, 1);
   assert.match(section, /<p class="subnet-section__sources">Subnet map provided by ICP Dashboard\. If the map does not load, <a[^>]*target="_blank" rel="noopener noreferrer">view it on ICP Dashboard<\/a>\.<\/p>/);

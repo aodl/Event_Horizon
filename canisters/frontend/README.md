@@ -191,17 +191,11 @@ The reviewed source is:
 https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae
 ```
 
-Both deployed canonical canisters were certificate-checked on this 34-node
-Fiduciary subnet on 2026-11-14. The copy is “All Event Horizon canisters are hosted
-on one of the largest ICP subnets.” It covers the deployed frontend and ICP
-backend; the IO instance is planned, has no deployed canister ID and is excluded.
-The current dashboard lists one 40-node subnet and three 34-node subnets,
-including this one, among 42 listed mainnet subnets. Review the claim when adding
-a deployed instance or changing subnet placement.
-Review this static URL if either canister moves. The section uses a vertical
-composition within the existing content gutters: semantic “Fully on-chain”
-heading, description and attribution/fallback, then one map immediately before
-“The protocol”. The fallback remains above the iframe in reading and keyboard order.
+The map follows the introductory “The protocol” section. Its semantic “Fully
+on-chain” heading remains visible when collapsed; attribution, status and the
+single persistent iframe are inside the disclosure body. The former hosting
+sentence is removed. Review the static subnet URL if either canister moves.
+The fallback remains above the iframe in reading and keyboard order.
 
 `subnet-layout.js` observes the parent embed width W with one ResizeObserver.
 At W > 760px the iframe has a fixed 760×520px layout size and a uniform
@@ -299,6 +293,49 @@ The harness accepts `--live`, `--output=directory` and `--no-screenshots`. Witho
 one shared real-dashboard smoke path for desktop, wide touch and native mobile.
 One-off zoom and engine research utilities are not part of the maintained suite.
 See the [full-width scaling validation](../../docs/codex/subnet-full-width-scaling-validation.md), the [copy and navigation validation report](../../docs/codex/subnet-navigation-validation.md), the [layout and loading validation report](../../docs/codex/subnet-section-refinement-validation.md) and the earlier [section and security validation report](../../docs/codex/subnet-section-security-validation.md).
+
+## Landing section disclosures
+
+The 11 direct content sections of `main` use native `details` with the shared
+name `event-horizon-sections`: Protocol overview, Fully on-chain, Choose, Compose,
+Complete, Principles, Open Source & Verifiable, Engineered for Immutability,
+Perpetual Endowment Funding, Powered by Internet Computer Protocol, and Open
+deployment. `protocol-overview` names the introduction; `protocol` still names
+Principles. Hero, footer, nested operating status and individual panels are excluded.
+
+All start closed on a fresh visit without a relevant fragment. Native grouping
+permits zero or one open section, including without JavaScript. Each summary
+contains one level-two heading, its existing label/icon and a decorative chevron;
+introductory paragraphs and their ordinary links remain in the body. Enter/Space
+operate the summaries, with visible focus and no height animation. Heading
+semantics were inspected in the available browser accessibility trees; this does
+not substitute for manual screen-reader testing.
+
+`section-disclosures.js` only enhances fragment navigation: initial deep links,
+hash history and ordinary same-document links reveal the owning top-level
+section. Repeated same-fragment links reopen it. Section links focus its summary;
+specific control targets retain focus. Modified/external/download/new-tab links
+and non-panel anchors retain browser behavior. Disclosure toggles never update
+the URL, store preferences or maintain a second expansion state. A single queued
+position check keeps an activated summary visible if closing a tall preceding
+panel moved it offscreen. There is no continuous scroll tracking.
+
+Forms, selected instance, preview generations and the iframe remain mounted.
+Closing/reopening does not reset inputs, rerun application initialization or
+navigate the iframe. Asynchronous results never open a section. The existing
+map ResizeObserver ignores hidden zero widths and recomputes on reopening;
+its baseline remains 760×520, with proportional wide scaling and native narrow
+rendering. The visibility observer starts the slow-loading deadline only near
+the visible frame, so leaving the initial map disclosure closed does not consume
+that deadline. Loading completion does not reopen it. The loader remains outside
+the scaling transform. Non-persisted page exit disposes navigation listeners and
+pending positioning; persisted browser-cache restoration retains the page state.
+No storage, new dependencies, additional observers or backend calls are added.
+
+Run the existing frontend unit suite and both browser harnesses above. They open
+panels through actual summaries/links before interacting. See the
+[disclosure validation report](../../docs/codex/section-disclosures-validation.md)
+for interaction evidence, representative screenshots and browser limitations.
 
 ## Landing ledger total
 

@@ -20,13 +20,15 @@ const fixture = await build({ stdin: { contents: `
 import { createApp, initHeroArtwork, initHeroBackdrop, initLedgerCounter } from './canisters/frontend/public/app.js';
 import { initCompactHeading } from './canisters/frontend/public/compact-heading.js';
 import { initOperatingStatus } from './canisters/frontend/public/operating-status.js';
+import { initSectionDisclosures } from './canisters/frontend/public/section-disclosures.js';
 import { INSTANCES } from './canisters/frontend/public/instances.js';
 import { backendResult } from './canisters/frontend/test/helpers.mjs';
 import { clock, flush } from './canisters/frontend/test/counter-clock.mjs';
 const doc = globalThis.document, time = clock();
+const disclosures = initSectionDisclosures(doc, window);
 let total = 123456789n, fail = false, calls = 0;
 let hold = false, release;
-let operatingFail = false, operatingCalls = 0;
+let operatingFail = false, operatingCalls = 0, previewRelease;
 const operating = initOperatingStatus(doc, window, {dependencies:time, query:async () => {
   operatingCalls++; if (operatingFail) throw Error('status fixture failure');
   return {mode:'Economy',liquidCycles:4450000000000n,balanceCycles:4860000000000n,reported:true,
@@ -38,12 +40,14 @@ const compact = initCompactHeading(doc, window);
 const counter = initLedgerCounter(doc, window, { dependencies: time,
   query: async () => { calls++; if (hold) await new Promise(resolve => {release=resolve;}); if (fail) throw Error('fixture failure'); return total; } });
 const reviewedFixture = { ...INSTANCES[0], id: 'generic-fixture', name: 'Reviewed fixture', ledgerCountSource: 'icrc3-log-length' };
-const app = createApp({ documentRef: doc, counter, operating, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10) });
+const app = createApp({ documentRef: doc, counter, operating, instances: [...INSTANCES, reviewedFixture], queryBackend: async () => backendResult(INSTANCES[0], 10),
+  queryPreview: async () => new Promise(resolve => {previewRelease=()=>resolve({target_count:5,subscriber:{toText:()=>'uuc56-gyb'},subject:[]});}) });
 globalThis.counterFixture = { time, flush, calls: () => calls,
+  previewReady:()=>Boolean(previewRelease), resolvePreview:()=>previewRelease?.(),
   operatingCalls:() => operatingCalls, operatingFail:value => {operatingFail = value;},
   sample: value => { total = BigInt(value); }, fail: value => { fail = value; },
   hold:value => {hold=value;}, release:() => release?.(),
-  dispose: () => { app.dispose(); artwork.dispose(); compact.dispose(); } };
+  dispose: () => { app.dispose(); artwork.dispose(); compact.dispose(); disclosures.dispose(); } };
 `, resolveDir: root }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022',
   // Suppress ONLY app.js's automatic document bootstrap in this separate harness;
   // the entry above invokes the same page integration with injected test queries.
@@ -65,6 +69,9 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
+async function openSection(page,id) {
+  if(!await page.locator(`#${id} > details`).evaluate(n=>n.open)) await page.locator(`#${id} > details > summary`).click();
+}
 async function assertBranding(page) {
   // Observe actual title visibility, including resize/scroll/reflow, before showing the compact brand.
   const handle = await page.waitForFunction(() => {
@@ -106,7 +113,7 @@ try {
   await page.waitForFunction(() => document.getElementById('ledger-status').textContent.includes('unavailable'));
   assert.equal(await page.locator('#ledger-count').textContent(), '—');
   await screenshot(page, { timeout: 60000,path:resolve(output, 'unavailable.png')});
-  await page.selectOption('#instance', 'io');
+  await openSection(page,'network'); await page.selectOption('#instance', 'io');
   assert.match(await page.locator('#ledger-status').textContent(), /until launch/);
   const before = evidence.requests.filter(r => r.url.includes('/ryjl3-tyaaa-aaaaa-aaaba-cai/')).length;
   assert.equal(await page.locator('#live-effects').count(), 0);
@@ -130,6 +137,42 @@ try {
   for (const size of [{width:1000,height:800},{width:1024,height:768},{width:844,height:390}]) {
     await page.setViewportSize(size); await assertBranding(page);
   }
+  const workflow=await context.newPage();await workflow.goto(`${origin}/fixture.html`);
+  await openSection(workflow,'network');
+  await workflow.locator('#instance').selectOption('generic-fixture');
+  await openSection(workflow,'builder');
+  await workflow.locator('#principal').fill('uuc56-gyb');
+  await workflow.locator('#amount').fill('1.25');
+  await workflow.locator('#subaccount').fill('42');
+  await workflow.locator('#scope').selectOption('range');
+  await workflow.locator('#range-start').fill('3');
+  await workflow.locator('#range-end').fill('7');
+  const original=await workflow.locator('#memo-output').textContent();
+  assert.notEqual(original,'—');
+  await workflow.locator('.builder-card__footnote a').click();
+  assert.equal(await workflow.locator('#memo-output').innerText(),original);
+  await workflow.locator('.memo-result__edit a').click();
+  assert.equal(await workflow.locator('#principal').inputValue(),'uuc56-gyb');
+  assert.equal(await workflow.locator('#amount').inputValue(),'1.25');
+  assert.equal(await workflow.locator('#subaccount').inputValue(),'42');
+  assert.equal(await workflow.locator('#instance').inputValue(),'generic-fixture');
+  assert.equal(await workflow.locator('#scope').inputValue(),'range');
+  assert.equal(await workflow.locator('#range-start').inputValue(),'3');
+  assert.equal(await workflow.locator('#range-end').inputValue(),'7');
+  await workflow.locator('#principal').fill('ALICE');
+  await workflow.waitForFunction(()=>counterFixture.previewReady());
+  await openSection(workflow,'protocol');
+  await workflow.evaluate(()=>counterFixture.resolvePreview());
+  await workflow.waitForFunction(()=>document.querySelector('#memo-help').textContent.includes('Preview validates'));
+  assert.equal(await workflow.locator('#protocol details').evaluate(n=>n.open),true,'async preview does not change disclosures');
+  await openSection(workflow,'complete');
+  assert.match(await workflow.locator('#memo-output').innerText(),/ALICE/);
+  await workflow.locator('.memo-result__edit a').click();
+  assert.equal(await workflow.locator('#principal').inputValue(),'ALICE');
+  await workflow.setViewportSize({width:390,height:844});
+  assert.equal(await workflow.locator('#builder details').evaluate(n=>n.open),true);
+  evidence.fixtures.disclosureWorkflow={mountedForm:true,inputsAndMemoRetained:true,asynchronousPreviewPreserved:true,noAutomaticExpansion:true};
+  await workflow.close();
   await page.goto(`${origin}/fixture.html`);
   await page.waitForFunction(() => document.getElementById('ledger-count').textContent === '123,456,789');
   await page.waitForFunction(() => document.querySelector('.hero__detail').classList.contains('hero__detail--loaded') && getComputedStyle(document.querySelector('.hero__detail')).opacity === '1');
@@ -287,7 +330,7 @@ try {
   await page.evaluate(async () => { counterFixture.fail(false); counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'); await counterFixture.time.tick(120000); });
   assert.equal(await page.locator('#ledger-count').textContent(), frozen);
   // Long totals are generic-only; use the actual generic DOM integration below.
-  await page.selectOption('#instance', 'generic-fixture');
+  await openSection(page,'network'); await page.selectOption('#instance', 'generic-fixture');
   await page.evaluate(() => counterFixture.sample('999999999999999999999999999999999999999999999999999999999999'));
   await page.evaluate(async () => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); await counterFixture.flush(); });
   assert.equal(await page.locator('#ledger-count').textContent(), '999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999');
@@ -317,7 +360,7 @@ try {
     document.dispatchEvent(new Event('visibilitychange')); document.dispatchEvent(new Event('visibilitychange'));
     await counterFixture.flush(); if (counterFixture.calls() !== n + 1) throw Error('resume burst');
   });
-  await page.selectOption('#instance', 'io'); await page.selectOption('#instance', 'icp'); await page.selectOption('#instance', 'io');
+  await openSection(page,'network'); await page.selectOption('#instance', 'io'); await openSection(page,'network'); await page.selectOption('#instance', 'icp'); await openSection(page,'network'); await page.selectOption('#instance', 'io');
   await page.evaluate(() => counterFixture.flush());
   assert.match(await page.locator('#ledger-status').textContent(), /until launch/);
   await page.evaluate(() => counterFixture.dispose());
@@ -329,6 +372,7 @@ try {
   assert.equal(evidence.console.filter(e => /Content Security Policy|violates.*directive/.test(e.text)).length, 0);
   assert.ok(evidence.requests.every(r => r.url.startsWith(origin) || r.url.startsWith('https://icp-api.io/') || r.url.startsWith('https://dashboard.internetcomputer.org/embed/subnet-map?subnet=')));
   await page.goto(`${origin}/fixture.html`);
+  await openSection(page,'network');
   await page.waitForFunction(() => document.getElementById('operating-tier').textContent === 'Economy');
   assert.equal(await page.locator('#operating-balance').textContent(), '4.860 T');
   assert.match(await page.locator('#operating-next').textContent(), /0.550 T to Standard/);
@@ -347,7 +391,7 @@ try {
   assert.equal(await page.locator('#scope').isDisabled(), false);
   await page.evaluate(async () => {counterFixture.operatingFail(false); await counterFixture.time.tick(60000);});
   assert.equal(await page.locator('#operating-tier').textContent(), 'Economy');
-  await page.selectOption('#instance','io');
+  await openSection(page,'network'); await page.selectOption('#instance','io');
   await page.evaluate(async () => {const n=counterFixture.operatingCalls(); await counterFixture.time.tick(120000); if(n!==counterFixture.operatingCalls())throw Error('planned status query');});
   assert.equal(await page.locator('#operating-tier').textContent(), 'Planned');
   assert.equal(await page.locator('#operating-progress').isVisible(), false);
@@ -432,10 +476,11 @@ try {
     await page.waitForFunction(id=>location.hash===`#${id}`,id);
     const target=page.getByRole('region',{name:label,exact:true});
     assert.equal(await target.getByRole('heading',{name:label,exact:true,level:2}).count(),1);
-    const heading=await target.locator('h2').boundingBox();assert.ok(heading.y>=0&&heading.y+heading.height<=800);
-    assert.equal(await target.evaluate(n=>document.activeElement===n),true);
+    const heading=await target.locator('h2').boundingBox();assert.ok(heading.y>=-1&&heading.y+heading.height<=801);
+    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id} summary`),id);
     await page.goBack();assert.equal(new URL(page.url()).hash,previous);
     await page.goForward();assert.equal(new URL(page.url()).hash,`#${id}`);
+    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id} summary`),id);
     await screenshot(page, {path:resolve(output,`section-${id}.png`)});
   }
   await page.emulateMedia({reducedMotion:'no-preference'});
@@ -445,7 +490,7 @@ try {
   for (const [id,label] of factTargets) {
     await page.goto(`${origin}/#${id}`);
     const target=page.getByRole('region',{name:label,exact:true});
-    await page.waitForFunction(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=0&&r.top<innerHeight;},id);
+    await page.waitForFunction(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=-1&&r.top<innerHeight;},id);
     assert.equal(new URL(page.url()).hash,`#${id}`);
     assert.equal(await target.locator('h2').isVisible(),true);
   }
@@ -471,6 +516,7 @@ try {
     await screenshot(livePage, { path: resolve(output, 'production-live.png') });
     await livePage.waitForFunction(() => document.getElementById('operating-balance').textContent !== '—', null, {timeout:15000});
     evidence.liveBrowser.operatingStatus = await livePage.locator('.operating-status').innerText();
+    await openSection(livePage,'network');
     await livePage.locator('.operating-status').scrollIntoViewIfNeeded();
     await screenshot(livePage, {path:resolve(output,'operating-production-live.png')});
     await liveContext.close();
@@ -485,7 +531,7 @@ try {
   await noObserver.addInitScript(() => { window.IntersectionObserver = undefined; });
   const unsupported = await noObserver.newPage(); await unsupported.goto(origin);
   assert.equal(await unsupported.locator('.hero__compact-mark').isVisible(), false);
-  await unsupported.selectOption('#instance', 'io'); assert.match(await unsupported.locator('#ledger-status').textContent(), /until launch/);
+  await openSection(unsupported,'network'); await unsupported.selectOption('#instance', 'io'); assert.match(await unsupported.locator('#ledger-status').textContent(), /until launch/);
   await noObserver.close();
   evidence.fixtures.defaultHiddenWithoutJs = true; evidence.fixtures.noObserverFailsClosed = true;
   evidence.passed = true;

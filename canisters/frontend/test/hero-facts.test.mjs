@@ -17,7 +17,7 @@ test('how-it-works flow links to ledger selection and completes the declaration 
   assert.match(html, /class="hero__action" href="#network">How it works/);
   assert.match(html, /<a href="#open-deployment">add it yourself<\/a>/);
   assert.equal([...html.matchAll(/id="open-deployment"/g)].length, 1);
-  const steps = [...html.matchAll(/<p class="section-label">(0[1-4] \/ [^<]+)<\/p>/g)].map(match => match[1]);
+  const steps = [...html.matchAll(/<span class="section-label">(0[1-4] \/ [^<]+)<\/span>/g)].map(match => match[1]);
   assert.deepEqual(steps, ['01 / Choose', '02 / Compose', '03 / Complete', '04 / Principles']);
   assert.ok(html.indexOf('id="builder"') < html.indexOf('id="complete"'));
   assert.ok(html.indexOf('id="complete"') < html.indexOf('id="protocol"'));
