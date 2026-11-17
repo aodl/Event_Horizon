@@ -404,6 +404,7 @@ try {
       const tab=await widget.boundingBox();assert.equal(tab.x,0);assert.equal(tab.width,46);assert.ok(tab.height>150&&tab.height<height-24);
       assert.equal(await widget.locator('h2').evaluate(n=>getComputedStyle(n).writingMode),'vertical-rl');
       await page.getByRole('button',{name:'Restore subnet thumbnail',exact:true}).click();await mode('thumbnail');
+      await page.waitForFunction(()=>document.querySelector('.subnet-section__loading').hidden);
       await page.frameLocator('iframe').locator('button').waitFor({state:'attached'}).catch(async error=>{console.error('Thumbnail fixture readiness',name,documents,await page.locator('iframe').getAttribute('src'),page.frames().map(f=>f.url()));throw error;});
       assert.equal(documents,1,'only first activation navigates the Dashboard');
       const g=await widget.evaluate(n=>{const f=n.querySelector('iframe'),e=n.querySelector('.subnet-section__embed');return {position:getComputedStyle(n).position,rect:n.getBoundingClientRect().toJSON(),overflow:n.scrollWidth>n.clientWidth,width:f.offsetWidth,height:f.offsetHeight,visual:f.getBoundingClientRect().toJSON(),inert:e.inert,hidden:e.getAttribute('aria-hidden'),tabIndex:f.tabIndex,pointer:getComputedStyle(f).pointerEvents};});
