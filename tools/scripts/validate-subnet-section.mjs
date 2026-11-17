@@ -157,6 +157,12 @@ async function assertGeometry(page) {
   });
   return page.locator('.subnet-section__embed').evaluate(e=>({width:e.clientWidth,height:e.clientHeight,frameWidth:e.querySelector('iframe').offsetWidth}));
 }
+async function assertMinimiseHitTarget(page) {
+  assert.equal(await page.getByRole('button',{name:'Minimise subnet map',exact:true}).evaluate(n=>{
+    const r=n.getBoundingClientRect();
+    return [1,r.height/2,r.height-2].every(y=>n.contains(document.elementFromPoint(r.x+r.width/2,r.y+y)));
+  }),true,'preview must not cover any part of the Minimise target');
+}
 async function closeCountry(page) {
   const map=page.frameLocator('iframe');
   const selected=map.getByRole('button',{name:/node machines? in this subnet/}).and(map.locator('[aria-expanded="true"]'));
@@ -227,6 +233,7 @@ async function verifyZoomAndCache() {
       const navigation=await page.locator('.hero__compact-mark').evaluate(n=>({visible:getComputedStyle(n).visibility==='visible',rect:n.getBoundingClientRect().toJSON()}));
       assert.ok(!navigation.visible||navigation.rect.right<=tab.x||navigation.rect.x>=tab.x+tab.width||navigation.rect.bottom<=tab.y||navigation.rect.y>=tab.y+tab.height,JSON.stringify({viewport,factor,tab,navigation}));
       await page.getByRole('button',{name:'Restore subnet thumbnail',exact:true}).press('Enter');await page.waitForFunction(()=>document.querySelector('#subnet-map').dataset.mode==='thumbnail');
+      await assertMinimiseHitTarget(page);
       const thumbnail=await page.locator('#subnet-map').boundingBox(),thumbnailNavigation=await page.locator('.hero__compact-mark').evaluate(n=>({visible:getComputedStyle(n).visibility==='visible',rect:n.getBoundingClientRect().toJSON()}));
       assert.ok(!thumbnailNavigation.visible||thumbnailNavigation.rect.right<=thumbnail.x||thumbnailNavigation.rect.x>=thumbnail.x+thumbnail.width||thumbnailNavigation.rect.bottom<=thumbnail.y||thumbnailNavigation.rect.y>=thumbnail.y+thumbnail.height,JSON.stringify({viewport,factor,thumbnail,thumbnailNavigation}));
       const preview=await page.locator('iframe').boundingBox();assert.ok(Math.abs(preview.width-150)<.05&&Math.abs(preview.height-130)<.05,JSON.stringify(preview));
@@ -402,6 +409,7 @@ try {
       const g=await widget.evaluate(n=>{const f=n.querySelector('iframe'),e=n.querySelector('.subnet-section__embed');return {position:getComputedStyle(n).position,rect:n.getBoundingClientRect().toJSON(),overflow:n.scrollWidth>n.clientWidth,width:f.offsetWidth,height:f.offsetHeight,visual:f.getBoundingClientRect().toJSON(),inert:e.inert,hidden:e.getAttribute('aria-hidden'),tabIndex:f.tabIndex,pointer:getComputedStyle(f).pointerEvents};});
       assert.equal(g.rect.x,0);assert.equal(g.overflow,false);assert.equal(g.position,'fixed');assert.equal(g.width,600);assert.equal(g.height,520);assert.equal(g.visual.width,150);assert.equal(g.visual.height,130);
       assert.ok(g.inert);assert.equal(g.hidden,'true');assert.equal(g.tabIndex,-1);assert.equal(g.pointer,'none');
+      await assertMinimiseHitTarget(page);
       await page.evaluate(()=>scrollTo({top:1000,behavior:'instant'}));assert.ok(Math.abs((await widget.boundingBox()).y-g.rect.y)<1);
       await page.getByRole('button',{name:'Minimise subnet map',exact:true}).focus();await page.keyboard.press('Tab');
       assert.equal(await page.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Maximise subnet map','inert preview is skipped');
@@ -433,9 +441,13 @@ try {
       assert.equal(intro.maxWidth,'none');assert.ok(Math.abs(intro.width-intro.parent)<2);assert.equal(intro.overflow,false);if(width>=1440)assert.equal(intro.lines,1);
       record.viewports.push({width,height,minimised:tab,thumbnail:g,expanded,intro});console.log(`${name}: ${width}×${height} three-state lifecycle passed`);
     }
+    await page.setViewportSize({width:422,height:195});
+    await page.getByRole('button',{name:'Restore subnet thumbnail',exact:true}).click();await mode('thumbnail');await assertMinimiseHitTarget(page);
+    await page.getByRole('button',{name:'Minimise subnet map',exact:true}).click();await mode('minimised');
     await page.setViewportSize({width:320,height:568});await page.evaluate(()=>document.documentElement.style.fontSize='200%');await assertSummaryTextContained(page);
     let tab=await widget.boundingBox();assert.equal(tab.x,0);assert.ok(tab.y>=0&&tab.height<568);
     await page.getByRole('button',{name:'Restore subnet thumbnail',exact:true}).click();await mode('thumbnail');
+    await assertMinimiseHitTarget(page);
     assert.equal(await widget.evaluate(n=>n.querySelector('.subnet-widget__toolbar').getBoundingClientRect().bottom<=n.querySelector('.subnet-widget__preview').getBoundingClientRect().top),true,'enlarged toolbar and preview never overlap');
     await page.getByRole('button',{name:'Maximise subnet map',exact:true}).click();const toolbar=await page.locator('.subnet-widget__toolbar').boundingBox();assert.ok(toolbar.y>=0&&toolbar.y+toolbar.height<=568/2);
     await page.emulateMedia({reducedMotion:'reduce',forcedColors:'active'});assert.equal(await page.locator('#protocol-overview details').evaluate(n=>getComputedStyle(n,'::details-content').transitionDuration),'0s');

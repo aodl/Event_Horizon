@@ -810,6 +810,7 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
 .subnet-widget[data-mode="thumbnail"] .subnet-section__frame { width: 600px; height: 520px; max-width: none; transform: scale(.25); transform-origin: top left; pointer-events: none; }
 .subnet-widget[data-mode="thumbnail"] .subnet-section__loading { padding: .5rem; font-size: .7rem; }
 /* The toolbar's single Maximise button also owns the thumbnail hit surface. */
+.subnet-widget[data-mode="thumbnail"] .subnet-minimise { position: relative; z-index: 2; }
 .subnet-widget[data-mode="thumbnail"] .subnet-maximise::after { content: ""; position: absolute; inset: auto 0 0; height: 142px; z-index: 1; }
 .subnet-widget:not([data-mode="expanded"]) .subnet-widget__attribution,
 .subnet-widget[data-mode="minimised"] .subnet-minimise,

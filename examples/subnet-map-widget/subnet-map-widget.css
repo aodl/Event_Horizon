@@ -47,6 +47,7 @@
 .ic-subnet-map[data-mode="thumbnail"] .ic-map-embed { width: 150px; height: 130px; margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
 .ic-subnet-map[data-mode="thumbnail"] iframe { width: 600px; height: 520px; transform: scale(.25); transform-origin: top left; pointer-events: none; }
 .ic-subnet-map[data-mode="thumbnail"] .ic-map-loading { font-size: 11px; }
+.ic-subnet-map[data-mode="thumbnail"] [data-map-mode="minimised"] { position: relative; z-index: 2; }
 .ic-subnet-map[data-mode="thumbnail"] [data-map-mode="expanded"]::after { content: ""; position: absolute; inset: auto 0 0; height: 142px; z-index: 1; }
 .ic-subnet-map[data-mode="minimised"] { width: calc(46px + env(safe-area-inset-left)); }
 .ic-subnet-map[data-mode="minimised"] .ic-map-preview { display: none; }

@@ -41,6 +41,8 @@ min(66.667vw,1200px), switching to safe-area available width below 900px.
 Exactly two state controls are visible. Short/zoomed panels scroll without reducing
 44px targets; state changes return the panel's toolbar to view. Thumbnail overflow
 contains the untransformed iframe layout, preserving its complete scaled image.
+The Minimise target stays above the preview hit surface in constrained views;
+browser tests sample its upper, centre and lower edges at short/zoomed sizes.
 Short landscape layouts reserve space for the existing compact EVH shortcut.
 
 Non-modal transitions keep the dialog open. Modal transitions use native
