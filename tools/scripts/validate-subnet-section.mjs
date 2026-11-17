@@ -259,14 +259,18 @@ try {
     const record={name,version:browser.version(),viewports:[],live:{}};
     evidence.engines.push(record);
     if(!process.argv.includes('--live-only')) {
+    let documents=0;
+    const fixtureContext=async()=>{
     const context=await browser.newContext();context.setDefaultTimeout(30000);
-    console.log(`${name}: starting URL and animation fixture`);
     await context.route('https://icp-api.io/**',r=>r.fulfill({status:r.request().method()==='OPTIONS'?204:503,headers:{'access-control-allow-origin':'*','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'*'},contentType:'text/plain',body:r.request().method()==='OPTIONS'?'':'Fixture service unavailable'}));
     // Isolate native interaction fixtures from expensive animated hero painting.
     await context.route('**/event-horizon.svg',async r=>r.fulfill({contentType:'image/svg+xml',body:await readFile(resolve(publicDir,'event-horizon-static.svg'))}));
-    record.fixtureArtwork='static master; genuine animated artwork covered by ledger harness and live path';
-    let documents=0;
     await context.route(SUBNET_EMBED_URL,r=>{documents++;return r.fulfill({contentType:'text/html',body:'<!doctype html><title>Subnet fixture</title><button onclick="this.textContent=\'retained\'">Country fixture</button><a href="#details">Data centre fixture</a>'});});
+    return context;
+    };
+    let context=await fixtureContext();
+    console.log(`${name}: starting URL and animation fixture`);
+    record.fixtureArtwork='static master; genuine animated artwork covered by ledger harness and live path';
     let page=await context.newPage();
     page.on('pageerror',e=>evidence.errors.push({engine:name,error:e.message}));
     await page.goto(origin,{waitUntil:'domcontentloaded'});
@@ -388,9 +392,9 @@ try {
       }
     }
     console.log(`${name}: history, nested fragments and initial focus checks passed`);
-    // Keep intercepted-frame lifecycle independent of SVG-object reload history.
-    // The genuine transport below separately repeats this complete reload sequence.
-    await page.close();page=await context.newPage();
+    // Isolate intercepted-frame navigation from SVG-object reload/history state.
+    // A fresh context keeps Firefox's fixture frame association deterministic.
+    await context.close();context=await fixtureContext();page=await context.newPage();
     page.on('pageerror',e=>evidence.errors.push({engine:name,error:e.message}));
     await page.goto(origin,{waitUntil:'domcontentloaded'});
     assert.equal(documents,0,'URL and initial-layout checks never activate Dashboard');

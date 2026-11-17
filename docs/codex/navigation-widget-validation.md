@@ -134,7 +134,9 @@ Normal pointer/emulated-touch checks are separate from the zoom checks.
 
 Genuine Dashboard checks exercise country selection, data-centre/geographic
 controls and isolated popup navigation. Candidate assets use the local server; API and Dashboard traffic are unmodified. This is not a
-production-certification smoke test. Deterministic URL/reload tests remain separate.
+production-certification smoke test. Deterministic URL/reload tests remain separate;
+the intercepted widget fixture starts in a fresh browser context after those cases
+to isolate its frame association from earlier SVG-object reload/history state.
 WPE access-control errors from canceled read_state requests during deliberate rapid
 reloads also reproduce against the reviewed public baseline; normal fresh-session
 checks and all CSP errors remain strict. No workaround for third-party code was
