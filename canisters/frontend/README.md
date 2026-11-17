@@ -179,28 +179,50 @@ See the [architecture overview](../../docs/architecture/overview.md), [productio
 
 ## Floating Fully on-chain map
 
-One fixed, bottom-left native dialog shows the genuine ICP Dashboard application.
-The initial compact dialog uses its native `open` property to avoid autofocus;
-the first Tab still reaches the Skip link. The single iframe stays mounted when
-the non-modal compact dialog is closed and
-reopened modally, and when minimised back to non-modal presentation. No source
-reassignment occurs during these transitions. Dismiss releases the frame document
-and keeps the widget hidden until reload; Escape received by the parent minimises.
-Escape inside the cross-origin document may not reach the parent, so the sticky
-Minimise and Dismiss controls remain available. The widget and accordion are
-independent. `#subnet-map` opens the modal unless dismissed. Ordinary widget
-controls do not modify history or save preferences.
+One fixed left-edge native dialog has exactly three presentations. Fresh pages
+start **Minimised**, a 46px vertical tab. Its native `open` property avoids
+autofocus, so the first Tab still reaches the page's Skip link. There is no
+permanent dismissal, storage preference or automatic Dashboard startup.
 
-Compact geometry is a 600×520 CSS-pixel iframe uniformly scaled to .25, reserving
-150×130 pixels. Its wrapper is inert and aria-hidden, the frame has tabindex -1
-and pointer events are disabled. Only Expand and Dismiss are compact controls.
-Expanded mode restores native iframe interaction. `subnet-layout.js` uses one
-ResizeObserver: widths W ≤ 760 use native responsive width and 520px height;
-W > 760 uses a 760×520 layout scaled by W/760, reserving the complete height.
-The modal scrolls rather than cropping the country list; its toolbar stays visible.
-Compact presentation explicitly bypasses this width calculation. Missing observers
-leave the expanded frame responsive at native height. Safe-area insets and a
-24px viewport clearance constrain the widget. No scroll listener is used.
+| Presentation | Visible controls | Map interaction |
+| --- | --- | --- |
+| Minimised | Restore thumbnail (stacked squares), Maximise (square) | Hidden and inert |
+| Thumbnail | Minimise (dash), Maximise (square) | Scaled preview; inert |
+| Expanded | Minimise (dash), Restore thumbnail (stacked squares) | Interactive native modal |
+
+Button names explicitly identify their destination. The thumbnail surface also
+activates its single Maximise control; it adds no third button or keyboard stop.
+Minimised and Thumbnail transitions update the existing open non-modal dialog.
+Only modal/non-modal switching closes and reopens it. The same iframe remains
+mounted and its URL is never reassigned during presentation changes. Escape
+received by the parent returns to the preceding non-modal mode; direct
+`#subnet-map` entry defaults Escape to Thumbnail. Escape inside the cross-origin
+frame is not guaranteed to reach the parent, so toolbar controls stay visible.
+Ordinary widget controls leave URL/history unchanged, including an existing
+`#subnet-map`; a fresh load or history navigation to that fragment opens Expanded.
+Accordion fragments and form state remain independent.
+
+Both non-modal backgrounds meet `left: 0`. Left safe-area padding protects their
+controls internally without a visible gutter; bottom placement respects the
+bottom safe-area inset. The vertical tab uses `writing-mode: vertical-rl` and a
+180-degree title rotation, with two 44px hit targets. Thumbnail geometry remains
+600×520 CSS pixels uniformly scaled to .25, reserving 150×130 pixels inside a
+204px-wide toolbar/frame. Its wrapper is inert and aria-hidden; iframe tabindex
+is -1 and pointer events are disabled. The hidden minimised preview uses
+`display: none` without removing or blanking the frame.
+
+Exceptionally short or zoomed viewports bound the floating panel to the usable
+height and allow scrolling without reducing its 44px control targets. Short
+landscape layouts reserve space beside the panel for the compact EVH shortcut. Narrow
+modal widths use the available layout width, including scrollbar space.
+
+Expanded desktop width is `min(66.667vw, 1200px)`; below 900px it uses the viewport
+minus modest safe-area margins. The modal stays centred, scrolls rather than
+cropping the country list, and keeps its toolbar sticky. `subnet-layout.js`
+retains one ResizeObserver: W ≤ 760 uses native responsive width and 520px height;
+W > 760 scales a 760×520 layout uniformly by W/760 and reserves its full height.
+Both non-modal presentations bypass that calculation. Missing observers leave
+the expanded map at native responsive width. There is no scroll listener.
 
 The exact approved external URL remains:
 
@@ -208,20 +230,35 @@ The exact approved external URL remains:
 https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae
 ```
 
-The URL is assigned once in a zero-delay task after application bootstrap, allowing
-independent ledger/status/configuration queries to start first. Even scaled down,
-this runs the complete external application, with its JavaScript and data-request
-cost. Scaling does not save network or CPU work. It adds no Event Horizon backend
-queries. Dismissal releases that work. No-JavaScript visitors get a conventional
-external link and no visible dialog.
+The first Restore or Maximise initializes the loader and assigns the URL exactly
+once, after the requested presentation is visible. A direct `#subnet-map` counts
+as an explicit request. Before activation there is no external src, Dashboard
+request, Dashboard script execution or Dashboard loading timer. The initial blank
+iframe document is not a loading milestone. Initial load checks inspect only the
+parent-owned src attribute; no cross-origin Document getter or Dashboard DOM is
+read. No-JavaScript visitors retain a conventional external link.
 
-The loading layer is dark and unscaled. Document load plus 500ms clears it;
-this is a visual milestone, not proof of data readiness. A 12-second deadline
-retains the dark placeholder and shows a slow-load message next to the permanent
-external fallback. The parent
-cannot inspect dashboard data completion or prevent a later external white paint.
-The indicator respects reduced motion. Loading timers are disposed
-on dismissal and non-persisted page exit; persisted pages keep their state.
+The unscaled dark loading layer clears 500ms after external document load, a
+visual milestone rather than proof of data readiness. A 12-second deadline keeps
+the placeholder and exposes a slow-loading explanation beside the permanent
+fallback. Late load recovers, and minimisation/restoration does not reset the
+loading state. Non-persisted page exit disposes timers and the observer; BFCache
+restoration keeps the existing document, valid mode and frame. A full fresh load
+starts Minimised again.
+
+After first activation the complete independently maintained Dashboard application
+runs, with its full JavaScript and data-request cost. Scaling saves no download
+work. Hiding the preview can reduce rendering, but does not guarantee suspension
+of external scripts, timers or network requests. No suspension protocol, resource
+manager, runtime telemetry, external data integration or Event Horizon backend
+query is added. Hero artwork, ledger polling/rates, status refresh, pricing and
+preview safeguards are unchanged. Baseline/candidate traces and network figures
+are recorded in the [current validation report](../../docs/codex/navigation-widget-validation.md).
+
+The independent [standalone example](../../examples/subnet-map-widget/README.md)
+uses only its own HTML/JS/CSS. It is neither imported into this bundle nor served
+by the frontend canister. Its licensing decision is pending; no new licence is
+granted by that example or this release.
 
 The iframe retains `referrerpolicy="no-referrer"` and sandbox
 `allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox`.
@@ -256,27 +293,54 @@ gap. This deliberate fallback avoids engine detection and custom animation
 controllers. Engines without the pseudo-element keep native instantaneous behavior. Reduced motion disables
 content and chevron transitions. No animation runs on initial page load.
 
-`section-disclosures.js` reveals a fragment's owning disclosure, including all four
-nested hero destinations. Initial URLs, repeated links, Back/Forward and control
-fragments retain native history. One finite post-animation positioning/focus
-correction handles a reveal; later navigation cancels stale correction. No state
-store, persistence, general router, custom expansion controller or scrolling loop
-is added. Form inputs and asynchronous preview state remain mounted.
+`section-disclosures.js` reveals the owner of each section/control fragment.
+Trusted pointer or Enter/Space summary activation pushes the selected section ID;
+manual collapse clears only a fragment owned by that section, including nested
+hero targets. Path/query and existing `history.state` are retained. Unchanged
+fragments do not create duplicate entries. Native exclusivity remains authoritative;
+unattributed toggles/data updates, programmatic reveals, resize/zoom and setup never
+write history. A transient trusted-activation marker commits only its native toggle
+result, independently of the cancellable scrolling frame.
 
-After rebuilding with esbuild, run `npm run test:frontend-unit`,
-`node tools/scripts/validate-subnet-section.mjs --live` and
-`node tools/scripts/validate-ledger-counter.mjs`. The subnet harness accepts `--live-only` to rerun only genuine Dashboard checks
-and separates
-cross-engine deterministic iframe-lifecycle fixtures from genuine dashboard checks;
-`--output=directory` and `--no-screenshots` control ignored evidence. Optional
-`SUBNET_BROWSERS=chromium,firefox,webkit` selects engines;
-`SUBNET_WEBKIT_EXECUTABLE` supports an explicit local WebKit wrapper. PocketIC verifies
-certified response bytes and security policies. See the
-[refinement validation report](../../docs/codex/floating-subnet-refinement-validation.md)
-for actual results and browser/device limitations. Browser automation does not
-substitute for physical Safari or manual screen-reader testing. Wide proportional
-scaling can offset magnification until the native narrow mode resumes; the external
-fallback offers independent browser zoom.
+`popstate` restores section selections or the zero-open state without rewriting
+history; `hashchange` preserves ordinary native anchors. Hero fact links keep
+`#open-source`, `#immutability`, `#endowment-funding` and `#internet-computer`.
+Repeated links and Compose/Complete navigation continue working. Normal `#top`,
+`#info` and skip links retain native meaning. Returning through history to a
+no-section entry closes the group without changing its URL.
+
+Initial URL and history restoration reveal/scroll without forced focus. Static
+negative tabindex on hero explanation sections also caused native fragment focus;
+these sections now receive temporary tabindex only for keyboard link activation,
+removed on focusout. Keyboard summary/link outlines remain visible. Closing
+focused hidden content still repairs focus to its summary. One cancellable,
+bounded post-animation correction preserves deep-link geometry; later user focus
+is respected. No general router, expansion-state store or scrolling loop is added.
+
+Only the introductory paragraph directly inside `#protocol-overview` removes its
+65ch cap. It uses the available width, wraps naturally and retains its typography;
+unrelated paragraph limits remain unchanged.
+
+After esbuild, run `npm run test:frontend-unit`,
+`node tools/scripts/validate-subnet-section.mjs --live --zoom`,
+`node tools/scripts/validate-ledger-counter.mjs` and
+`node tools/scripts/validate-subnet-example.mjs --live`. The subnet harness separates
+deterministic cross-engine lifecycle/URL/focus/geometry/slow-load checks from genuine
+Dashboard checks. `--zoom` adds actual Chromium browser zoom and genuine Dashboard
+BFCache restoration. `--live-only`, `--output=directory`, `--no-screenshots`,
+`SUBNET_BROWSERS` and `SUBNET_WEBKIT_EXECUTABLE` retain their existing meanings.
+
+The live map check uses the existing local candidate-asset server; Dashboard and
+ICP API traffic remain genuine. This fixture is not proof of a deployed revision.
+URL/reload focus tests use deterministic API transport separately. WPE can report canceled `read_state` requests as access-control
+errors during deliberate reloads; the same exact errors reproduce on the reviewed
+production baseline. Fresh-session errors and all CSP errors remain strict checks.
+PocketIC checks exact certified bytes/CSP and confirms example paths remain 404s.
+See the [current validation report](../../docs/codex/navigation-widget-validation.md)
+for measured results and limitations. Historical reports describe their original
+revisions. WebKit automation does not establish physical Safari/device or manual
+screen-reader testing. Wide proportional scaling can offset magnification until
+the native narrow mode resumes; the external link supports independent zoom.
 
 ## Landing ledger total
 

@@ -25,7 +25,7 @@ export function initSubnetLayout(documentRef, windowRef) {
   };
   const update = width => {
     if (disposed) return;
-    if (widget?.dataset?.mode === 'compact') { reset(); previousWidth = 0; return; }
+    if (widget?.dataset?.mode !== 'expanded') { reset(); previousWidth = 0; return; }
     if ((Math.abs(width - previousWidth) < .25 && (width > BASE_WIDTH) === (previousWidth > BASE_WIDTH))) return;
     const geometry = subnetGeometry(width);
     if (!geometry) return;

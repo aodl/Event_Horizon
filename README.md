@@ -54,8 +54,11 @@ A subscriber may use several Event Horizon instances for several ledgers. Once a
 The public site is [www.event-horizon-icp.com](https://www.event-horizon-icp.com/);
 the frontend also has its [canister URL](https://ej7c4-lyaaa-aaaar-qchrq-cai.icp.net/).
 Its [floating Fully on-chain map](canisters/frontend/README.md#floating-fully-on-chain-map)
-embeds one live ICP Dashboard subnet map in a fixed expandable thumbnail, independently of the
-subscription builder and ledger queries.
+starts as a fixed minimised left-edge tab and loads one live ICP Dashboard map only
+on Restore or Maximise. Its three presentations are independent of subscription
+and ledger queries. The [standalone example](examples/subnet-map-widget/README.md)
+is a separate source deliverable with a pending licensing decision, not a production
+dependency.
 These IDs identify the existing canonical ICP deployment, not local replicas or
 future additional instances. `icp.yaml` declares the CLI names;
 `.icp/data/mappings/ic.ids.json` resolves them in the `ic` environment. This
