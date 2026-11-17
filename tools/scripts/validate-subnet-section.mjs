@@ -501,6 +501,7 @@ try {
       livePage.on('framenavigated',f=>{if(f.url()===SUBNET_EMBED_URL)navigations++;});
       const started=Date.now();
       await livePage.goto(liveOrigin,{waitUntil:'domcontentloaded'});
+      await livePage.bringToFront();
       // Reload/history behavior is exercised separately with deterministic API transport.
       assert.equal(await livePage.locator('main details[open]').count(),0);
       try {
