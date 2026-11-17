@@ -30,7 +30,7 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
   external iframe src, Dashboard script or loading timer. The single minimised tab restores Thumbnail; first activation or an explicit #subnet-map request
   loads one independently maintained ICP Dashboard document. Event Horizon certifies
   its markup, fixed URL and fallback, not external assets or runtime data. Thumbnail
-  uses 600×520 at 25%; Expanded restores interaction in a native modal, approximately
+  uses 600×520 at 30% (25% in very narrow viewports); Expanded restores interaction in a native modal, approximately
   two-thirds desktop width. Non-modal content is inert and excluded from keyboard
   and accessibility navigation. Minimise/Restore/Maximise retain the same iframe;
   there is no permanent dismissal or persistent preference. Hiding loaded content

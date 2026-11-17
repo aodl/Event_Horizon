@@ -46,16 +46,26 @@
 .ic-subnet-map:not([data-mode="minimised"]) .ic-map-tab,
 .ic-subnet-map[data-mode="thumbnail"] [data-map-mode="thumbnail"],
 .ic-subnet-map[data-mode="expanded"] [data-map-mode="expanded"] { display: none; }
-.ic-subnet-map[data-mode="thumbnail"] .ic-map-embed { width: 150px; height: 130px; margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
-.ic-subnet-map[data-mode="thumbnail"] iframe { width: 600px; height: 520px; transform: scale(.25); transform-origin: top left; pointer-events: none; }
+.ic-subnet-map[data-mode="thumbnail"] {
+  --preview-scale: .30;
+  --preview-width: calc(600px * var(--preview-scale));
+  --preview-height: calc(520px * var(--preview-scale));
+}
+.ic-subnet-map[data-mode="thumbnail"] header { flex-wrap: wrap; justify-content: flex-end; gap: 2px; padding-right: 2px; }
+.ic-subnet-map[data-mode="thumbnail"] h2 { flex-basis: max-content; }
+@media (max-width: 218px) { .ic-subnet-map[data-mode="thumbnail"] h2 { flex-basis: 100%; } }
+@media (max-width: 184px) { .ic-subnet-map[data-mode="thumbnail"] { --preview-scale: .25; } }
+.ic-subnet-map[data-mode="thumbnail"] .ic-map-embed { width: var(--preview-width); height: var(--preview-height); margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
+.ic-subnet-map[data-mode="thumbnail"] iframe { width: 600px; height: 520px; transform: scale(var(--preview-scale)); transform-origin: top left; pointer-events: none; }
 .ic-subnet-map[data-mode="thumbnail"] .ic-map-loading { font-size: 11px; }
 .ic-subnet-map[data-mode="thumbnail"] [data-map-mode="minimised"] { position: relative; z-index: 2; }
-.ic-subnet-map[data-mode="thumbnail"] [data-map-mode="expanded"]::after { content: ""; position: absolute; inset: auto 0 0; height: 142px; z-index: 1; }
+.ic-subnet-map[data-mode="thumbnail"] [data-map-mode="expanded"]::after { content: ""; position: absolute; inset: auto 0 0; height: calc(var(--preview-height) + 12px); z-index: 1; }
 .ic-subnet-map[data-mode="minimised"] { width: calc(46px + env(safe-area-inset-left)); }
 .ic-subnet-map[data-mode="minimised"] .ic-map-preview { display: none; }
 .ic-subnet-map .ic-map-tab { display: flex; align-items: center; justify-content: center; width: 100%; padding: 16px 0; font: 500 .6rem/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
 .ic-map-tab span { writing-mode: vertical-rl; transform: rotate(180deg); }
 @media (max-height: 320px) { .ic-subnet-map { --ic-map-offset: 12px; } }
+@media (max-width: 218px) and (max-height: 360px) { .ic-subnet-map[data-mode="thumbnail"] { --ic-map-offset: 12px; } }
 .ic-subnet-map[data-mode="expanded"] { inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); width: min(66.667vw, 1200px); max-width: none; max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))); margin: auto; padding: 0; overflow: auto; }
 .ic-subnet-map[data-mode="expanded"] header { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--ic-map-line); }
 @media (max-width: 200px) {
@@ -66,7 +76,7 @@
 @media (max-width: 900px) { .ic-subnet-map[data-mode="expanded"] { width: calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right))); } }
 @media (forced-colors: active) { .ic-subnet-map { --ic-map-bg: Canvas; --ic-map-text: CanvasText; --ic-map-line: CanvasText; --ic-map-focus: Highlight; } }
 .ic-map-spinner { width: 28px; height: 28px; border: 2px solid var(--ic-map-line); border-top-color: var(--ic-map-focus); border-radius: 50%; animation: ic-map-spin 1.2s linear infinite; }
-.ic-subnet-map[data-mode="thumbnail"] .ic-map-loading { inset: 0 0 12px; width: 150px; margin-inline: auto; }
+.ic-subnet-map[data-mode="thumbnail"] .ic-map-loading { inset: 0 0 12px; width: var(--preview-width); margin-inline: auto; }
 .ic-subnet-map[data-mode="thumbnail"] .ic-map-spinner { width: 18px; height: 18px; }
 .ic-map-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @keyframes ic-map-spin { to { transform: rotate(360deg); } }

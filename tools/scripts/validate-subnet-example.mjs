@@ -14,6 +14,26 @@ async function maximise(page,method='click') {
   const control=page.getByRole('button',{name:'Maximise subnet map',exact:true});
   if(method==='keyboard')await control.press('Enter');else await control[method]();
 }
+async function assertThumbnail(dialog, pending = false) {
+  const g = await dialog.evaluate(n => {
+    const iframe = n.querySelector('iframe'), title = n.querySelector('h2');
+    const rect = node => node.getBoundingClientRect().toJSON();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    return { card: rect(n), map: rect(iframe), layout: [iframe.offsetWidth, iframe.offsetHeight],
+      overlay: rect(n.querySelector('.ic-map-loading')), text: [...range.getClientRects()].map(r => r.toJSON()),
+      buttons: [...n.querySelectorAll('header button')].filter(b => b.offsetWidth).map(rect) };
+  });
+  assert.equal(g.card.width, 224);
+  assert.deepEqual(g.layout, [600, 520]);
+  assert.deepEqual([g.map.width, g.map.height], [180, 156]);
+  assert.deepEqual([g.map.left - g.card.left, g.card.right - g.map.right], [22, 22]);
+  assert.equal(g.text.length, 1);
+  assert.equal(g.buttons.length, 2);
+  assert.ok(g.text[0].right <= g.buttons[0].left && g.buttons[0].right <= g.buttons[1].left);
+  assert.ok(g.buttons.every(b => b.width >= 44 && b.height >= 44 && b.top === g.buttons[0].top));
+  if (pending) assert.deepEqual(g.overlay, g.map);
+}
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const output=resolve(root,process.argv.find(a=>a.startsWith('--output='))?.slice(9)??'observations/subnet-example');await mkdir(output,{recursive:true});
 const files=new Set(['index.html','subnet-map-widget.js','subnet-map-widget.css']);
@@ -35,6 +55,7 @@ try{
   await page.waitForFunction(()=>document.querySelector('iframe').getAttribute('src')!==null);
   assert.equal(await page.getByRole('status').filter({hasText:'Loading subnet map…'}).count(),1);
   const spinner=await page.locator('.ic-map-loading').evaluate(n=>{const r=n.getBoundingClientRect(),s=n.querySelector('.ic-map-spinner').getBoundingClientRect(),t=n.querySelector('.ic-map-visually-hidden');return{dx:Math.abs(r.x+r.width/2-s.x-s.width/2),dy:Math.abs(r.y+r.height/2-s.y-s.height/2),size:n.querySelector('.ic-map-spinner').offsetWidth,text:t.textContent,width:t.getBoundingClientRect().width};});
+  await assertThumbnail(dialog, true);
   assert.ok(spinner.dx<1&&spinner.dy<1);assert.equal(spinner.size,18);assert.equal(spinner.text,'Loading subnet map…');assert.equal(spinner.width,1);
   assert.equal(typeof releaseInitial,'function');releaseInitial();await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');
 
@@ -44,7 +65,7 @@ try{
    for(const fraction of [.1,.5,.9]){const b=page.getByRole('button',{name:'Show Fully on-chain thumbnail'}),r=await b.boundingBox();await page.mouse.click(r.x+r.width/2,r.y+r.height*fraction);await mode('thumbnail');await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');}
    for(const key of ['Enter','Space']){const b=page.getByRole('button',{name:'Show Fully on-chain thumbnail'});await b.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');assert.equal(await b.evaluate(n=>n.matches(':focus-visible')),true);await page.keyboard.press(key);await mode('thumbnail');await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');}
    await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/}).click();await mode('thumbnail');await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);await page.frameLocator('iframe').locator('button').waitFor({state:'attached'});
-   assert.equal(documents,1);assert.equal(await dialog.evaluate(n=>n.scrollWidth>n.clientWidth),false);const f=await page.locator('iframe').boundingBox();assert.equal(f.width,150);assert.equal(f.height,130);assert.equal(await page.locator('.ic-map-embed').evaluate(n=>n.inert),true);
+   assert.equal(documents,1);assert.equal(await dialog.evaluate(n=>n.scrollWidth>n.clientWidth),false);await assertThumbnail(dialog);assert.equal(await page.locator('.ic-map-embed').evaluate(n=>n.inert),true);
    assert.equal(await page.getByRole('button',{name:'Minimise subnet map'}).evaluate(n=>{const r=n.getBoundingClientRect();return [1,r.height/2,r.height-2].every(y=>n.contains(document.elementFromPoint(r.x+r.width/2,r.y+y)));}),true,'preview must not cover any part of the Minimise target');
    await maximise(page,'click');await mode('expanded');assert.equal(await dialog.evaluate(n=>n.matches(':modal')),true);await page.waitForFunction(()=>{const e=document.querySelector('.ic-map-embed'),f=e.querySelector('iframe'),w=e.getBoundingClientRect().width;return Math.abs(f.getBoundingClientRect().width-w)<2&&Math.abs(e.getBoundingClientRect().height-520*Math.max(1,w/760))<2;});
    const bounds=await dialog.boundingBox(),width=viewport.width>900?Math.min(viewport.width*2/3,1200):viewport.width-24;assert.ok(Math.abs(bounds.width-width)<2);

@@ -156,6 +156,44 @@ async function assertSummaryTextContained(page) {
   }).map(n=>n.closest('section').id));
   assert.deepEqual(clipped,[],'heading text must remain inside each disclosure, including enlarged text');
 }
+async function assertThumbnail(page, { normal = false, loading = false } = {}) {
+  const g = await page.locator('#subnet-map').evaluate(dialog => {
+    const frame = dialog.querySelector('iframe');
+    const title = dialog.querySelector('h2');
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const rect = node => node.getBoundingClientRect().toJSON();
+    return {
+      viewport: innerWidth, card: rect(dialog), map: rect(frame),
+      layout: [frame.offsetWidth, frame.offsetHeight],
+      overlay: rect(dialog.querySelector('.subnet-section__loading')),
+      toolbar: rect(title.parentElement), title: rect(title),
+      text: [...range.getClientRects()].map(r => r.toJSON()),
+      buttons: [...title.parentElement.querySelectorAll('button')].filter(b => b.offsetWidth).map(rect),
+      overflow: dialog.scrollWidth > dialog.clientWidth,
+    };
+  });
+  const scale = g.viewport <= 184 ? .25 : .30;
+  assert.deepEqual(g.layout, [600, 520]);
+  assert.ok(Math.abs(g.map.width - 600 * scale) < .05 && Math.abs(g.map.height - 520 * scale) < .05, JSON.stringify(g));
+  const margins = [g.map.left - g.card.left, g.card.right - g.map.right];
+  assert.ok(margins.every(m => m >= 0) && Math.abs(margins[0] - margins[1]) < .05, JSON.stringify(g));
+  assert.equal(g.overflow, false);
+  if (normal) {
+    assert.ok(g.card.width >= 224 && g.card.width <= 244 && margins.every(m => m <= 32), JSON.stringify(g));
+    assert.equal(g.text.length, 1, JSON.stringify(g));
+    assert.ok(g.buttons.every(b => Math.abs(b.top - g.toolbar.top) < 3), JSON.stringify(g));
+  }
+  assert.equal(g.buttons.length, 2);
+  assert.ok(g.buttons.every(b => b.width >= 43.95 && b.height >= 43.95), JSON.stringify(g));
+  assert.ok(g.buttons[0].right <= g.buttons[1].left + .05, JSON.stringify(g));
+  assert.ok(g.text.every(t => t.left >= g.title.left - .05 && t.right <= g.title.right + .05 &&
+    g.buttons.every(b => t.right <= b.left || t.bottom <= b.top)), JSON.stringify(g));
+  if (loading) {
+    for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(g.overlay[key] - g.map[key]) < .05, JSON.stringify(g));
+  }
+  return { card: g.card, map: g.map, margins, buttons: g.buttons, titleLines: g.text.length, scale };
+}
 async function assertSpinner(page,thumbnail=false) {
  assert.equal(await page.getByRole('status').filter({hasText:'Loading subnet map…'}).count(),1,'pending status is accessible even while the preview frame is inert');
  const g=await page.locator('.subnet-section__loading').evaluate(n=>{const s=n.querySelector('.subnet-section__indicator').getBoundingClientRect(),r=n.getBoundingClientRect(),t=n.querySelector('.visually-hidden');return{deltaX:Math.abs(s.x+s.width/2-r.x-r.width/2),deltaY:Math.abs(s.y+s.height/2-r.y-r.height/2),size:n.querySelector('.subnet-section__indicator').offsetWidth,text:t.textContent,textBox:t.getBoundingClientRect().toJSON()};});
@@ -249,13 +287,13 @@ async function verifyZoomAndCache() {
       await assertMinimiseHitTarget(page);
       const thumbnail=await page.locator('#subnet-map').boundingBox(),thumbnailNavigation=await page.locator('.hero__compact-mark').evaluate(n=>({visible:getComputedStyle(n).visibility==='visible',rect:n.getBoundingClientRect().toJSON()}));
       assert.ok(!thumbnailNavigation.visible||thumbnailNavigation.rect.right<=thumbnail.x||thumbnailNavigation.rect.x>=thumbnail.x+thumbnail.width||thumbnailNavigation.rect.bottom<=thumbnail.y||thumbnailNavigation.rect.y>=thumbnail.y+thumbnail.height,JSON.stringify({viewport,factor,thumbnail,thumbnailNavigation}));
-      const preview=await page.locator('iframe').boundingBox();assert.ok(Math.abs(preview.width-150)<.05&&Math.abs(preview.height-130)<.05,JSON.stringify(preview));
+      const thumbnailLayout = await assertThumbnail(page);
       await maximise(page,'keyboard');await assertGeometry(page);
       const geometry=await page.locator('#subnet-map').evaluate(n=>({viewportWidth:innerWidth,viewportHeight:innerHeight,rect:n.getBoundingClientRect().toJSON(),toolbar:n.querySelector('.subnet-widget__toolbar').getBoundingClientRect().toJSON(),overflow:n.scrollWidth>n.clientWidth}));
       assert.ok(geometry.toolbar.y>=0&&geometry.toolbar.bottom<=geometry.viewportHeight);assert.equal(geometry.overflow,false);
       const heading=await page.locator('.subnet-widget__toolbar').evaluate(n=>{const range=document.createRange();range.selectNodeContents(n.querySelector('h2'));return{text:[...range.getClientRects()].map(r=>r.toJSON()),buttons:[...n.querySelectorAll('button')].map(b=>b.getBoundingClientRect()).filter(r=>r.width).map(r=>r.toJSON())};});
       assert.ok(heading.text.every(t=>heading.buttons.every(b=>t.right<=b.left||t.left>=b.right||t.bottom<=b.top||t.top>=b.bottom)),JSON.stringify({viewport,factor,heading}));
-      assert.equal(documents,1);result.zoom.push({viewport,factor,actual,...geometry});console.log('zoom:',viewport,factor,'passed');
+      assert.equal(documents,1);result.zoom.push({viewport,factor,actual,thumbnailLayout,...geometry});console.log('zoom:',viewport,factor,'passed');
     }
     }
     const token=await page.evaluate(()=>{globalThis.cacheToken=crypto.randomUUID();addEventListener('pageshow',e=>globalThis.restored=e.persisted);return cacheToken;});
@@ -443,7 +481,7 @@ try {
       const g=await widget.evaluate(n=>{const f=n.querySelector('iframe'),e=n.querySelector('.subnet-section__embed');return {position:getComputedStyle(n).position,rect:n.getBoundingClientRect().toJSON(),overflow:n.scrollWidth>n.clientWidth,width:f.offsetWidth,height:f.offsetHeight,visual:f.getBoundingClientRect().toJSON(),inert:e.inert,hidden:e.getAttribute('aria-hidden'),tabIndex:f.tabIndex,pointer:getComputedStyle(f).pointerEvents};});
       assert.ok(Math.abs(height-g.rect.bottom-50)<1);
       const heading=await widget.locator('h2').evaluate(n=>{const r=n.getBoundingClientRect(),p=n.closest('dialog').getBoundingClientRect(),c=getComputedStyle(n);return{padding:r.left-p.left,uppercase:c.textTransform,weight:c.fontWeight};});assert.equal(heading.uppercase,'uppercase');assert.equal(heading.weight,'500');assert.ok(heading.padding>=14);
-      assert.equal(g.rect.x,0);assert.equal(g.overflow,false);assert.equal(g.position,'fixed');assert.equal(g.width,600);assert.equal(g.height,520);assert.equal(g.visual.width,150);assert.equal(g.visual.height,130);
+      assert.equal(g.rect.x,0);assert.equal(g.overflow,false);assert.equal(g.position,'fixed');assert.equal(g.width,600);assert.equal(g.height,520);const thumbnailLayout=await assertThumbnail(page,{normal:true});
       assert.ok(g.inert);assert.equal(g.hidden,'true');assert.equal(g.tabIndex,-1);assert.equal(g.pointer,'none');
       await assertMinimiseHitTarget(page);
       await page.evaluate(()=>scrollTo({top:1000,behavior:'instant'}));assert.ok(Math.abs((await widget.boundingBox()).y-g.rect.y)<1);
@@ -479,14 +517,14 @@ try {
         const intro=await page.locator(`#${id} > details > .section-disclosure__body > .section-disclosure__intro`).evaluate(n=>{const r=n.getBoundingClientRect();return{width:r.width,parent:n.parentElement.clientWidth,maxWidth:getComputedStyle(n).maxWidth,overflow:document.documentElement.scrollWidth>innerWidth};});
         assert.equal(intro.maxWidth,'none');assert.ok(Math.abs(intro.width-intro.parent)<2);assert.equal(intro.overflow,false);intros.push({id,...intro});
         if(id==='protocol-overview') {
-          icons=await page.locator('.project-detail h3').evaluateAll(ns=>ns.map(n=>{const i=n.querySelector('img'),t=n.querySelector('span'),a=i.getBoundingClientRect(),b=t.getBoundingClientRect();return{width:a.width,height:a.height,delta:Math.abs(a.y+a.height/2-b.y-b.height/2),gap:b.x-a.right,loaded:i.complete&&i.naturalWidth>0};}));
+          icons=await page.locator('.project-detail h3').evaluateAll(ns=>ns.map(n=>{const i=n.querySelector('img'),t=n.querySelector('span'),a=i.getBoundingClientRect(),b=t.getBoundingClientRect();return{width:a.width,height:a.height,delta:Math.abs(a.y+a.height/2-b.y-b.height/2),gap:b.x-a.right,expectedGap:parseFloat(getComputedStyle(document.documentElement).fontSize),loaded:i.complete&&i.naturalWidth>0};}));
           if(width===320&&name==='chromium')await shot(page,'mobile-protocol-headings');
-          for(const [i,g]of icons.entries()){assert.equal(g.width,i===3?52:32);assert.equal(g.height,i===3?52:32);assert.ok(g.delta<1&&g.gap>0&&g.loaded,JSON.stringify(g));}
+          for(const [i,g]of icons.entries()){assert.equal(g.width,i===3?52:32);assert.equal(g.height,i===3?52:32);assert.ok(g.delta<1&&Math.abs(g.gap-g.expectedGap)<.05&&g.loaded,JSON.stringify(g));}
         }
       }
       assert.equal(await page.locator('#protocol .section-label').textContent(),'Design Principles');
       const intro=intros[0];
-      record.viewports.push({width,height,minimised:tab,thumbnail:g,expanded,intro,intros,icons});console.log(`${name}: ${width}×${height} three-state lifecycle passed`);
+      record.viewports.push({width,height,minimised:tab,thumbnail:{...g,layout:thumbnailLayout},expanded,intro,intros,icons});console.log(`${name}: ${width}×${height} three-state lifecycle passed`);
     }
     await page.setViewportSize({width:422,height:195});
     await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/,exact:true}).click();await mode('thumbnail');await assertMinimiseHitTarget(page);
@@ -495,7 +533,7 @@ try {
     await page.locator('#protocol-overview details').evaluate(n=>n.open=true);await page.waitForTimeout(350);assert.equal(await page.locator('.project-detail h3').evaluateAll(ns=>ns.every(n=>{const a=n.querySelector('img').getBoundingClientRect(),b=n.querySelector('span').getBoundingClientRect();const range=document.createRange();range.selectNodeContents(n.querySelector('span'));return Math.abs(a.y+a.height/2-b.y-b.height/2)<1&&a.right<b.left&&b.right<=innerWidth&&[...range.getClientRects()].every(r=>r.right<=b.right+1);})),true,'enlarged multiline headings retain icon centring without overflow');
     let tab=await widget.boundingBox();assert.equal(tab.x,0);assert.ok(tab.y>=0&&tab.height<568);
     await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/,exact:true}).click();await mode('thumbnail');
-    await assertMinimiseHitTarget(page);
+    await assertMinimiseHitTarget(page);await assertThumbnail(page);
     assert.equal(await widget.evaluate(n=>n.querySelector('.subnet-widget__toolbar').getBoundingClientRect().bottom<=n.querySelector('.subnet-widget__preview').getBoundingClientRect().top),true,'enlarged toolbar and preview never overlap');
     await maximise(page,'click');const toolbar=await page.locator('.subnet-widget__toolbar').boundingBox();assert.ok(toolbar.y>=0&&toolbar.y+toolbar.height<=568/2);
     await page.emulateMedia({reducedMotion:'reduce',forcedColors:'active'});assert.equal(await page.locator('#protocol-overview details').evaluate(n=>getComputedStyle(n,'::details-content').transitionDuration),'0s');
@@ -512,7 +550,7 @@ try {
     await slowPage.route(SUBNET_EMBED_URL,async route=>{slowDocuments++;await new Promise(r=>release=r);await route.fulfill({contentType:'text/html',body:'<!doctype html><button>Late country fixture</button>'});});
     await slowPage.goto(entry==='fragment'?`${origin}/#subnet-map`:origin,{waitUntil:'domcontentloaded'});
     await slowPage.bringToFront();
-    if(entry==='thumbnail'){assert.equal(slowDocuments,0);await slowPage.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/,exact:true}).click();await assertSpinner(slowPage,true);await maximise(slowPage,'click');}
+    if(entry==='thumbnail'){assert.equal(slowDocuments,0);await slowPage.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/,exact:true}).click();await assertSpinner(slowPage,true);await assertThumbnail(slowPage,{loading:true});await shot(slowPage,'thumbnail-spinner');await maximise(slowPage,'click');}
     await slowPage.waitForFunction(()=>document.querySelector('#subnet-map').matches(':modal'));
     await slowPage.waitForTimeout(800);
     await assertSpinner(slowPage);await shot(slowPage,'spinner-pending');assert.equal(await slowPage.locator('.subnet-section__loading').evaluate(n=>n.hidden),false,'blank document never clears pending external loading');

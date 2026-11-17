@@ -206,8 +206,9 @@ Both non-modal backgrounds meet `left: 0`. Left safe-area padding protects their
 controls internally without a visible gutter; bottom placement respects the
 bottom safe-area inset. Both non-modal modes use a 50px bottom offset (38px higher than before), falling back to 12px at viewport heights of 320px or less; Expanded remains centred. The vertical tab uses `writing-mode: vertical-rl` and a
 180-degree title rotation. The entire tab is one native button with a visible focus ring; Enter/Space restore Thumbnail. Thumbnail geometry remains
-600×520 CSS pixels uniformly scaled to .25, reserving 150×130 pixels inside a
-224px-wide toolbar/frame. Its wrapper is inert and aria-hidden; iframe tabindex
+600×520 CSS pixels uniformly scaled to .30, reserving 180×156 pixels inside a
+224px card (up to 244px with large desktop type). Exceptionally narrow
+viewports use the smaller 150×130px preview. Its wrapper is inert and aria-hidden; iframe tabindex
 is -1 and pointer events are disabled. The hidden minimised preview uses
 `display: none` without removing or blanking the frame.
 
