@@ -27,7 +27,7 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
 - The floating “Fully on-chain” widget starts as a minimised left-edge tab with no
-  external iframe src, Dashboard script or loading timer. First Restore/Maximise
+  external iframe src, Dashboard script or loading timer. The single minimised tab restores Thumbnail; first activation or an explicit #subnet-map request
   loads one independently maintained ICP Dashboard document. Event Horizon certifies
   its markup, fixed URL and fallback, not external assets or runtime data. Thumbnail
   uses 600×520 at 25%; Expanded restores interaction in a native modal, approximately

@@ -94,3 +94,11 @@ test('explanations expose their requested external resources as separate actions
     assert.ok(html.includes(`href="${url}"`)); assert.ok(!nav.includes(url));
   }
 });
+
+test('only Protocol heading icons grow, with natural flex centring and original artwork',async()=>{
+ const css=await readFile(publicFile('styles.css'),'utf8');
+ for(const [id,,,]of expected){const heading=html.match(new RegExp(`<h3 id="${id}-title">([\\s\\S]*?)<\\/h3>`))[1];const size=id==='internet-computer'?52:32;assert.match(heading,new RegExp(`width="${size}" height="${size}"`));}
+ assert.match(css,/\.project-detail h3 \{ display: flex; align-items: center;/);
+ assert.doesNotMatch(css,/margin-top: calc\(\(1\.15em/);
+ assert.match(css,/\.hero__fact-icon \{ flex: none; width: 24px; height: 24px;/);
+});

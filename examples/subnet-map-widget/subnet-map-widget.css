@@ -1,15 +1,16 @@
 /* Self-contained defaults. No Event Horizon tokens or assets. See README.md. */
 .ic-subnet-map {
   --ic-map-bg: #100e0b;
+  --ic-map-offset: 50px;
   --ic-map-text: #eee9e1;
   --ic-map-line: #514a40;
   --ic-map-focus: #d7a46d;
   box-sizing: border-box;
   position: fixed;
-  inset: auto auto max(12px, env(safe-area-inset-bottom)) 0;
-  width: calc(204px + env(safe-area-inset-left));
+  inset: auto auto max(var(--ic-map-offset), env(safe-area-inset-bottom)) 0;
+  width: calc(224px + env(safe-area-inset-left));
   max-width: 100vw;
-  max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+  max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(var(--ic-map-offset), env(safe-area-inset-bottom)));
   overflow: auto;
   margin: 0;
   padding: 0 0 0 env(safe-area-inset-left);
@@ -22,8 +23,8 @@
 .ic-subnet-map *, .ic-subnet-map *::before, .ic-subnet-map *::after { box-sizing: border-box; }
 .ic-subnet-map:not([open]) { display: none; }
 .ic-subnet-map:not([data-mode="expanded"]) { scrollbar-width: none; }
-.ic-subnet-map header { display: flex; align-items: center; gap: 8px; padding: 0 6px; background: var(--ic-map-bg); }
-.ic-subnet-map h2 { flex: 1; min-width: 0; margin: 0; font: 500 .75em/1.5 system-ui, sans-serif; }
+.ic-subnet-map header { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 14px; background: var(--ic-map-bg); }
+.ic-subnet-map h2 { flex: 1; min-width: 0; margin: 0; font: 500 .75em/1.5 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
 .ic-subnet-map button { flex: none; min-width: 44px; min-height: 44px; padding: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .ic-subnet-map :focus-visible { outline: 2px solid var(--ic-map-focus); outline-offset: -3px; }
 .ic-map-icon { position: relative; display: inline-block; width: 12px; height: 10px; border: 1px solid currentColor; }
@@ -41,7 +42,8 @@
 .ic-map-attribution a { color: inherit; text-underline-offset: .2em; }
 .ic-map-status:empty { display: none; }
 .ic-subnet-map:not([data-mode="expanded"]) .ic-map-attribution,
-.ic-subnet-map[data-mode="minimised"] [data-map-mode="minimised"],
+.ic-subnet-map[data-mode="minimised"] header,
+.ic-subnet-map:not([data-mode="minimised"]) .ic-map-tab,
 .ic-subnet-map[data-mode="thumbnail"] [data-map-mode="thumbnail"],
 .ic-subnet-map[data-mode="expanded"] [data-map-mode="expanded"] { display: none; }
 .ic-subnet-map[data-mode="thumbnail"] .ic-map-embed { width: 150px; height: 130px; margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
@@ -51,11 +53,21 @@
 .ic-subnet-map[data-mode="thumbnail"] [data-map-mode="expanded"]::after { content: ""; position: absolute; inset: auto 0 0; height: 142px; z-index: 1; }
 .ic-subnet-map[data-mode="minimised"] { width: calc(46px + env(safe-area-inset-left)); }
 .ic-subnet-map[data-mode="minimised"] .ic-map-preview { display: none; }
-.ic-subnet-map[data-mode="minimised"] header { flex-direction: column; gap: 0; padding: 0; }
-.ic-subnet-map[data-mode="minimised"] h2 { order: 1; flex: none; writing-mode: vertical-rl; transform: rotate(180deg); margin: 12px 0; text-transform: uppercase; letter-spacing: .14em; }
+.ic-subnet-map .ic-map-tab { display: flex; align-items: center; justify-content: center; width: 100%; padding: 16px 0; font: 500 .6rem/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+.ic-map-tab span { writing-mode: vertical-rl; transform: rotate(180deg); }
+@media (max-height: 320px) { .ic-subnet-map { --ic-map-offset: 12px; } }
 .ic-subnet-map[data-mode="expanded"] { inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); width: min(66.667vw, 1200px); max-width: none; max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))); margin: auto; padding: 0; overflow: auto; }
 .ic-subnet-map[data-mode="expanded"] header { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--ic-map-line); }
+@media (max-width: 200px) {
+  .ic-subnet-map[data-mode="expanded"] header { flex-wrap: wrap; justify-content: flex-end; padding-top: 8px; }
+  .ic-subnet-map[data-mode="expanded"] h2 { flex-basis: 100%; }
+}
 .ic-subnet-map::backdrop { background: rgb(0 0 0 / .8); }
 @media (max-width: 900px) { .ic-subnet-map[data-mode="expanded"] { width: calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right))); } }
 @media (forced-colors: active) { .ic-subnet-map { --ic-map-bg: Canvas; --ic-map-text: CanvasText; --ic-map-line: CanvasText; --ic-map-focus: Highlight; } }
-/* No presentation motion is required, including under prefers-reduced-motion. */
+.ic-map-spinner { width: 28px; height: 28px; border: 2px solid var(--ic-map-line); border-top-color: var(--ic-map-focus); border-radius: 50%; animation: ic-map-spin 1.2s linear infinite; }
+.ic-subnet-map[data-mode="thumbnail"] .ic-map-loading { inset: 0 0 12px; width: 150px; margin-inline: auto; }
+.ic-subnet-map[data-mode="thumbnail"] .ic-map-spinner { width: 18px; height: 18px; }
+.ic-map-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@keyframes ic-map-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ic-map-spinner { animation: none; } }

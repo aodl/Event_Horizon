@@ -7,6 +7,8 @@ test('exactly six explicit, initially closed, native grouped disclosures retain 
   const html = await readFile(new URL('../public/index.html',import.meta.url),'utf8');
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
   assert.equal(new Set(ids).size,ids.length);
+  assert.match(html, /<span class="section-label">Design Principles<\/span>/);
+  assert.doesNotMatch(html, /<span class="section-label">Design<\/span>/);
   const members = [...html.matchAll(/<section\b([^>]*)>\s*<details class="section-disclosure" name="event-horizon-sections">\s*<summary class="section-disclosure__summary">\s*(<h2[\s\S]*?<\/h2>)\s*<\/summary>\s*<div class="section-disclosure__body">/g)];
   assert.deepEqual(members.map(m=>m[1].match(/id="([^"]+)"/)[1]),order);
   assert.equal(html.match(/<details\b/g).length,6);
@@ -114,4 +116,12 @@ test('a new native anchor navigation cannot be overwritten by an earlier queued 
  f.events.get('click')({button:0,isTrusted:true,detail:1,pointerType:'mouse',target:{closest:s=>s==='a[href]'?link:null}});
  f.location('#top');f.events.get('toggle')({target:f.details});
  assert.equal(f.win.location.hash,'#top');assert.equal(f.details.open,true);assert.equal(f.pushes.length,0);
+});
+
+test('all six introduction paragraphs use natural width while detailed editorial paragraphs retain their measure',async()=>{
+ const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8'),css=await readFile(new URL('../public/styles.css',import.meta.url),'utf8');
+ assert.equal((html.match(/<p class="section-disclosure__intro">/g)||[]).length,6);
+ assert.doesNotMatch(css,/\.section-disclosure__intro\s*\{[^}]*max-width/);
+ assert.doesNotMatch(css,/#protocol-overview > details/);
+ assert.match(css,/\.project-detail p \{ max-width: 65ch;/);
 });

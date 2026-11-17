@@ -180,13 +180,13 @@ See the [architecture overview](../../docs/architecture/overview.md), [productio
 ## Floating Fully on-chain map
 
 One fixed left-edge native dialog has exactly three presentations. Fresh pages
-start **Minimised**, a 46px vertical tab. Its native `open` property avoids
+start **Minimised**, one clickable 46px vertical tab. Its native `open` property avoids
 autofocus, so the first Tab still reaches the page's Skip link. There is no
 permanent dismissal, storage preference or automatic Dashboard startup.
 
 | Presentation | Visible controls | Map interaction |
 | --- | --- | --- |
-| Minimised | Restore thumbnail (stacked squares), Maximise (square) | Hidden and inert |
+| Minimised | Entire tab → Thumbnail | Hidden and inert |
 | Thumbnail | Minimise (dash), Maximise (square) | Scaled preview; inert |
 | Expanded | Minimise (dash), Restore thumbnail (stacked squares) | Interactive native modal |
 
@@ -204,10 +204,10 @@ Accordion fragments and form state remain independent.
 
 Both non-modal backgrounds meet `left: 0`. Left safe-area padding protects their
 controls internally without a visible gutter; bottom placement respects the
-bottom safe-area inset. The vertical tab uses `writing-mode: vertical-rl` and a
-180-degree title rotation, with two 44px hit targets. Thumbnail geometry remains
+bottom safe-area inset. Both non-modal modes use a 50px bottom offset (38px higher than before), falling back to 12px at viewport heights of 320px or less; Expanded remains centred. The vertical tab uses `writing-mode: vertical-rl` and a
+180-degree title rotation. The entire tab is one native button with a visible focus ring; Enter/Space restore Thumbnail. Thumbnail geometry remains
 600×520 CSS pixels uniformly scaled to .25, reserving 150×130 pixels inside a
-204px-wide toolbar/frame. Its wrapper is inert and aria-hidden; iframe tabindex
+224px-wide toolbar/frame. Its wrapper is inert and aria-hidden; iframe tabindex
 is -1 and pointer events are disabled. The hidden minimised preview uses
 `display: none` without removing or blanking the frame.
 
@@ -224,13 +224,19 @@ W > 760 scales a 760×520 layout uniformly by W/760 and reserves its full height
 Both non-modal presentations bypass that calculation. Missing observers leave
 the expanded map at native responsive width. There is no scroll listener.
 
+Widget headings are uppercase, weight 500 with consistent tracking and 14px left toolbar padding. Normal loading shows a centred 18px thumbnail / 1.75rem expanded CSS spinner with visually hidden status text; reduced motion uses a static ring. The existing 500ms settle, 12s slow explanation and late recovery are unchanged.
+
+The loading overlay is a sibling of the inert frame wrapper, so its visually hidden status remains accessible in Thumbnail as well as Expanded. It is positioned over the same map region without changing the iframe or loading controller.
+
+At effective viewport widths of 200px or less, the expanded toolbar gives its title a separate row, preserving both 44px controls without overlap. Actual Chromium zoom validation covers all eight requested window sizes at 100%, 150% and 200%.
+
 The exact approved external URL remains:
 
 ```text
 https://dashboard.internetcomputer.org/embed/subnet-map?subnet=pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae
 ```
 
-The first Restore or Maximise initializes the loader and assigns the URL exactly
+The first tab activation initializes the loader and assigns the URL exactly
 once, after the requested presentation is visible. A direct `#subnet-map` counts
 as an explicit request. Before activation there is no external src, Dashboard
 request, Dashboard script execution or Dashboard loading timer. The initial blank
@@ -253,7 +259,7 @@ of external scripts, timers or network requests. No suspension protocol, resourc
 manager, runtime telemetry, external data integration or Event Horizon backend
 query is added. Hero artwork, ledger polling/rates, status refresh, pricing and
 preview safeguards are unchanged. Baseline/candidate traces and network figures
-are recorded in the [current validation report](../../docs/codex/navigation-widget-validation.md).
+are recorded in the [original performance report](../../docs/codex/navigation-widget-validation.md).
 
 The independent [standalone example](../../examples/subnet-map-widget/README.md)
 uses only its own HTML/JS/CSS. It is neither imported into this bundle nor served
@@ -275,11 +281,11 @@ No top navigation, external DOM manipulation or message protocol is introduced.
 
 Exactly six direct accordion members use native `details` and the shared name
 `event-horizon-sections`, in order: The protocol, 01 / Choose, 02 / Compose,
-03 / Complete, Design, Open deployment. `protocol-overview` contains the original
+03 / Complete, Design Principles, Open deployment. `protocol-overview` contains the original
 introduction and four ordinary semantic subsections: Open Source & Verifiable,
 Engineered for Immutability, Perpetual Endowment Funding and Powered by Internet
 Computer Protocol. Their original text, icons, links, fragment IDs and focus targets
-remain. `protocol` and `protocol-title` still identify Design and its four unchanged
+remain. `protocol` and `protocol-title` still identify Design Principles and its four unchanged
 principle articles. Hero and footer remain outside the group.
 
 All start closed without a relevant fragment. Native grouping permits zero or one
@@ -317,9 +323,7 @@ focused hidden content still repairs focus to its summary. One cancellable,
 bounded post-animation correction preserves deep-link geometry; later user focus
 is respected. No general router, expansion-state store or scrolling loop is added.
 
-Only the introductory paragraph directly inside `#protocol-overview` removes its
-65ch cap. It uses the available width, wraps naturally and retains its typography;
-unrelated paragraph limits remain unchanged.
+All six accordion introductions use their available content width and wrap naturally, with unchanged typography. The four detailed Protocol subsections retain their 65ch editorial paragraph measure. Protocol heading icons alone use 32px boxes (ICP: 52px), centred against the entire multiline heading with flexbox. Scoped wrapping keeps long words inside the column with enlarged text; hero icons and artwork remain unchanged.
 
 After esbuild, run `npm run test:frontend-unit`,
 `node tools/scripts/validate-subnet-section.mjs --live --zoom`,
@@ -336,7 +340,7 @@ URL/reload focus tests use deterministic API transport separately. WPE can repor
 errors during deliberate reloads; the same exact errors reproduce on the reviewed
 production baseline. Fresh-session errors and all CSP errors remain strict checks.
 PocketIC checks exact certified bytes/CSP and confirms example paths remain 404s.
-See the [current validation report](../../docs/codex/navigation-widget-validation.md)
+See the [original performance report](../../docs/codex/navigation-widget-validation.md)
 for measured results and limitations. Historical reports describe their original
 revisions. WebKit automation does not establish physical Safari/device or manual
 screen-reader testing. Wide proportional scaling can offset magnification until
