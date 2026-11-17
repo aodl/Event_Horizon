@@ -7774,23 +7774,33 @@ mod tests {
             }));
         }
 
-        let missing_preview: HttpResponse = query(
-            &pic,
-            id,
-            "http_request",
-            HttpRequest {
-                method: "GET".to_string(),
-                url: "/og/missing.jpg".to_string(),
-                headers: vec![],
-                body: vec![],
-                certificate_version: Some(2),
-            },
-        )?;
-        assert_eq!(missing_preview.status_code, 404);
-        assert_eq!(
-            missing_preview.body,
-            std::fs::read(workspace_root()?.join("canisters/frontend/public/404.html"))?
-        );
+        for missing_url in [
+            "/og/missing.jpg",
+            "/examples/subnet-map-widget/index.html",
+            "/subnet-map-widget.js",
+            "/subnet-map-widget.css",
+        ] {
+            let missing_preview: HttpResponse = query(
+                &pic,
+                id,
+                "http_request",
+                HttpRequest {
+                    method: "GET".to_string(),
+                    url: missing_url.to_string(),
+                    headers: vec![],
+                    body: vec![],
+                    certificate_version: Some(2),
+                },
+            )?;
+            assert_eq!(missing_preview.status_code, 404);
+            assert!(missing_preview.headers.iter().any(|(name, value)| {
+                name.eq_ignore_ascii_case("IC-Certificate") && !value.is_empty()
+            }));
+            assert_eq!(
+                missing_preview.body,
+                std::fs::read(workspace_root()?.join("canisters/frontend/public/404.html"))?
+            );
+        }
 
         let removed_update = pic.update_call(
             id,
@@ -7858,7 +7868,7 @@ mod tests {
         assert!(html.contains("id=\"operating-balance\""));
         assert!(html.contains("id=\"operating-progress\""));
         assert!(html.contains("<dialog id=\"subnet-map\""));
-        assert!(html.contains("class=\"subnet-widget\" data-mode=\"compact\""));
+        assert!(html.contains("class=\"subnet-widget\" data-mode=\"minimised\""));
         assert!(html.contains("class=\"subnet-section__embed\" inert aria-hidden=\"true\""));
         let main = html.find("<main id=\"main-content\"").unwrap();
         assert!(html.find("</main>").unwrap() < html.find("<dialog").unwrap());

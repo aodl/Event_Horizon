@@ -310,6 +310,19 @@ assert "object-src 'self'; frame-src 'self' https://dashboard.internetcomputer.o
 assert "style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" in frontend
 assert '<span class="section-label">Open deployment</span>' in frontend_index
 assert frontend_index.count('name="event-horizon-sections"') == 6
+assert '<dialog id="subnet-map" class="subnet-widget" data-mode="minimised"' in frontend_index
+assert 'Dismiss subnet map' not in frontend_index
+for label in ['Minimise subnet map', 'Restore subnet thumbnail', 'Maximise subnet map']:
+    assert f'aria-label="{label}"' in frontend_index
+widget_source=(root/'canisters/frontend/public/subnet-widget.js').read_text()
+assert 'frame.remove' not in widget_source and 'setTimeout' not in widget_source
+assert 'requestIdleCallback' not in widget_source
+assert 'initICSubnetMap' not in (root/'canisters/frontend/public/app.bundle.js').read_text()
+assert '../examples/' not in frontend_app
+example_source=(root/'examples/subnet-map-widget/subnet-map-widget.js').read_text()
+assert 'https://dashboard.internetcomputer.org' in example_source
+assert 'import ' not in example_source and 'event-horizon' not in example_source.lower()
+
 assert 'All Event Horizon canisters are hosted on one of the largest ICP subnets.' not in frontend_index
 assert frontend_index.index('id="protocol-overview"') < frontend_index.index('id="open-source"') < frontend_index.index('id="network"') < frontend_index.index('<dialog id="subnet-map"')
 assert 'Additional immutable instances can be deployed by anyone for compatible ICRC token ledgers.' in frontend_index

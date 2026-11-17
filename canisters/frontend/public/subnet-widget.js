@@ -1,71 +1,53 @@
 import { initSubnetLayout } from './subnet-layout.js';
 import { initSubnetLoading } from './subnet-loading.js';
 
-// The dialog and its frame stay mounted across native non-modal/modal switching.
+// One mounted dialog/frame; data-mode owns presentation, previousMode only Escape.
 export function initSubnetWidget(documentRef, windowRef) {
   const dialog = documentRef.querySelector('#subnet-map');
   if (!dialog?.show || !dialog.showModal) return { dispose() {} };
   const frame = dialog.querySelector('iframe');
   const embed = dialog.querySelector('.subnet-section__embed');
-  const expand = dialog.querySelector('.subnet-expand');
-  const minimise = dialog.querySelector('.subnet-minimise');
-  const dismiss = dialog.querySelector('.subnet-dismiss');
-  let dismissed = false, returnFocus, loading;
   const layout = initSubnetLayout(documentRef, windowRef);
-  const restoreFocus = fallback => {
-    const destination = returnFocus?.isConnected && returnFocus !== documentRef.body && !dialog.contains(returnFocus) ? returnFocus : fallback;
-    destination?.focus({ preventScroll: true });
-    if (documentRef.activeElement !== destination) fallback?.focus({ preventScroll: true });
+  let previousMode = 'thumbnail', loading;
+  const start = () => {
+    if (loading) return;
+    loading = initSubnetLoading(documentRef, windowRef);
+    frame.src = frame.dataset.src;
   };
-  const present = expanded => {
-    if (dismissed || (dialog.open && dialog.dataset.mode === (expanded ? 'expanded' : 'compact'))) return;
-    if (expanded) returnFocus = documentRef.activeElement;
-    // Close before changing mode: showModal cannot promote an open non-modal dialog.
-    dialog.close();
-    dialog.dataset.mode = expanded ? 'expanded' : 'compact';
+  const present = (mode, fragment = false) => {
+    const current = dialog.dataset.mode;
+    if (mode === current) return;
+    const expanded = mode === 'expanded', modalChange = expanded || current === 'expanded';
+    if (expanded) previousMode = fragment ? 'thumbnail' : current;
+    // Only modal/non-modal switching requires closing the native dialog.
+    if (modalChange) dialog.close();
+    dialog.dataset.mode = mode;
     embed.inert = !expanded;
     embed.setAttribute('aria-hidden', String(!expanded));
     frame.tabIndex = expanded ? 0 : -1;
-    if (expanded) dialog.showModal();
-    else dialog.show();
+    if (modalChange) expanded ? dialog.showModal() : dialog.show();
     layout.update?.();
-    if (expanded) minimise.focus({ preventScroll: true });
-    else restoreFocus(expand);
+    dialog.scrollTop = 0; // Keep the destination toolbar visible in short views.
+    if (mode !== 'minimised') start();
+    dialog.querySelector(expanded ? '.subnet-minimise' : mode === 'minimised' ? '.subnet-restore' : '.subnet-maximise').focus({ preventScroll: true });
   };
-  const open = () => present(true);
-  const shrink = () => present(false);
-  const remove = () => {
-    if (dismissed) return;
-    const focused = dialog.contains(documentRef.activeElement);
-    dismissed = true;
-    windowRef.clearTimeout(startTimer);
-    loading?.dispose();
-    layout.dispose();
-    dialog.close();
-    frame.remove(); // Release the external application only on permanent dismissal.
-    if (focused) restoreFocus(documentRef.querySelector('main > section summary'));
+  const click = event => {
+    const control = event.target.closest?.('button[data-subnet-mode]');
+    if (control && dialog.contains(control)) present(control.dataset.subnetMode);
   };
-  const cancel = event => { event.preventDefault(); shrink(); };
-  const hashchange = () => { if (windowRef.location.hash === '#subnet-map') open(); };
-  expand.addEventListener('click', open);
-  minimise.addEventListener('click', shrink);
-  dismiss.addEventListener('click', remove);
+  const cancel = event => { event.preventDefault(); present(previousMode); };
+  const hashchange = () => { if (windowRef.location.hash === '#subnet-map') present('expanded', true); };
+  dialog.addEventListener('click', click);
   dialog.addEventListener('cancel', cancel);
   windowRef.addEventListener('hashchange', hashchange);
-  // Schedule after the main app has started its independent queries and rendering.
-  const startTimer = windowRef.setTimeout(() => {
-    if (dismissed) return;
-    loading = initSubnetLoading(documentRef, windowRef);
-    frame.src = frame.dataset.src;
-  }, 0);
-  // Native non-modal presentation without taking the page's initial focus.
+  // Avoid taking initial focus from the page's Skip link.
   dialog.open = true;
   hashchange();
   return { dispose() {
-    remove();
-    expand.removeEventListener('click', open);
-    minimise.removeEventListener('click', shrink);
-    dismiss.removeEventListener('click', remove);
+    loading?.dispose();
+    layout.dispose();
+    dialog.close();
+    dialog.removeEventListener('click', click);
     dialog.removeEventListener('cancel', cancel);
     windowRef.removeEventListener('hashchange', hashchange);
   } };

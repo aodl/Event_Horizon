@@ -26,23 +26,30 @@ subscriber boundary, separate from Event Horizon's funding-based admission.
 - For a subscriber trusting multiple Event Horizon instances, the authenticated caller defines the observed-ledger context of every poke.
 - Public native status and logs remain the operational interface.
 - The mutable frontend presents pricing obtained by a direct read-only backend query but cannot change backend admission decisions. Its embedded assets and response headers are certified. HTML is non-stale; mutable unversioned JavaScript, CSS, and SVG require revalidation. A one-time `?v=2` script/style transition bypasses previously cached immutable URLs, and stale asynchronous backend completions are ignored. Backend admission remains authoritative.
-- The floating “Fully on-chain” widget embeds one independently maintained ICP
-  Dashboard application. Event Horizon certifies its markup, URL and fallback,
-  not external assets or runtime data. The compact 600×520 iframe scales uniformly
-  to 25%; it still runs the full external application after frontend bootstrap.
-  The inert, aria-hidden preview has no independent dashboard controls. Expansion
-  restores interaction in a native modal; minimisation preserves the same mounted
-  document. Dismissal releases it until reload. A single parent ResizeObserver
-  handles expanded responsive geometry without network calls or external DOM access.
-  Load/settling and slow-load status are not external data-readiness evidence.
-  The permanent fallback is available without JavaScript. No backend query or runtime
-  subnet discovery is added. The static URL must be reviewed after a subnet move.
-  Subnet composition does not establish source, controller removal or module hash.
-  Sandbox and page/SVG CSP are unchanged. Popup permissions permit external tabs
-  outside parent certification and frame-src restrictions; the live dashboard link
-  must preserve explicit noopener/noreferrer and observed null opener. These
-  permissions do not enforce opener isolation for arbitrary future popup code.
-  See the [frontend documentation](../../canisters/frontend/README.md#floating-fully-on-chain-map).
+- The floating “Fully on-chain” widget starts as a minimised left-edge tab with no
+  external iframe src, Dashboard script or loading timer. First Restore/Maximise
+  loads one independently maintained ICP Dashboard document. Event Horizon certifies
+  its markup, fixed URL and fallback, not external assets or runtime data. Thumbnail
+  uses 600×520 at 25%; Expanded restores interaction in a native modal, approximately
+  two-thirds desktop width. Non-modal content is inert and excluded from keyboard
+  and accessibility navigation. Minimise/Restore/Maximise retain the same iframe;
+  there is no permanent dismissal or persistent preference. Hiding loaded content
+  does not guarantee that external JavaScript/network work stops. One parent
+  ResizeObserver handles geometry without external DOM access. Document load,
+  500ms settling and slow-load status are not Dashboard data-readiness evidence.
+  There is no runtime subnet discovery or added Event Horizon backend query. Review
+  the static URL after a subnet move. Subnet composition does not establish source,
+  controller removal or module hash. Sandbox and page/SVG CSP are unchanged. Popup
+  permissions allow tabs outside parent certification/frame-origin restrictions;
+  the genuine link must retain noopener/noreferrer and observed null opener. Those
+  permissions cannot enforce isolation for arbitrary future Dashboard code. The
+  copyable standalone example is independent source, not a production import or
+  certified frontend asset; its licensing decision remains pending.
+- Accordion history is presentation only. Native grouped details owns expansion;
+  trusted summary activations synchronise fragments without changing backend or
+  form state. Initial/history restoration avoids forced focus; keyboard destinations
+  retain visible focus and temporary programmatic focusability. No URL, history
+  state, example configuration or iframe message selects an Event Horizon backend.
 
 Daily samples can be missed, and the observed rolling minimum is only the lowest successful daily observation recorded by Event Horizon. It is not a market low. Stale data carries prices forward. Pokes can fail, be delayed, or arrive before Index visibility.
 

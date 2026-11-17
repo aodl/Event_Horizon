@@ -482,7 +482,8 @@ try {
     await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id}`),id);
     await page.goBack();assert.equal(new URL(page.url()).hash,previous);
     await page.goForward();assert.equal(new URL(page.url()).hash,`#${id}`);
-    await page.waitForFunction(id=>document.activeElement===document.querySelector(`#${id}`),id);
+    await page.waitForFunction(id=>{const n=document.getElementById(id),r=n.getBoundingClientRect();return n.closest('details').open&&r.top>=-1&&r.top<innerHeight;},id);
+    assert.equal(await page.evaluate(()=>{const a=document.activeElement,d=a.closest('details');return !!d&&!d.open&&a.tagName!=='SUMMARY';}),false,'history never strands focus in hidden content');
     await screenshot(page, {path:resolve(output,`section-${id}.png`)});
   }
   await page.emulateMedia({reducedMotion:'no-preference'});
@@ -495,6 +496,7 @@ try {
     await page.waitForFunction(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=-1&&r.top<innerHeight;},id);
     assert.equal(new URL(page.url()).hash,`#${id}`);
     assert.equal(await target.locator('h3').isVisible(),true);
+    assert.equal(await target.evaluate(n=>n.matches(':focus-visible')),false,'initial fragments do not add a highlight');
   }
   await page.goto(`${origin}/fixture.html`, { timeout: 60000 }); await page.setViewportSize({width:320,height:568});
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');

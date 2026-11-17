@@ -126,7 +126,7 @@
         </summary>
         <div class="section-disclosure__body">
           <p class="section-disclosure__intro">Event Horizon watches a reviewed ledger and wakes your canister when relevant activity appears. The ledger remains the source of truth.</p>
-          <section class="project-detail" id="open-source" aria-labelledby="open-source-title" tabindex="-1">
+          <section class="project-detail" id="open-source" aria-labelledby="open-source-title">
             <h3 id="open-source-title"><img class="hero__fact-icon" src="/github-mark-white.svg" alt="" width="24" height="24"><span>Open Source &amp; Verifiable</span></h3>
             <div>
               <p>Event Horizon’s implementation is public and designed for independent verification. Reproduce the production Wasm from a reviewed source revision, then compare its SHA-256 with the module hash installed on the canister.</p>
@@ -134,7 +134,7 @@
               <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/reproducible-builds.md">Reproduce the build <span aria-hidden="true">↗</span></a></p>
             </div>
           </section>
-          <section class="project-detail" id="immutability" aria-labelledby="immutability-title" tabindex="-1">
+          <section class="project-detail" id="immutability" aria-labelledby="immutability-title">
             <h3 id="immutability-title"><img class="hero__fact-icon" src="/favicon.ico?v=1" alt="" width="24" height="24"><span>Engineered for Immutability</span></h3>
             <div>
               <p>The backend has immutable instance configuration and no administrative control API. It is designed for eventual finalisation through controller removal after operational acceptance; this is an intended step, not a claim that controllers have already been removed.</p>
@@ -142,7 +142,7 @@
               <p class="project-detail__links"><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/architecture/trust-model.md">Read the trust model <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/operations/acceptance-observation.md">Review operational acceptance <span aria-hidden="true">↗</span></a></p>
             </div>
           </section>
-          <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title" tabindex="-1">
+          <section class="project-detail" id="endowment-funding" aria-labelledby="endowment-funding-title">
             <h3 id="endowment-funding-title"><img class="hero__fact-icon" src="/jupiter-faucet.ico" alt="" width="24" height="24"><span>Perpetual Endowment Funding</span></h3>
             <div>
               <p>Patrons can fund subscription declarations through Jupiter Faucet. ICP principal stays in Jupiter’s productive staking path; recurring maturity-derived ICP payouts can eventually reach Event Horizon, which converts retained payouts into pooled operating cycles rather than assigning cycles to individual subscribers.</p>
@@ -150,7 +150,7 @@
               <p class="project-detail__links"><a href="https://www.jupiter-faucet.com/">Visit Jupiter Faucet <span aria-hidden="true">↗</span></a><a href="https://github.com/aodl/Event_Horizon/blob/main/docs/subscriber-guide.md">Read the subscription guide <span aria-hidden="true">↗</span></a></p>
             </div>
           </section>
-          <section class="project-detail" id="internet-computer" aria-labelledby="internet-computer-title" tabindex="-1">
+          <section class="project-detail" id="internet-computer" aria-labelledby="internet-computer-title">
             <h3 id="internet-computer-title"><img class="hero__fact-icon hero__fact-icon--wide" src="/icp-infinity.svg" alt="" width="44" height="44"><span>Powered by Internet Computer Protocol</span></h3>
             <div>
               <p>The Internet Computer hosts Event Horizon’s backend canister and certified frontend assets. Ledger queries identify relevant activity, canister-to-canister notifications provide best-effort wake-up hints, and cycles converted from ICP pay for operation.</p>
@@ -338,11 +338,12 @@
     <p>Event Horizon / Internet Computer</p>
     <a href="#top">Return to top &#8593;</a>
   </footer>
-  <dialog id="subnet-map" class="subnet-widget" data-mode="compact" aria-labelledby="subnet-title">
+  <dialog id="subnet-map" class="subnet-widget" data-mode="minimised" aria-labelledby="subnet-title">
     <div class="subnet-widget__toolbar">
       <h2 id="subnet-title">Fully on-chain</h2>
-      <button type="button" class="subnet-minimise" aria-label="Minimise subnet map">Minimise</button>
-      <button type="button" class="subnet-dismiss" aria-label="Dismiss subnet map">×</button>
+      <button type="button" class="subnet-minimise" data-subnet-mode="minimised" aria-label="Minimise subnet map" title="Minimise subnet map"><span class="subnet-control-icon subnet-control-icon--minimise" aria-hidden="true"></span></button>
+      <button type="button" class="subnet-restore" data-subnet-mode="thumbnail" aria-label="Restore subnet thumbnail" title="Restore subnet thumbnail"><span class="subnet-control-icon subnet-control-icon--restore" aria-hidden="true"></span></button>
+      <button type="button" class="subnet-maximise" data-subnet-mode="expanded" aria-label="Maximise subnet map" title="Maximise subnet map"><span class="subnet-control-icon" aria-hidden="true"></span></button>
     </div>
     <div class="subnet-widget__preview">
       <div class="subnet-section__embed" inert aria-hidden="true">
@@ -352,7 +353,6 @@
           <span>Loading subnet map…</span>
         </div>
       </div>
-      <button type="button" class="subnet-expand" aria-label="Expand subnet map"><span aria-hidden="true">↗</span></button>
     </div>
     <div class="subnet-widget__attribution">
       <p class="subnet-section__sources">Subnet map provided by ICP Dashboard. If the map does not load, <a href="https://dashboard.internetcomputer.org/network/subnet/pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae" target="_blank" rel="noopener noreferrer">view it on ICP Dashboard</a>.</p>

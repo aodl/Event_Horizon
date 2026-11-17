@@ -325,11 +325,21 @@ checks, all-public-asset comparisons, advisory correction evidence and PR/CI sta
 
 ## Floating map and six-section landing page
 
-Build the frontend, then run both `node tools/scripts/validate-subnet-section.mjs --live`
+Build the frontend, then run both `node tools/scripts/validate-subnet-section.mjs --live --zoom`
 and `node tools/scripts/validate-ledger-counter.mjs`. The first runs deterministic
 Chromium, Firefox and available WebKit modal/lifecycle, geometry, accordion and
 fragment checks before separate genuine Dashboard checks. The second retains
 ledger, operating status, builder and hero navigation regressions. `--no-screenshots`
 limits evidence volume; the subnet harness also accepts `--output=directory`.
-Consult the current [validation report](../codex/floating-subnet-refinement-validation.md)
+Also run `node tools/scripts/validate-subnet-example.mjs --live` against the otherwise
+empty standalone demo; it has no Event Horizon application dependencies. The main
+harness covers zero pre-activation requests, the complete three-state matrix,
+actual Chromium zoom/BFCache, URL history, initial focus and slow-load recovery.
+Consult the current [validation report](../codex/navigation-widget-validation.md)
 for results; historical reports describe their original revisions.
+
+The live map check uses the existing local candidate-asset server; Dashboard and
+ICP API traffic remain genuine. This fixture is not proof of a deployed revision.
+URL/reload focus tests use deterministic API transport separately. WPE can report canceled `read_state` requests as access-control
+errors during deliberate reloads; the same exact errors reproduce on the reviewed
+production baseline. Fresh-session errors and all CSP errors remain strict checks.

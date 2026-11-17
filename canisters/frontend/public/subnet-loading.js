@@ -12,6 +12,9 @@ export function initSubnetLoading(documentRef, windowRef) {
     windowRef.clearTimeout(settleTimer);
   };
   const loaded = () => {
+    // No external URL means this is the initial empty document, not our request.
+    // Do not inspect the cross-origin document (including its Document getter).
+    if (!frame.getAttribute('src')) return;
     clearTimers();
     // A brief visual settling interval, not a claim about cross-origin data.
     settleTimer = windowRef.setTimeout(() => {

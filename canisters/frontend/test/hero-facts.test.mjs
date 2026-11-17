@@ -52,7 +52,7 @@ test('every hero destination is a unique labelled section inside The protocol be
   const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)[1];
   const order = expected.map(([id,label,icon]) => {
     assert.equal([...html.matchAll(new RegExp(`id="${id}"`, 'g'))].length, 1);
-    const section = main.match(new RegExp(`<section class="project-detail" id="${id}" aria-labelledby="([^"]+)" tabindex="-1">([\\s\\S]*?)<\\/section>`));
+    const section = main.match(new RegExp(`<section class="project-detail" id="${id}" aria-labelledby="([^"]+)">([\\s\\S]*?)<\\/section>`));
     assert.ok(section, id);
     const [,headingId,content] = section;
     assert.equal([...html.matchAll(new RegExp(`id="${headingId}"`, 'g'))].length, 1);
