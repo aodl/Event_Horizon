@@ -6,6 +6,14 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+async function maximise(page,method='click') {
+  if(await page.locator('dialog').getAttribute('data-mode')==='minimised') {
+    const tab=page.getByRole('button',{name:'Show Fully on-chain thumbnail',exact:true});
+    if(method==='keyboard')await tab.press('Enter');else await tab[method]();
+  }
+  const control=page.getByRole('button',{name:'Maximise subnet map',exact:true});
+  if(method==='keyboard')await control.press('Enter');else await control[method]();
+}
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const output=resolve(root,process.argv.find(a=>a.startsWith('--output='))?.slice(9)??'observations/subnet-example');await mkdir(output,{recursive:true});
 const files=new Set(['index.html','subnet-map-widget.js','subnet-map-widget.css']);
@@ -15,31 +23,41 @@ const subnet='pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae',u
 const evidence={utc:new Date().toISOString(),engines:[],errors:[]};let browser;
 try{
  for(const[name,engine]of Object.entries({chromium,firefox,webkit})){
-  browser=await engine.launch();const context=await browser.newContext();let documents=0;
-  await context.route(url,r=>{documents++;return r.fulfill({contentType:'text/html',body:'<!doctype html><button onclick="this.textContent=\'retained\'">Country fixture</button>'});});
+  browser=await engine.launch();const context=await browser.newContext();let documents=0,releaseInitial;
+  await context.route(url,async r=>{documents++;if(documents===1)await new Promise(resolve=>releaseInitial=resolve);return r.fulfill({contentType:'text/html',body:'<!doctype html><button onclick="this.textContent=\'retained\'">Country fixture</button>'});});
   const page=await context.newPage();page.on('pageerror',e=>evidence.errors.push({engine:name,error:e.message}));page.on('console',m=>{if(/Content Security Policy|violates.*directive/.test(m.text()))evidence.errors.push({engine:name,error:m.text()});});await page.goto(origin);
-  const dialog=page.locator('dialog'),mode=async value=>{await page.waitForFunction(value=>document.querySelector('dialog').dataset.mode===value,value);assert.equal(await dialog.getByRole('button').count(),2);};
+  const dialog=page.locator('dialog'),mode=async value=>{await page.waitForFunction(value=>document.querySelector('dialog').dataset.mode===value,value);assert.equal(await dialog.getByRole('button').count(),value==='minimised'?1:2);};
   await mode('minimised');assert.equal(documents,0);assert.equal(await page.locator('iframe').getAttribute('src'),null);
   assert.equal(await page.evaluate(()=>{const a=initICSubnetMap();return a===initICSubnetMap();}),true);assert.equal(await page.locator('iframe').count(),1);
-  await page.bringToFront();assert.equal(await page.evaluate(()=>document.activeElement.tagName),'BODY','startup must not autofocus');for(let step=0;step<4;step++){await page.keyboard.press('Tab');if(await page.evaluate(()=>document.activeElement.getAttribute('aria-label')==='Restore subnet thumbnail'))break;}const firstFocus=await page.evaluate(()=>({tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label'),visible:document.activeElement.matches(':focus-visible'),hasFocus:document.hasFocus()}));assert.equal(firstFocus.label,'Restore subnet thumbnail',JSON.stringify({name,firstFocus}));assert.equal(firstFocus.visible,true,JSON.stringify({name,firstFocus}));
+  await page.bringToFront();assert.equal(await page.evaluate(()=>document.activeElement.tagName),'BODY','startup must not autofocus');for(let step=0;step<4;step++){await page.keyboard.press('Tab');if(await page.evaluate(()=>document.activeElement.getAttribute('aria-label')==='Show Fully on-chain thumbnail'))break;}const firstFocus=await page.evaluate(()=>({tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label'),visible:document.activeElement.matches(':focus-visible'),hasFocus:document.hasFocus()}));assert.equal(firstFocus.label,'Show Fully on-chain thumbnail',JSON.stringify({name,firstFocus}));assert.equal(firstFocus.visible,true,JSON.stringify({name,firstFocus}));
   await page.locator('iframe').evaluate(n=>globalThis.originalFrame=n);
+  await page.getByRole('button',{name:'Show Fully on-chain thumbnail'}).click();await mode('thumbnail');
+  await page.waitForFunction(()=>document.querySelector('iframe').getAttribute('src')!==null);
+  assert.equal(await page.getByRole('status').filter({hasText:'Loading subnet map…'}).count(),1);
+  const spinner=await page.locator('.ic-map-loading').evaluate(n=>{const r=n.getBoundingClientRect(),s=n.querySelector('.ic-map-spinner').getBoundingClientRect(),t=n.querySelector('.ic-map-visually-hidden');return{dx:Math.abs(r.x+r.width/2-s.x-s.width/2),dy:Math.abs(r.y+r.height/2-s.y-s.height/2),size:n.querySelector('.ic-map-spinner').offsetWidth,text:t.textContent,width:t.getBoundingClientRect().width};});
+  assert.ok(spinner.dx<1&&spinner.dy<1);assert.equal(spinner.size,18);assert.equal(spinner.text,'Loading subnet map…');assert.equal(spinner.width,1);
+  assert.equal(typeof releaseInitial,'function');releaseInitial();await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');
+
   for(const viewport of [{width:1920,height:1080},{width:390,height:844},{width:320,height:568},{width:422,height:195}]){
    await page.setViewportSize(viewport);const tab=await dialog.boundingBox();assert.equal(tab.x,0);assert.equal(tab.width,46);assert.ok(tab.y>=0&&tab.y+tab.height<=viewport.height);
-   await page.getByRole('button',{name:'Restore subnet thumbnail'}).click();await mode('thumbnail');await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);await page.frameLocator('iframe').locator('button').waitFor({state:'attached'});
+   assert.ok(Math.abs(viewport.height-tab.y-tab.height-(viewport.height<=320?12:50))<1);
+   for(const fraction of [.1,.5,.9]){const b=page.getByRole('button',{name:'Show Fully on-chain thumbnail'}),r=await b.boundingBox();await page.mouse.click(r.x+r.width/2,r.y+r.height*fraction);await mode('thumbnail');await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');}
+   for(const key of ['Enter','Space']){const b=page.getByRole('button',{name:'Show Fully on-chain thumbnail'});await b.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');assert.equal(await b.evaluate(n=>n.matches(':focus-visible')),true);await page.keyboard.press(key);await mode('thumbnail');await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');}
+   await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/}).click();await mode('thumbnail');await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);await page.frameLocator('iframe').locator('button').waitFor({state:'attached'});
    assert.equal(documents,1);assert.equal(await dialog.evaluate(n=>n.scrollWidth>n.clientWidth),false);const f=await page.locator('iframe').boundingBox();assert.equal(f.width,150);assert.equal(f.height,130);assert.equal(await page.locator('.ic-map-embed').evaluate(n=>n.inert),true);
    assert.equal(await page.getByRole('button',{name:'Minimise subnet map'}).evaluate(n=>{const r=n.getBoundingClientRect();return [1,r.height/2,r.height-2].every(y=>n.contains(document.elementFromPoint(r.x+r.width/2,r.y+y)));}),true,'preview must not cover any part of the Minimise target');
-   await page.getByRole('button',{name:'Maximise subnet map'}).click();await mode('expanded');assert.equal(await dialog.evaluate(n=>n.matches(':modal')),true);await page.waitForFunction(()=>{const e=document.querySelector('.ic-map-embed'),f=e.querySelector('iframe'),w=e.getBoundingClientRect().width;return Math.abs(f.getBoundingClientRect().width-w)<2&&Math.abs(e.getBoundingClientRect().height-520*Math.max(1,w/760))<2;});
+   await maximise(page,'click');await mode('expanded');assert.equal(await dialog.evaluate(n=>n.matches(':modal')),true);await page.waitForFunction(()=>{const e=document.querySelector('.ic-map-embed'),f=e.querySelector('iframe'),w=e.getBoundingClientRect().width;return Math.abs(f.getBoundingClientRect().width-w)<2&&Math.abs(e.getBoundingClientRect().height-520*Math.max(1,w/760))<2;});
    const bounds=await dialog.boundingBox(),width=viewport.width>900?Math.min(viewport.width*2/3,1200):viewport.width-24;assert.ok(Math.abs(bounds.width-width)<2);
    await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden);const country=page.frameLocator('iframe').getByRole('button');if(await country.textContent()!=='retained')await country.click();await country.evaluate(n=>{if(n.textContent!=='retained')throw Error('initial trusted country activation did not take effect');});
-   await page.getByRole('button',{name:'Restore subnet thumbnail'}).click();await mode('thumbnail');
-   await page.getByRole('button',{name:'Maximise subnet map'}).click();await page.keyboard.press('Escape');await mode('thumbnail');
+   await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/}).click();await mode('thumbnail');
+   await maximise(page,'click');await page.keyboard.press('Escape');await mode('thumbnail');
    await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');
-   await page.getByRole('button',{name:'Maximise subnet map'}).click();await page.keyboard.press('Escape');await mode('minimised');
-   await page.getByRole('button',{name:'Maximise subnet map'}).click();await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');
-   await page.getByRole('button',{name:'Maximise subnet map'}).click();assert.equal(await country.textContent(),'retained');await page.getByRole('button',{name:'Restore subnet thumbnail'}).click();await page.getByRole('button',{name:'Minimise subnet map'}).click();
+   await maximise(page,'click');await page.keyboard.press('Escape');await mode('thumbnail');await page.getByRole('button',{name:'Minimise subnet map',exact:true}).click();await mode('minimised');
+   await maximise(page,'click');await page.getByRole('button',{name:'Minimise subnet map'}).click();await mode('minimised');
+   await maximise(page,'click');assert.equal(await country.textContent(),'retained');await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/}).click();await page.getByRole('button',{name:'Minimise subnet map'}).click();
    assert.equal(documents,1);assert.equal(await page.locator('iframe').evaluate(n=>n===originalFrame),true);
   }
-  await page.reload();await mode('minimised');assert.equal(documents,1);await page.getByRole('button',{name:'Maximise subnet map'}).click();await mode('expanded');await page.frameLocator('iframe').getByRole('button').waitFor();assert.equal(documents,2,'direct Maximise navigates exactly once');
+  await page.reload();await mode('minimised');assert.equal(documents,1);await maximise(page,'click');await mode('expanded');await page.frameLocator('iframe').getByRole('button').waitFor();assert.equal(documents,2,'tab activation followed by Maximise navigates exactly once');
   await page.evaluate(()=>{const api=initICSubnetMap();api.dispose();api.dispose();});assert.equal(await page.locator('iframe').count(),0);
   for(const invalid of ['https://example.com/','PZP6E-ekpqk','pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yaa'])assert.equal(await page.evaluate(value=>{document.querySelector('[data-ic-subnet-map]').dataset.icSubnetMap=value;try{initICSubnetMap();return false;}catch{return true;}},invalid),true);
   await context.close();const nojs=await browser.newContext({javaScriptEnabled:false}),fallback=await nojs.newPage();await fallback.goto(origin);assert.equal(await fallback.getByRole('link',{name:'View subnet maps on ICP Dashboard'}).isVisible(),true);assert.equal(await fallback.locator('iframe').count(),0);await nojs.close();
@@ -47,8 +65,8 @@ try{
  }
  if(process.argv.includes('--live')){
   browser=await chromium.launch();const context=await browser.newContext({viewport:{width:1440,height:900}}),page=await context.newPage();let documents=0;const requests=[];page.on('request',r=>{requests.push(r.url());if(r.url()===url&&r.isNavigationRequest())documents++;});page.on('pageerror',e=>evidence.errors.push({engine:'live',error:e.message}));await page.goto(origin);await page.waitForTimeout(1000);assert.equal(requests.some(u=>u.startsWith('https://dashboard.internetcomputer.org/')),false);
-  await page.bringToFront();await page.getByRole('button',{name:'Maximise subnet map'}).click();await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden,null,{timeout:90000});const country=page.frameLocator('iframe').getByRole('button',{name:/node machines? in this subnet/}).first();await country.waitFor({timeout:120000});await country.click();assert.equal(await country.getAttribute('aria-expanded'),'true');
-  await page.getByRole('button',{name:'Minimise subnet map'}).click();await page.getByRole('button',{name:'Restore subnet thumbnail'}).click();await page.getByRole('button',{name:'Maximise subnet map'}).click();assert.equal(await country.getAttribute('aria-expanded'),'true');assert.equal(documents,1);
+  await page.bringToFront();await maximise(page,'click');await page.waitForFunction(()=>document.querySelector('.ic-map-loading').hidden,null,{timeout:90000});const country=page.frameLocator('iframe').getByRole('button',{name:/node machines? in this subnet/}).first();await country.waitFor({timeout:120000});await country.click();assert.equal(await country.getAttribute('aria-expanded'),'true');
+  await page.getByRole('button',{name:'Minimise subnet map'}).click();await page.getByRole('button',{name:/^(Show Fully on-chain thumbnail|Restore subnet thumbnail)$/}).click();await maximise(page,'click');assert.equal(await country.getAttribute('aria-expanded'),'true');assert.equal(documents,1);
   const link=page.frameLocator('iframe').getByRole('link',{name:/ICP Dashboard: Open/}),[popup]=await Promise.all([page.waitForEvent('popup'),link.press('Enter')]);await popup.bringToFront();await popup.waitForLoadState('domcontentloaded');assert.equal(await popup.evaluate(()=>window.opener===null),true);assert.equal(await popup.evaluate(()=>document.referrer),'');assert.ok(popup.url().includes(`/network/subnet/${subnet}`));await popup.close();
   evidence.live={passed:true,initialDashboardRequests:0,documentRequests:documents,openerNull:true,dependencies:'HTML + standalone JS/CSS only'};await context.close();await browser.close();browser=undefined;
  }

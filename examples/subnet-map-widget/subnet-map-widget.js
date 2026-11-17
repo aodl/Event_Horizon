@@ -33,13 +33,13 @@
     dialog.className = 'ic-subnet-map';
     dialog.dataset.mode = 'minimised';
     dialog.setAttribute('aria-label', 'Fully on-chain');
-    dialog.innerHTML = `<header><h2>Fully on-chain</h2>
+    dialog.innerHTML = `<button type="button" class="ic-map-tab" data-map-mode="thumbnail" aria-label="Show Fully on-chain thumbnail"><span aria-hidden="true">Fully on-chain</span></button><header><h2>Fully on-chain</h2>
       <button type="button" data-map-mode="minimised" aria-label="Minimise subnet map" title="Minimise subnet map"><span class="ic-map-icon ic-map-icon--minimise" aria-hidden="true"></span></button>
       <button type="button" data-map-mode="thumbnail" aria-label="Restore subnet thumbnail" title="Restore subnet thumbnail"><span class="ic-map-icon ic-map-icon--restore" aria-hidden="true"></span></button>
       <button type="button" data-map-mode="expanded" aria-label="Maximise subnet map" title="Maximise subnet map"><span class="ic-map-icon" aria-hidden="true"></span></button></header>
       <div class="ic-map-preview"><div class="ic-map-embed" inert aria-hidden="true">
-        <iframe title="ICP Dashboard subnet map" tabindex="-1" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
-        <div class="ic-map-loading" role="status">Loading subnet map…</div></div></div>
+        <iframe title="ICP Dashboard subnet map" tabindex="-1" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe></div>
+        <div class="ic-map-loading" role="status" aria-live="polite"><span class="ic-map-spinner" aria-hidden="true"></span><span class="ic-map-visually-hidden">Loading subnet map…</span></div></div>
       <div class="ic-map-attribution"><p>Subnet map provided by ICP Dashboard. <a target="_blank" rel="noopener noreferrer">View it on ICP Dashboard</a>.</p><p class="ic-map-status" role="status"></p></div>`;
     const frame = dialog.querySelector('iframe'), embed = dialog.querySelector('.ic-map-embed');
     const layer = dialog.querySelector('.ic-map-loading'), status = dialog.querySelector('.ic-map-status');
@@ -78,7 +78,7 @@
       layout();
       dialog.scrollTop = 0;
       if (mode !== 'minimised') start();
-      dialog.querySelector(`[data-map-mode="${expanded ? 'minimised' : mode === 'minimised' ? 'thumbnail' : 'expanded'}"]`).focus({ preventScroll: true });
+      dialog.querySelector(mode === 'minimised' ? '.ic-map-tab' : `header [data-map-mode="${expanded ? 'minimised' : 'expanded'}"]`).focus({ preventScroll: true });
     };
     const click = event => {
       const control = event.target.closest('button[data-map-mode]');

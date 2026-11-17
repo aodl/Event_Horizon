@@ -55,7 +55,7 @@ The public site is [www.event-horizon-icp.com](https://www.event-horizon-icp.com
 the frontend also has its [canister URL](https://ej7c4-lyaaa-aaaar-qchrq-cai.icp.net/).
 Its [floating Fully on-chain map](canisters/frontend/README.md#floating-fully-on-chain-map)
 starts as a fixed minimised left-edge tab and loads one live ICP Dashboard map only
-on Restore or Maximise. Its three presentations are independent of subscription
+when its clickable tab opens Thumbnail (or through a direct map link). Its three presentations are independent of subscription
 and ledger queries. The [standalone example](examples/subnet-map-widget/README.md)
 is a separate source deliverable with a pending licensing decision, not a production
 dependency.

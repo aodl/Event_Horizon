@@ -38,9 +38,8 @@ be repeated. It is unnecessary to call the initializer during mode changes.
 
 ## Interaction and resources
 
-Fresh pages start **Minimised**: a 46px left-edge tab, vertical title, Restore
-(stacked squares) and Maximise (single square). No Dashboard URL is assigned and
-no loading timer starts until the first Restore or Maximise.
+Fresh pages start **Minimised**: one clickable 46px left-edge vertical tab. Click anywhere, or use Enter/Space, to show Thumbnail; there is no direct Maximise control in this state. No Dashboard URL is assigned and
+no loading timer starts until the first tab activation.
 
 **Thumbnail** has Minimise (dash) and Maximise controls. Its genuine 600×520px
 iframe is scaled uniformly to 25%, giving a 150×130px preview. The map area also
@@ -70,6 +69,12 @@ After activation, the full independently maintained Dashboard application runs:
 scaling does not reduce its JavaScript, data-fetching or network cost. Minimising
 hides rendering but does **not** guarantee suspension of scripts, timers or
 network requests. There is no attempt to control its internal application.
+
+Non-modal modes sit 50px above the bottom edge, with safe-area protection and a 12px fallback below 321px viewport height. Expanded remains centred. All headings use uppercase styling and the normal toolbar has 14px left padding. A centred CSS spinner is the only visible initial loading content; its status text is visually hidden, and reduced motion stops rotation. Slow-loading and external-fallback behaviour is unchanged.
+
+The loading overlay is a sibling of the inert frame wrapper, so its visually hidden status remains accessible in Thumbnail as well as Expanded. It is positioned over the same map region without changing the iframe or loading controller.
+
+At effective viewport widths of 200px or less, the expanded toolbar gives its title a separate row, preserving both 44px controls without overlap. Actual Chromium zoom validation covers all eight requested window sizes at 100%, 150% and 200%.
 
 ## Security and accessibility boundary
 
@@ -109,8 +114,8 @@ From this directory, run `python3 -m http.server 8080` and open
 needed. No Event Horizon application server or canister is involved.
 
 Check that there are zero Dashboard requests before activation, one embed
-document request on the first Restore or Maximise, and none added by later mode
-changes. Try all six transitions, Escape from both entry states, keyboard focus,
+document request on the first tab activation, and none added by later mode
+changes. Try every visible transition and Escape restoration, keyboard focus,
 mobile width, enlarged text and the no-JavaScript fallback. In Expanded, exercise
 country/data-centre controls and the full-Dashboard link; confirm its new tab has
 no `window.opener`. The repository's development-only

@@ -29,7 +29,7 @@ export function initSubnetWidget(documentRef, windowRef) {
     layout.update?.();
     dialog.scrollTop = 0; // Keep the destination toolbar visible in short views.
     if (mode !== 'minimised') start();
-    dialog.querySelector(expanded ? '.subnet-minimise' : mode === 'minimised' ? '.subnet-restore' : '.subnet-maximise').focus({ preventScroll: true });
+    dialog.querySelector(expanded ? '.subnet-minimise' : mode === 'minimised' ? '.subnet-tab-trigger' : '.subnet-maximise').focus({ preventScroll: true });
   };
   const click = event => {
     const control = event.target.closest?.('button[data-subnet-mode]');

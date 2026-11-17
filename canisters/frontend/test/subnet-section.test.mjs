@@ -14,7 +14,7 @@ test('one stable, initially non-modal widget retains the approved embed and isol
   assert.doesNotMatch(frame, /allow-top-navigation|allow-forms|allow-modals|allow-downloads| src=/);
   assert.match(html, /class="subnet-section__embed" inert aria-hidden="true"/);
   assert.ok(html.indexOf('<dialog') > html.indexOf('</footer>'));
-  for(const label of ['Minimise subnet map','Restore subnet thumbnail','Maximise subnet map']) assert.ok(html.includes(`aria-label="${label}"`));
+  for(const label of ['Show Fully on-chain thumbnail','Minimise subnet map','Restore subnet thumbnail','Maximise subnet map']) assert.ok(html.includes(`aria-label="${label}"`));
   assert.doesNotMatch(html,/Dismiss subnet|subnet-dismiss|subnet-expand/);
   assert.match(html, /<noscript><p class="subnet-fallback"><a href="https:\/\/dashboard.internetcomputer.org\/network\/subnet\//);
   assert.ok(html.includes(embed.replace('/embed/subnet-map?subnet=', '/network/subnet/')));
@@ -130,7 +130,7 @@ function widgetFixture(hash='') {
   const listeners=new Map(),timers=new Map(),writes=[],lifecycle=[];let serial=0,focused='skip';
   const frame={dataset:{src:embed},tabIndex:-1,addEventListener:(n,f)=>listeners.set(`frame:${n}`,f),removeEventListener:n=>listeners.delete(`frame:${n}`),set src(value){writes.push(value);}};
   const area={inert:true,querySelector:()=>frame,setAttribute:(n,v)=>area[n]=v};
-  const controls=Object.fromEntries([['minimise','minimised'],['restore','thumbnail'],['maximise','expanded']].map(([name,mode])=>[`.subnet-${name}`,{dataset:{subnetMode:mode},focus:()=>focused=name}]));
+  const controls=Object.fromEntries([['minimise','minimised'],['restore','thumbnail'],['maximise','expanded'],['tab-trigger','thumbnail']].map(([name,mode])=>[`.subnet-${name}`,{dataset:{subnetMode:mode},focus:()=>focused=name}]));
   const layer={hidden:false},status={textContent:''};
   const dialog={dataset:{mode:'minimised'},open:false,contains:n=>Object.values(controls).includes(n),querySelector:s=>s==='iframe'?frame:s==='.subnet-section__embed'?area:s==='.subnet-section__loading'?layer:s==='.subnet-section__status'?status:controls[s],
     show(){lifecycle.push('show');this.open=true;},showModal(){lifecycle.push('showModal');this.open=true;},close(){lifecycle.push('close');this.open=false;},
@@ -143,12 +143,12 @@ function widgetFixture(hash='') {
     start:()=>{for(const [id,t] of timers)if(t.delay===0){timers.delete(id);t.f();}}};
 }
 test('three-state transition matrix retains one frame, isolates non-modal modes and focuses visible destinations',()=>{
-  const f=widgetFixture();assert.equal(f.dialog.dataset.mode,'minimised');assert.equal(f.focused(),'skip');assert.equal(f.timers.size,0);assert.deepEqual(f.writes,[]);f.click('restore');assert.deepEqual(f.lifecycle,[]);
+  const f=widgetFixture();assert.equal(f.dialog.dataset.mode,'minimised');assert.equal(f.focused(),'skip');assert.equal(f.timers.size,0);assert.deepEqual(f.writes,[]);f.click('tab-trigger');assert.deepEqual(f.lifecycle,[]);
   const check=(action,mode,focus)=>{f.click(action);assert.equal(f.dialog.dataset.mode,mode);assert.equal(f.area.inert,mode!=='expanded');assert.equal(f.frame.tabIndex,mode==='expanded'?0:-1);assert.equal(f.focused(),focus);};
-  check('minimise','minimised','restore');check('restore','thumbnail','maximise');assert.deepEqual(f.lifecycle,[],'non-modal changes do not close/reopen');
+  check('minimise','minimised','tab-trigger');check('restore','thumbnail','maximise');assert.deepEqual(f.lifecycle,[],'non-modal changes do not close/reopen');
   check('maximise','expanded','minimise');check('restore','thumbnail','maximise');
-  check('minimise','minimised','restore');check('maximise','expanded','minimise');check('minimise','minimised','restore');
-  check('restore','thumbnail','maximise');check('maximise','expanded','minimise');check('minimise','minimised','restore');
+  check('minimise','minimised','tab-trigger');check('maximise','expanded','minimise');check('minimise','minimised','tab-trigger');
+  check('restore','thumbnail','maximise');check('maximise','expanded','minimise');check('minimise','minimised','tab-trigger');
   f.start();assert.deepEqual(f.writes,[embed]);assert.equal(f.listeners.size,4,'one delegated click, cancel, hashchange and frame load listener');
   f.app.dispose();assert.equal(f.listeners.size,0);assert.equal(f.timers.size,0);assert.deepEqual(f.writes,[embed]);
 });
@@ -159,7 +159,7 @@ test('Escape restores the prior non-modal presentation; direct map fragments def
   const direct=widgetFixture('#subnet-map');assert.equal(direct.dialog.dataset.mode,'expanded');assert.deepEqual(direct.writes,[embed]);direct.escape();assert.equal(direct.dialog.dataset.mode,'thumbnail');direct.app.dispose();
 });
 test('first explicit activation loads once and unused disposal has no pending work',()=>{
-  const f=widgetFixture();assert.deepEqual(f.writes,[]);f.click('restore');f.click('maximise');f.click('restore');f.click('minimise');f.click('restore');assert.deepEqual(f.writes,[embed]);f.app.dispose();
+  const f=widgetFixture();assert.deepEqual(f.writes,[]);f.click('tab-trigger');f.click('maximise');f.click('restore');f.click('minimise');f.click('restore');assert.deepEqual(f.writes,[embed]);f.app.dispose();
   const cancelled=widgetFixture();cancelled.app.dispose();cancelled.start();assert.deepEqual(cancelled.writes,[]);assert.equal(cancelled.timers.size,0);
 });
 
@@ -167,4 +167,14 @@ test('initial about:blank load is ignored until the external document loads',()=
   const f=loadingFixture();
   f.blankLoad();f.tick(500);assert.equal(f.layer.hidden,false);
   f.load();f.tick(500);assert.equal(f.layer.hidden,true);f.loading.dispose();
+});
+
+test('single labelled tab and spinner-only loading preserve decorative and accessible content',async()=>{
+  const html=await publicFile('index.html'),css=await publicFile('styles.css');
+  const tab=html.match(/<button[^>]*class="subnet-tab-trigger"[\s\S]*?<\/button>/)?.[0];
+  assert.ok(tab);assert.match(tab,/data-subnet-mode="thumbnail"/);assert.match(tab,/aria-label="Show Fully on-chain thumbnail"/);assert.equal((tab.match(/<button/g)||[]).length,1);
+  assert.match(html,/<span class="visually-hidden">Loading subnet map…<\/span>/);
+  assert.match(html,/<\/iframe>\s*<\/div>\s*<div class="subnet-section__loading"/,'loading status is outside the inert frame wrapper');
+  assert.match(css,/\.subnet-widget\[data-mode="minimised"\] \.subnet-widget__toolbar/);
+  assert.match(css,/--subnet-edge-offset: 50px/);
 });

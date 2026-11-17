@@ -7869,6 +7869,10 @@ mod tests {
         assert!(html.contains("id=\"operating-progress\""));
         assert!(html.contains("<dialog id=\"subnet-map\""));
         assert!(html.contains("class=\"subnet-widget\" data-mode=\"minimised\""));
+        assert!(html.contains("class=\"subnet-tab-trigger\" data-subnet-mode=\"thumbnail\""));
+        assert!(html.contains("aria-label=\"Show Fully on-chain thumbnail\""));
+        assert!(html.contains("class=\"visually-hidden\">Loading subnet map…</span>"));
+        assert!(html.contains(">Design Principles</span>"));
         assert!(html.contains("class=\"subnet-section__embed\" inert aria-hidden=\"true\""));
         let main = html.find("<main id=\"main-content\"").unwrap();
         assert!(html.find("</main>").unwrap() < html.find("<dialog").unwrap());
