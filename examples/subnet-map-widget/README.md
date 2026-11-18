@@ -42,7 +42,8 @@ Fresh pages start **Minimised**: one clickable 46px left-edge vertical tab. Clic
 no loading timer starts until the first tab activation.
 
 **Thumbnail** has Minimise (dash) and Maximise controls. Its genuine 600×520px
-iframe is scaled uniformly to 25%, giving a 150×130px preview. The map area also
+iframe is scaled uniformly to 30%, giving a 180×156px preview inside the 224px card.
+At widths of 184px or less the preview uses 25%. The map area also
 activates the same Maximise button. The preview is inert and excluded from
 keyboard/accessibility navigation.
 

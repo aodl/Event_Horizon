@@ -68,6 +68,7 @@ a { color: inherit; }
 
 @media (min-width: 93.75rem) {
   html { font-size: 1.0666667vw; }
+  :root { --subnet-thumbnail-width: clamp(224px, calc(108px + 6.6rem), 244px); }
 }
 
 .skip-link {
@@ -446,7 +447,7 @@ code { color: #e6c8a6; font-family: "SFMono-Regular", Consolas, "Liberation Mono
 
 .instances-note { border-bottom: 1px solid var(--line); }
 .project-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 2rem; padding-block: 2.5rem; border-top: 1px solid var(--line); scroll-margin-top: 2rem; }
-.project-detail h3 { display: flex; align-items: center; gap: .75rem; }
+.project-detail h3 { display: flex; align-items: center; gap: 1rem; }
 @media (max-width: 56rem) { .project-detail { grid-template-columns: 1fr; } }
 .project-detail h3 { margin: 0; font-size: clamp(1.7rem, 2.6vw, 2.8rem); font-weight: 300; line-height: 1.15; letter-spacing: -.025em; }
 .project-detail h3 .hero__fact-icon { width: 32px; height: 32px; }
@@ -805,13 +806,23 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
 .subnet-widget__toolbar h2 { flex: 1; min-width: 0; margin: 0; font-size: .65rem; font-weight: 500; text-transform: uppercase; letter-spacing: .12em; }
 .subnet-widget button { min-width: 44px; min-height: 44px; padding: .5rem; border: 0; background: transparent; color: inherit; font: inherit; font-size: .75rem; cursor: pointer; }
 .subnet-widget button:focus-visible, .subnet-widget a:focus-visible { outline: 2px solid var(--ember); outline-offset: -3px; }
-.subnet-widget[data-mode="thumbnail"] .subnet-section__embed { width: 150px; height: 130px; margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
-.subnet-widget[data-mode="thumbnail"] .subnet-section__frame { width: 600px; height: 520px; max-width: none; transform: scale(.25); transform-origin: top left; pointer-events: none; }
-.subnet-widget[data-mode="thumbnail"] .subnet-section__loading { inset: 0 0 12px; width: 150px; margin-inline: auto; padding: .5rem; }
+.subnet-widget[data-mode="thumbnail"] {
+  --preview-scale: .30;
+  --preview-width: calc(600px * var(--preview-scale));
+  --preview-height: calc(520px * var(--preview-scale));
+}
+.subnet-widget[data-mode="thumbnail"] .subnet-widget__toolbar { flex-wrap: wrap; justify-content: flex-end; gap: 2px; padding-right: 2px; }
+.subnet-widget[data-mode="thumbnail"] .subnet-widget__toolbar h2 { flex-basis: max-content; }
+.subnet-widget[data-mode="thumbnail"] .subnet-widget__toolbar button { flex: none; }
+@media (max-width: 218px) { .subnet-widget[data-mode="thumbnail"] .subnet-widget__toolbar h2 { flex-basis: 100%; } }
+@media (max-width: 184px) { .subnet-widget[data-mode="thumbnail"] { --preview-scale: .25; } }
+.subnet-widget[data-mode="thumbnail"] .subnet-section__embed { width: var(--preview-width); height: var(--preview-height); margin: 0 auto 12px; overflow: hidden; pointer-events: none; }
+.subnet-widget[data-mode="thumbnail"] .subnet-section__frame { width: 600px; height: 520px; max-width: none; transform: scale(var(--preview-scale)); transform-origin: top left; pointer-events: none; }
+.subnet-widget[data-mode="thumbnail"] .subnet-section__loading { inset: 0 0 12px; width: var(--preview-width); margin-inline: auto; padding: .5rem; }
 .subnet-widget[data-mode="thumbnail"] .subnet-section__indicator { width: 18px; height: 18px; }
 /* The toolbar's single Maximise button also owns the thumbnail hit surface. */
 .subnet-widget[data-mode="thumbnail"] .subnet-minimise { position: relative; z-index: 2; }
-.subnet-widget[data-mode="thumbnail"] .subnet-maximise::after { content: ""; position: absolute; inset: auto 0 0; height: 142px; z-index: 1; }
+.subnet-widget[data-mode="thumbnail"] .subnet-maximise::after { content: ""; position: absolute; inset: auto 0 0; height: calc(var(--preview-height) + 12px); z-index: 1; }
 .subnet-widget:not([data-mode="expanded"]) .subnet-widget__attribution,
 .subnet-widget[data-mode="minimised"] .subnet-widget__toolbar,
 .subnet-widget:not([data-mode="minimised"]) .subnet-tab-trigger,
@@ -823,6 +834,13 @@ footer p { margin: 0; font-size: .65rem; letter-spacing: .14em; text-transform: 
 .subnet-widget .subnet-tab-trigger { display: flex; align-items: center; justify-content: center; width: 100%; padding: 16px 0; font-size: .6rem; font-weight: 500; text-transform: uppercase; letter-spacing: .12em; }
 .subnet-tab-trigger span { writing-mode: vertical-rl; transform: rotate(180deg); }
 @media (max-height: 320px) { :root { --subnet-edge-offset: 12px; } }
+/* Leave room for the compact EVH shortcut when zoom leaves no space beside it. */
+@media (max-width: 218px) and (max-height: 360px) {
+  .subnet-widget[data-mode="thumbnail"] {
+    --subnet-edge-offset: 12px;
+    max-height: calc(100dvh - max(84px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+  }
+}
 .subnet-control-icon { position: relative; display: inline-block; width: 12px; height: 10px; border: 1px solid currentColor; }
 .subnet-control-icon--minimise { height: 0; border: 0; border-top: 1px solid currentColor; vertical-align: middle; }
 .subnet-control-icon--restore::before { content: ""; position: absolute; width: 10px; height: 8px; left: 2px; top: -4px; border-top: 1px solid currentColor; border-right: 1px solid currentColor; }
