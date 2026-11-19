@@ -93,7 +93,7 @@ The two-production-Wasm scenario funds two ordinary Faucet/Historian routes,
 observes the canonical one-way delivery through the resulting generic
 subscription, and verifies fallback with the notifier stopped. Deterministic
 debug fixtures exercise authenticated payload filtering, throttling, in-flight
-work, archive gaps and historical configuration. The combined-cycle scenario
+work, archived payouts and historical configuration. The combined-cycle scenario
 uses the existing ledger request counters and reads cycle balances on both
 sides of the calls. It fixes poll cadence and simulated time and uses mocks,
 so it measures controlled costs rather than mainnet billing or guaranteed
@@ -126,8 +126,8 @@ The integration suite builds purpose-specific mock Wasms and exercises:
 - shared ICP, separate ICP admission, and generic ICRC-3 multi-page
   archive-only catch-up through a pinned boundary, including one real Economy
   scheduler execution and exact live-tail callback payloads;
-- structural response rejection before archive mutation, durable proved
-  archive prefixes before malformed live data, page-level admission commits,
+- structural response rejection before archive calls, durable fetched
+  archive prefixes before malformed root-local data, page-level admission commits,
   and identical/conflicting ICRC-3 duplicate IDs;
 - generic ICRC-3 observation alongside canonical ICP legacy-log admission and observation;
 - legacy ICP CMC top-up transfer;
@@ -299,7 +299,7 @@ for evidence and the limitations of dated mode/liquid readings.
 
 Specific-match regressions independently aggregate the earliest qualifying observed
 Ledger block index and largest individual amount across pages, thresholds,
-admissions and archive gaps. The separately compiled unified receiver decodes the new payload;
+admissions and archived activity. The separately compiled unified receiver decodes the new payload;
 full-width `nat64` indices and 256-entry Candid vectors are covered. Aggregates
 remain transient across ordinary upgrades and separate polls.
 

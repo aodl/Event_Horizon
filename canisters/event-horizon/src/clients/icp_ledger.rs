@@ -62,10 +62,31 @@ pub struct GetBlocksArgs {
     pub start: u64,
     pub length: u64,
 }
+#[derive(CandidType, Deserialize)]
+struct BlockRange {
+    blocks: Vec<Block>,
+}
+
+#[derive(Debug, CandidType, Deserialize)]
+enum ArchiveError {
+    BadFirstBlockIndex {
+        requested_index: u64,
+        first_valid_index: u64,
+    },
+    Other {
+        error_code: u64,
+        error_message: String,
+    },
+}
+
+type ArchiveResult = Result<BlockRange, ArchiveError>;
+candid::define_function!(pub ArchiveCallback : (GetBlocksArgs) -> (ArchiveResult) query);
+
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct ArchivedBlocksRange {
     pub start: u64,
     pub length: u64,
+    pub callback: ArchiveCallback,
 }
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct QueryBlocksResponse {
@@ -82,17 +103,38 @@ pub async fn query_blocks(
 ) -> Result<QueryBlocksResponse, String> {
     #[cfg(feature = "debug_api")]
     QUERY_BLOCKS_CALLS.with(|calls| calls.set(calls.get() + 1));
-    let call =
-        Call::bounded_wait(ledger, "query_blocks").with_arg(&GetBlocksArgs { start, length });
+    read_blocks(ledger, "query_blocks", start, length)
+        .await?
+        .candid()
+        .map_err(|e| format!("query_blocks decode: {e:?}"))
+}
+
+async fn read_blocks(
+    ledger: Principal,
+    method: &str,
+    start: u64,
+    length: u64,
+) -> Result<ic_cdk::call::Response, String> {
+    let call = Call::bounded_wait(ledger, method).with_arg(&GetBlocksArgs { start, length });
     if ic_cdk::api::canister_liquid_cycle_balance()
         < RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())
     {
         return Err(crate::config::RESERVE_PROTECTION_ERROR.into());
     }
-    call.await
-        .map_err(|e| format!("query_blocks transport: {e:?}"))?
-        .candid()
-        .map_err(|e| format!("query_blocks decode: {e:?}"))
+    call.await.map_err(|e| format!("{method} transport: {e:?}"))
+}
+
+pub async fn archive_blocks(
+    callback: &ArchiveCallback,
+    start: u64,
+    length: u64,
+) -> Result<Vec<Block>, String> {
+    read_blocks(callback.0.principal, &callback.0.method, start, length)
+        .await?
+        .candid::<ArchiveResult>()
+        .map_err(|e| format!("archive decode: {e:?}"))?
+        .map(|range| range.blocks)
+        .map_err(|e| format!("archive error: {e:?}"))
 }
 
 #[cfg(feature = "debug_api")]
@@ -193,9 +235,8 @@ pub async fn legacy_transfer(ledger: Principal, arg: &LegacyTransferArg) -> Lega
 mod contract_tests {
     use super::*;
 
-    // Mirrors the public ICP Ledger interface at dfinity/ic revision
-    // 6a36bed9dad2542f7b9f508560301703b1936ede. These intentionally do not
-    // reuse the consumer projection above.
+    // Independently mirrors ledger.did and ledger_archive.did at dfinity/ic
+    // da6233202a0ae1bc778c37a14dc28a2aea2c6590.
     #[derive(CandidType)]
     struct WireTokens {
         e8s: u64,
@@ -214,6 +255,7 @@ mod contract_tests {
         },
         Burn {
             from: Vec<u8>,
+            spender: Option<Vec<u8>>,
             amount: WireTokens,
         },
         Transfer {
@@ -221,12 +263,23 @@ mod contract_tests {
             to: Vec<u8>,
             amount: WireTokens,
             fee: WireTokens,
+            spender: Option<Vec<u8>>,
+        },
+        Approve {
+            from: Vec<u8>,
+            spender: Vec<u8>,
+            allowance_e8s: Int,
+            allowance: WireTokens,
+            fee: WireTokens,
+            expires_at: Option<WireTimeStamp>,
+            expected_allowance: Option<WireTokens>,
         },
     }
 
     #[derive(CandidType)]
     struct WireTransaction {
         memo: u64,
+        icrc1_memo: Option<Vec<u8>>,
         operation: Option<WireOperation>,
         created_at_time: WireTimeStamp,
     }
@@ -261,7 +314,13 @@ mod contract_tests {
         Err(WireQueryArchiveError),
     }
 
-    candid::define_function!(WireQueryArchiveFn : (GetBlocksArgs) -> (WireQueryArchiveResult) query);
+    #[derive(CandidType, Deserialize)]
+    struct WireGetBlocksArgs {
+        start: u64,
+        length: u64,
+    }
+
+    candid::define_function!(WireQueryArchiveFn : (WireGetBlocksArgs) -> (WireQueryArchiveResult) query);
 
     #[derive(CandidType)]
     struct WireArchivedBlocksRange {
@@ -303,7 +362,59 @@ mod contract_tests {
             vec![ArchivedBlocksRange {
                 start: 38_801_807,
                 length: 256,
+                callback: ArchiveCallback::new(Principal::anonymous(), "get_blocks".to_string()),
             }]
         );
+    }
+    #[test]
+    fn official_archive_requests_and_results_decode_in_both_directions() {
+        let bytes = candid::encode_one(GetBlocksArgs {
+            start: u64::MAX - 1,
+            length: 1,
+        })
+        .unwrap();
+        let args: WireGetBlocksArgs = candid::decode_one(&bytes).unwrap();
+        assert_eq!((args.start, args.length), (u64::MAX - 1, 1));
+
+        let success = WireQueryArchiveResult::Ok(WireBlockRange {
+            blocks: vec![WireBlock {
+                parent_hash: None,
+                timestamp: WireTimeStamp { timestamp_nanos: 9 },
+                transaction: WireTransaction {
+                    memo: 0,
+                    icrc1_memo: Some(vec![1, 2]),
+                    operation: None,
+                    created_at_time: WireTimeStamp { timestamp_nanos: 8 },
+                },
+            }],
+        });
+        let encode = |value| candid::encode_one(value).unwrap();
+        let blocks = candid::decode_one::<ArchiveResult>(&encode(success))
+            .unwrap()
+            .unwrap()
+            .blocks;
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].transaction.icrc1_memo, Some(vec![1, 2]));
+
+        let bad_first = WireQueryArchiveResult::Err(WireQueryArchiveError::BadFirstBlockIndex {
+            requested_index: 20,
+            first_valid_index: 25,
+        });
+        assert!(matches!(
+            candid::decode_one::<ArchiveResult>(&encode(bad_first)).unwrap(),
+            Err(ArchiveError::BadFirstBlockIndex {
+                requested_index: 20,
+                first_valid_index: 25
+            })
+        ));
+        let other = WireQueryArchiveResult::Err(WireQueryArchiveError::Other {
+            error_code: 42,
+            error_message: "unavailable".to_string(),
+        });
+        assert!(matches!(
+            candid::decode_one::<ArchiveResult>(&encode(other)).unwrap(),
+            Err(ArchiveError::Other { error_code: 42, error_message }) if error_message == "unavailable"
+        ));
+        assert!(candid::decode_one::<ArchiveResult>(&candid::encode_one(42u64).unwrap()).is_err());
     }
 }

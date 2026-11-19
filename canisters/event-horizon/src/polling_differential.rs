@@ -186,7 +186,7 @@ fn equal_transfers_walk_1024_watchers_once_and_empty_sets_keep_no_nat() {
 }
 
 #[test]
-fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
+fn unresolved_prefixes_do_not_walk_globals_and_the_snapshot_is_once() {
     for count in [0, 256, 1024] {
         std::thread::spawn(move || {
             fn ready<F: std::future::Future>(f: F) -> F::Output {
@@ -211,7 +211,7 @@ fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
             let mut order = SharedGlobalOrder {
                 existing: None,
                 admitted_at: BTreeMap::new(),
-                last_live: None,
+                last_processed: None,
             };
             let mut context = AdmissionContext {
                 runtime: config::RuntimeConfig::production(p(8), None),
@@ -222,24 +222,12 @@ fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
             };
             let mut out = BTreeMap::new();
             let empty = icp_ledger::QueryBlocksResponse {
-                chain_length: 0,
+                chain_length: 1,
                 blocks: vec![],
                 first_block_index: u64::MAX,
                 archived_blocks: vec![],
             };
-            assert_eq!(
-                ready(legacy_page(
-                    empty,
-                    Stream::Shared,
-                    0,
-                    0..0,
-                    &mut context,
-                    &mut out,
-                    Some(&mut order)
-                ))
-                .unwrap(),
-                (0, false)
-            );
+            assert!(ready(legacy_prefix(empty, &(0..1))).is_err());
             assert_eq!(state::test_global_visits(), 0);
             assert!(order.existing.is_none());
             for index in 0..2 {
@@ -262,14 +250,13 @@ fn empty_shared_pages_do_not_walk_globals_and_live_snapshot_is_once() {
                     ready(legacy_page(
                         response,
                         Stream::Shared,
-                        index + 1,
                         index..index + 1,
                         &mut context,
                         &mut out,
                         Some(&mut order)
                     ))
                     .unwrap(),
-                    (index + 1, true)
+                    index + 1
                 );
                 assert_eq!(state::test_global_visits(), count);
                 assert_eq!(state::global_subscription_count(), count);

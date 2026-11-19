@@ -28,9 +28,9 @@ Event Horizon consists of an autonomous backend and a separately controlled cert
 
 ## Poll lane
 
-Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Qualifying transfers independently accumulate the first qualifying block index and maximum `Nat` amount for each `(subject, target)`, capped at 256 combined specific matches per subscriber. Only decoded live blocks count as activity; archive-only progress never wakes global subscribers. Each subscriber receives at most one `poke(PokeNotification)`. Its explicit `global_activity` flag and subject-qualified `matches` are independent: global-only activity has a true flag and no matches, while specific matches may accompany either flag value.
+Each poll captures the first response's exclusive boundary (`chain_length` for ICP, `log_length` for ICRC-3) and never processes beyond it. Qualifying transfers independently accumulate the first qualifying block index and maximum `Nat` amount for each `(subject, target)`, capped at 256 combined specific matches per subscriber. Decoded blocks from the root ledger or its archives count as activity. Each subscriber receives at most one `poke(PokeNotification)`. Its explicit `global_activity` flag and subject-qualified `matches` are independent: global-only activity has a true flag and no matches, while specific matches may accompany either flag value.
 
-The reader uses no Index or archive traversal. A proven archived prefix is logged and skipped. Subscribers own authoritative reconciliation.
+The reader follows callbacks advertised by the configured root ledger to fetch the next unread prefix. Descriptors cannot advance a cursor. ICRC-3 referrals stay within the delegated interval and are limited to 16 archive calls per prefix. Subscribers own authoritative reconciliation.
 
 ## Admission and storage
 

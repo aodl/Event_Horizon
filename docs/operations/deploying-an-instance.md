@@ -107,8 +107,8 @@ instance verified.
 6. In a controlled acceptance environment, confirm a genuine qualifying Faucet
    payout to the generic default account causes a canonical poke and a generic
    admission scan. Confirm independent observed-ledger polling and verify
-   fallback by withholding a poke while the payout is still live. An archived
-   payout can be missed, with `HISTORY_GAP` reported. Spacing is 60 seconds and
+   fallback by withholding a poke. The reader can recover an unread archived
+   payout through the ICP Ledger callback. Spacing is 60 seconds and
    fallback is due after five minutes on the existing lane. Standard and Economy
    may reconcile only every ten minutes and every hour respectively, and reserve
    mode suspends ordinary polling entirely.

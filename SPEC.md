@@ -130,9 +130,8 @@ Install and upgrade make admission due on the first eligible pass using the
 existing prospective bootstrap and durable cursors. Pending work and scan
 spacing are transient and recover through that pass.
 
-Notifications remain best effort. Reconciliation reads the live ledger and
-preserves `HISTORY_GAP` reporting when archived ranges are encountered. No
-interval guarantees recovery of payouts across an archive gap or long outage.
+Notifications remain best effort. Reconciliation reads required unread ICP
+blocks through the configured root ledger and its archive callbacks.
 
 ## 6. Ledger reader
 
@@ -150,7 +149,7 @@ Within a single completed poll, Event Horizon attempts all globally matched
 subscriber pokes before attempting specific-only subscriber pokes. Each phase
 uses deterministic ascending principal order; endowment amounts do not determine
 ordering within a phase. Classification uses actual global-match state for the
-relevant live activity, including admission timing, rather than an empty payload
+relevant processed activity, including admission timing, rather than an empty payload
 or merely having a global declaration. A mixed global/specific match belongs to
 the global phase and still receives exactly one poke with its specific payload.
 A failed or unaffordable global poke does not stop remaining attempts; every
@@ -165,31 +164,31 @@ query, inspect or wait for Index canisters.
 
 ## 7. Archives and history gaps
 
-Event Horizon does not traverse Ledger archives.
+Both backend readers recover required unread blocks using callbacks advertised by
+the configured root ledger. ICRC-3 callbacks may refer to another callback
+within the delegated interval. The reader makes at most 16 ICRC-3 archive calls
+per prefix resolution, including the first callback. A deeper route stalls at
+the unread block until the route or the implementation changes.
 
-Event Horizon may skip a prefix only when the Ledger response itself explicitly
-proves that the contiguous required interval is archived. For such a proved
-archived interval Event Horizon:
+An initialized cursor identifies the first unprocessed block. Each commit
+requires a contiguous prefix of fetched, validated and processed blocks. A
+descriptor, error hint or later block cannot cover missing content. A short
+nonempty prefix can commit and the reader then asks the root ledger at the next
+cursor. For legacy ICP, the first block index is meaningful only when the root
+blocks vector is nonempty. The root tip remains fixed and exclusive throughout
+the poll. Archive-local counts do not set that boundary.
 
-1. writes one concise public `HISTORY_GAP` exceptional log for the skipped interval;
-2. advances its cursor past exactly that archived interval;
-3. continues normal operation.
+Unavailable, malformed, empty or unresolved required reads stop the stream at
+the unprocessed position. Ordinary later polling uses the same durable cursor
+and scheduling rules. Every read uses bounded wait and protects the liquid
+cycles reserve. Successful archive reads are ordinary processing. Storage
+location does not change ordering, matching, admission or global activity.
+Earlier committed prefixes remain durable if a later prefix fails. Such failures
+can discard transient notification hints from the incomplete scan. Pokes are
+best effort and subscribers retain authoritative reconciliation.
 
-Archive-only progress is not global activity. Archive callbacks are never
-called. An unexplained live hole does not advance the cursor and is retried
-later; Event Horizon does not infer archival merely from the first live block
-returned.
-
-For legacy `query_blocks`, `first_block_index` is interpreted only when the
-returned `blocks` vector is nonempty; the Ledger contract leaves that field
-unspecified for an empty vector. Empty responses therefore advance only over
-explicit contiguous archive evidence. A partial archived prefix commits only
-that prefix and the same poll continues toward its pinned boundary. An empty
-response below the boundary without usable evidence fails rather than spinning
-or making unsupported progress. Archive intervals are checked for overflow,
-clipped to the outstanding requested interval, and never bridge a genuine gap.
-
-This is acceptable because subscribers retain authoritative reconciliation.
+Fresh bootstrap starts at the root tip. Upgrades retain existing cursors and
+recover outstanding history from those cursors forward.
 
 ## 8. Poke contract
 
@@ -237,9 +236,9 @@ subscriber and retained semantic target in one successfully completed poll, it
 is the smallest observed Ledger block index of a transfer that matched the
 admitted target and satisfied the effective Event Horizon threshold when
 processed. It excludes unrelated and below-threshold transfers, activity before
-the relevant admission, and archive-only skipped blocks that were not inspected.
-It is not merely the poll or page start. Canonical ICP uses the validated live
-response index plus checked offset; ICRC-3 uses each validated explicit block ID,
+the relevant admission. Recovered archived transfers participate in the same aggregation.
+It is not merely the poll or page start. Canonical ICP uses the validated root response index or archive request start,
+plus checked offset; ICRC-3 uses each validated explicit block ID,
 already normalized to `u64`. No additional reads or conversions are needed.
 
 The two fields aggregate independently across transactions and pages:
@@ -429,7 +428,7 @@ Polling, funding, and pricing are independent one-shot, single-flight lanes. If 
 
 The production install configuration is immutable `observed_ledger` plus optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier`. `surplus_canister` is an independent canister principal and need not belong to the observed Ledger, SNS, or Jupiter; all diverted value remains ICP. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain Wasm-level compiled trust anchors. The same reviewed production Wasm serves every instance and contains no recipient-specific build input.
 
-Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
+Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Both readers follow bounded ledger-advertised archive callbacks as specified in section 7. Cursors advance only across fetched, validated and processed block coverage.
 
 Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
 
@@ -472,8 +471,7 @@ ICP is labelled **ICP ledger transactions** (all transaction kinds); a reviewed
 generic entry is labelled **<registry name> ledger records**. This is neither a
 backend processing count nor evidence of catch-up, active polling, notification
 delivery or service health. The prospective backend cursor cannot substitute
-for a processing count: it begins at the installation tip and may advance over
-explicitly proved archive gaps.
+for a processing count because it begins at the installation tip.
 
 The static registry explicitly selects `icp-chain-length`, `icrc3-log-length`
 or no counter. The browser queries only that entry's `observedLedgerCanisterId`

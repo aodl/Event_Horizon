@@ -9,33 +9,7 @@ thread_local! {
     static HISTORIAN_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static SNS_ROOT_UNAVAILABLE: Cell<bool> = const { Cell::new(false) };
     static SNS_RELATION_INVALID: Cell<bool> = const { Cell::new(false) };
-    static OBSERVED_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
-    static ADMISSION_HISTORY_GAP_ACTIVE: Cell<bool> = const { Cell::new(false) };
     static SHARED_CURSOR_INVALID: Cell<bool> = const { Cell::new(false) };
-}
-
-pub fn history_gap(stream: &str, start: u64, end_exclusive: u64) {
-    if end_exclusive <= start {
-        return;
-    }
-    let key = if stream == "observed" {
-        &OBSERVED_HISTORY_GAP_ACTIVE
-    } else {
-        &ADMISSION_HISTORY_GAP_ACTIVE
-    };
-    key.with(|flag| {
-        if !flag.replace(true) {
-            // A long archived prefix can span many bounded Ledger pages. Log the
-            // exceptional transition once rather than evicting useful public logs
-            // with one line per skipped page.
-            ic_cdk::println!(
-                "HISTORY_GAP stream={} first_skipped={}..{}",
-                stream,
-                start,
-                end_exclusive - 1
-            );
-        }
-    });
 }
 
 pub fn observed_ledger_failure(message: &str) {
@@ -48,7 +22,6 @@ pub fn observed_ledger_failure(message: &str) {
 
 pub fn observed_ledger_recovered() {
     OBSERVED_LEDGER_UNAVAILABLE.with(|f| f.set(false));
-    OBSERVED_HISTORY_GAP_ACTIVE.with(|f| f.set(false));
 }
 pub fn icp_admission_ledger_failure(message: &str) {
     ICP_LEDGER_UNAVAILABLE.with(|f| {
@@ -59,7 +32,6 @@ pub fn icp_admission_ledger_failure(message: &str) {
 }
 pub fn icp_admission_ledger_recovered() {
     ICP_LEDGER_UNAVAILABLE.with(|f| f.set(false));
-    ADMISSION_HISTORY_GAP_ACTIVE.with(|f| f.set(false));
 }
 pub fn ledger_recovered_all() {
     observed_ledger_recovered();

@@ -64,10 +64,31 @@ pub struct GetBlocksArgs {
     pub start: u64,
     pub length: u64,
 }
+#[derive(CandidType, Deserialize)]
+struct ArchiveBlockRange {
+    blocks: Vec<Block>,
+}
+
+#[derive(CandidType, Deserialize)]
+enum ArchiveError {
+    BadFirstBlockIndex {
+        requested_index: u64,
+        first_valid_index: u64,
+    },
+    Other {
+        error_code: u64,
+        error_message: String,
+    },
+}
+
+type ArchiveResult = Result<ArchiveBlockRange, ArchiveError>;
+candid::define_function!(pub ArchiveCallback : (GetBlocksArgs) -> (ArchiveResult) query);
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ArchivedRange {
     pub start: u64,
     pub length: u64,
+    pub callback: ArchiveCallback,
 }
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct QueryBlocksResponse {
@@ -185,11 +206,25 @@ struct LegacyDedup {
     arg: LegacyTransferArg,
     block: u64,
 }
+#[derive(CandidType, Deserialize)]
+struct ArchiveRoute {
+    canister: Principal,
+    method: String,
+    intervals: Vec<(u64, u64)>,
+}
+
 struct State {
     blocks: Vec<Block>,
     icrc_blocks: Vec<ICRC3Value>,
     first_local: u64,
     suppress_archive_info: bool,
+    archive_canister: Option<Principal>,
+    archive_reply_limit: u64,
+    archive_routes: Vec<ArchiveRoute>,
+    archive_window: Option<(u64, u64)>,
+    archive_error: Option<bool>,
+    #[cfg(feature = "generic_icrc3")]
+    archive_calls: u64,
     empty_first_overrides: Vec<DebugEmptyFirstOverride>,
     query_blocks_reject_starts: Vec<u64>,
     #[cfg(feature = "generic_icrc3")]
@@ -220,6 +255,13 @@ impl Default for State {
             icrc_blocks: vec![],
             first_local: 0,
             suppress_archive_info: false,
+            archive_canister: None,
+            archive_reply_limit: u64::MAX,
+            archive_routes: vec![],
+            archive_window: None,
+            archive_error: None,
+            #[cfg(feature = "generic_icrc3")]
+            archive_calls: 0,
             empty_first_overrides: vec![],
             query_blocks_reject_starts: vec![],
             #[cfg(feature = "generic_icrc3")]
@@ -402,10 +444,28 @@ fn query_blocks(args: GetBlocksArgs) -> QueryBlocksResponse {
         let archive_end = s.first_local.min(request_end);
         let mut archived = vec![];
         if args.start < archive_end && !s.suppress_archive_info {
-            archived.push(ArchivedRange {
-                start: args.start,
-                length: archive_end - args.start,
-            });
+            if s.archive_routes.is_empty() {
+                archived.push(ArchivedRange {
+                    start: args.start,
+                    length: archive_end - args.start,
+                    callback: ArchiveCallback::new(
+                        s.archive_canister
+                            .unwrap_or_else(ic_cdk::api::canister_self),
+                        "read_legacy_history".into(),
+                    ),
+                });
+            } else {
+                archived.extend(s.archive_routes.iter().flat_map(|route| {
+                    route
+                        .intervals
+                        .iter()
+                        .map(|&(start, length)| ArchivedRange {
+                            start,
+                            length,
+                            callback: ArchiveCallback::new(route.canister, route.method.clone()),
+                        })
+                }));
+            }
         }
         let first_live = args.start.max(s.first_local);
         let blocks: Vec<_> = (first_live..request_end)
@@ -920,16 +980,22 @@ fn icrc3_blocks_response(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
                 .min(state.icrc_blocks.len() as u64);
             let archive_end = state.first_local.min(end);
             if start < archive_end && !state.suppress_archive_info {
-                archived_blocks.push(ArchivedBlocks {
-                    args: vec![GetBlocksRequest {
-                        start: start.into(),
-                        length: (archive_end - start).into(),
-                    }],
-                    callback: QueryArchiveFn::new(
-                        ic_cdk::api::canister_self(),
-                        "forbidden_archive_callback",
-                    ),
-                });
+                if state.archive_routes.is_empty() {
+                    archived_blocks.push(ArchivedBlocks {
+                        args: vec![GetBlocksRequest {
+                            start: start.into(),
+                            length: (archive_end - start).into(),
+                        }],
+                        callback: QueryArchiveFn::new(
+                            state
+                                .archive_canister
+                                .unwrap_or_else(ic_cdk::api::canister_self),
+                            "read_icrc_history",
+                        ),
+                    });
+                } else {
+                    archived_blocks.extend(icrc_referrals(&state.archive_routes));
+                }
             }
             for id in start.max(state.first_local)..end {
                 blocks.push(BlockWithId {
@@ -1002,11 +1068,198 @@ fn debug_set_minting_account(value: DebugMintingAccount) {
 fn debug_set_capabilities(value: DebugCapabilities) {
     STATE.with(|s| s.borrow_mut().capabilities = value);
 }
+#[ic_cdk::query]
+fn read_legacy_history(args: GetBlocksArgs) -> ArchiveResult {
+    STATE.with(|state| {
+        let state = state.borrow();
+        match state.archive_error {
+            Some(true) => {
+                return Err(ArchiveError::BadFirstBlockIndex {
+                    requested_index: args.start,
+                    first_valid_index: args.start + 1,
+                })
+            }
+            Some(false) => {
+                return Err(ArchiveError::Other {
+                    error_code: 42,
+                    error_message: "mock archive unavailable".into(),
+                })
+            }
+            None => {}
+        }
+        check_archive_window(&state, args.start, args.length);
+        let end = args
+            .start
+            .saturating_add(args.length.min(state.archive_reply_limit))
+            .min(state.first_local);
+        Ok(ArchiveBlockRange {
+            blocks: (args.start..end)
+                .map(|id| state.blocks[id as usize].clone())
+                .collect(),
+        })
+    })
+}
+
+thread_local! {
+    static ARCHIVE_HOLD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static ARCHIVE_ENTERED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[ic_cdk::update]
+fn debug_hold_archive(hold: bool) {
+    ARCHIVE_HOLD.set(hold);
+    if hold {
+        ARCHIVE_ENTERED.set(false);
+    }
+}
+
+#[ic_cdk::query]
+fn debug_archive_entered() -> bool {
+    ARCHIVE_ENTERED.get()
+}
+
+#[ic_cdk::update]
+fn debug_archive_wait_tick() {}
+
+#[ic_cdk::update]
+async fn wait_for_legacy_history(args: GetBlocksArgs) -> ArchiveResult {
+    ARCHIVE_ENTERED.set(true);
+    while ARCHIVE_HOLD.get() {
+        Call::bounded_wait(ic_cdk::api::canister_self(), "debug_archive_wait_tick")
+            .await
+            .expect("mock archive wait tick");
+    }
+    read_legacy_history(args)
+}
+
+#[ic_cdk::query]
+fn archive_wrong_wire(_: GetBlocksArgs) -> u64 {
+    42
+}
+
+fn check_archive_window(state: &State, start: u64, length: u64) {
+    if let Some((floor, end)) = state.archive_window {
+        assert!(
+            floor <= start && length > 0 && start.checked_add(length).unwrap() <= end,
+            "archive request outside the advertised interval"
+        );
+    }
+}
+
+#[cfg(feature = "generic_icrc3")]
+fn icrc_referrals(routes: &[ArchiveRoute]) -> Vec<ArchivedBlocks> {
+    routes
+        .iter()
+        .map(|route| ArchivedBlocks {
+            args: route
+                .intervals
+                .iter()
+                .map(|&(start, length)| GetBlocksRequest {
+                    start: start.into(),
+                    length: length.into(),
+                })
+                .collect(),
+            callback: QueryArchiveFn::new(route.canister, &route.method),
+        })
+        .collect()
+}
+
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn record_icrc_archive_request(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    STATE.with(|state| state.borrow_mut().archive_calls += 1);
+    read_icrc_history(args)
+}
+
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::query]
-fn forbidden_archive_callback(_: Vec<GetBlocksRequest>) -> GetBlocksResult {
-    ic_cdk::trap("archive callback must not be called")
+fn debug_archive_calls() -> u64 {
+    STATE.with(|state| state.borrow().archive_calls)
 }
+
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::query]
+fn read_icrc_history(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    STATE.with(|state| {
+        let state = state.borrow();
+        let mut blocks = Vec::new();
+        for request in args {
+            let (start, length) = request.as_start_and_length().unwrap();
+            check_archive_window(&state, start, length);
+            let end = start
+                .saturating_add(length.min(state.archive_reply_limit))
+                .min(state.first_local);
+            if !state.archive_routes.is_empty() {
+                return GetBlocksResult {
+                    log_length: 0u8.into(),
+                    blocks: vec![],
+                    archived_blocks: icrc_referrals(&state.archive_routes),
+                };
+            }
+            blocks.extend((start..end).map(|id| BlockWithId {
+                id: id.into(),
+                block: state.icrc_blocks[id as usize].clone(),
+            }));
+        }
+        GetBlocksResult {
+            log_length: blocks.len().into(),
+            blocks,
+            archived_blocks: vec![],
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn debug_set_archive_routes(routes: Vec<ArchiveRoute>) {
+    STATE.with(|state| state.borrow_mut().archive_routes = routes);
+}
+
+#[ic_cdk::update]
+fn debug_set_archive_window(window: (u64, u64)) {
+    STATE.with(|state| state.borrow_mut().archive_window = Some(window));
+}
+
+#[ic_cdk::update]
+fn debug_set_archive_error(bad_first_block_index: Option<bool>) {
+    STATE.with(|state| state.borrow_mut().archive_error = bad_first_block_index);
+}
+
+#[ic_cdk::update]
+fn debug_set_archive_reply_limit(limit: u64) {
+    STATE.with(|state| state.borrow_mut().archive_reply_limit = limit);
+}
+
+#[ic_cdk::update]
+async fn debug_copy_to_archive((archive, end): (Principal, u64)) {
+    let (blocks, icrc_blocks) = STATE.with(|state| {
+        let state = state.borrow();
+        assert!(end <= state.blocks.len().max(state.icrc_blocks.len()) as u64);
+        (
+            state.blocks[..(end as usize).min(state.blocks.len())].to_vec(),
+            state.icrc_blocks[..(end as usize).min(state.icrc_blocks.len())].to_vec(),
+        )
+    });
+    Call::bounded_wait(archive, "debug_seed_archive")
+        .with_args(&(blocks, icrc_blocks))
+        .await
+        .unwrap();
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        state.first_local = end;
+        state.archive_canister = Some(archive);
+    });
+}
+
+#[ic_cdk::update]
+fn debug_seed_archive(blocks: Vec<Block>, icrc_blocks: Vec<ICRC3Value>) {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        state.first_local = blocks.len().max(icrc_blocks.len()) as u64;
+        state.blocks = blocks;
+        state.icrc_blocks = icrc_blocks;
+    });
+}
+
 #[ic_cdk::update]
 fn debug_set_first_local_block(index: u64) {
     STATE.with(|s| {

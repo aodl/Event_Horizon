@@ -3,7 +3,10 @@ use ic_cdk::call::Call;
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
     icrc1::account::Account,
-    icrc3::blocks::{GetBlocksRequest, GetBlocksResult, SupportedBlockType},
+    icrc3::{
+        archive::QueryArchiveFn,
+        blocks::{GetBlocksRequest, GetBlocksResult, SupportedBlockType},
+    },
 };
 
 use crate::config::RESERVE_PROTECTION_CYCLES;
@@ -134,19 +137,37 @@ pub async fn get_blocks(
 ) -> Result<GetBlocksResult, String> {
     #[cfg(feature = "debug_api")]
     GET_BLOCKS_CALLS.with(|calls| calls.set(calls.get() + 1));
+    read_blocks(ledger, "icrc3_get_blocks", start, length).await
+}
+
+pub async fn archive_blocks(
+    callback: &QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>,
+    start: u64,
+    length: u64,
+) -> Result<GetBlocksResult, String> {
+    read_blocks(callback.canister_id, &callback.method, start, length).await
+}
+
+async fn read_blocks(
+    ledger: Principal,
+    method: &str,
+    start: u64,
+    length: u64,
+) -> Result<GetBlocksResult, String> {
     let request = vec![GetBlocksRequest {
         start: start.into(),
         length: length.into(),
     }];
     checked_call(
         ledger,
-        "icrc3_get_blocks",
+        method,
         Some(candid::encode_one(request).map_err(|e| e.to_string())?),
     )
     .await?
     .candid()
-    .map_err(|e| format!("icrc3_get_blocks decode: {e:?}"))
+    .map_err(|e| format!("{method} decode: {e:?}"))
 }
+
 #[cfg(feature = "debug_api")]
 pub fn debug_get_blocks_calls() -> u64 {
     GET_BLOCKS_CALLS.with(std::cell::Cell::get)
@@ -187,6 +208,72 @@ pub async fn supported_block_types(ledger: Principal) -> Result<Vec<SupportedBlo
 mod tests {
     use super::*;
     use std::{collections::BTreeMap, str::FromStr};
+
+    // Independent wire envelope from ICRC-3. The standard Value is reused
+    // here because the archive protocol delegates the same record format.
+    #[derive(CandidType, Deserialize)]
+    struct WireRange {
+        start: Nat,
+        length: Nat,
+    }
+
+    #[derive(CandidType)]
+    struct WireBlock {
+        id: Nat,
+        block: ICRC3Value,
+    }
+
+    #[derive(CandidType)]
+    struct WireReferral {
+        args: Vec<WireRange>,
+        callback: WireCallback,
+    }
+
+    #[derive(CandidType)]
+    struct WireResult {
+        log_length: Nat,
+        blocks: Vec<WireBlock>,
+        archived_blocks: Vec<WireReferral>,
+    }
+
+    candid::define_function!(WireCallback : (Vec<WireRange>) -> (WireResult) query);
+
+    #[test]
+    fn icrc3_archive_uses_root_wire_shape_and_preserves_global_ids() {
+        let id = u64::MAX - 2;
+        let bytes = candid::encode_one(vec![GetBlocksRequest {
+            start: id.into(),
+            length: 2u8.into(),
+        }])
+        .unwrap();
+        let ranges: Vec<WireRange> = candid::decode_one(&bytes).unwrap();
+        assert_eq!(ranges[0].start, Nat::from(id));
+        assert_eq!(ranges[0].length, Nat::from(2u8));
+
+        let archive = Principal::from_slice(&[91]);
+        let wire = WireResult {
+            log_length: 1u8.into(),
+            blocks: vec![WireBlock {
+                id: id.into(),
+                block: ICRC3Value::Map(BTreeMap::new()),
+            }],
+            archived_blocks: vec![WireReferral {
+                args: vec![WireRange {
+                    start: (id + 1).into(),
+                    length: 1u8.into(),
+                }],
+                callback: WireCallback::new(archive, "delegated_history".into()),
+            }],
+        };
+        let result: GetBlocksResult =
+            candid::decode_one(&candid::encode_one(wire).unwrap()).unwrap();
+        assert_eq!(result.log_length, Nat::from(1u8));
+        assert_eq!(result.blocks[0].id, Nat::from(id));
+        let referral = &result.archived_blocks[0];
+        assert_eq!(referral.callback.canister_id, archive);
+        assert_eq!(referral.callback.method, "delegated_history");
+        assert_eq!(referral.args[0].as_start_and_length().unwrap(), (id + 1, 1));
+    }
 
     fn account_value(owner: Principal, subaccount: Option<[u8; 32]>) -> ICRC3Value {
         let mut values = vec![ICRC3Value::Blob(owner.as_slice().to_vec().into())];

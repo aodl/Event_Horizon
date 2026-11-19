@@ -9,7 +9,10 @@ use crate::{
 use candid::{Nat, Principal};
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
-    icrc3::blocks::{BlockWithId, GetBlocksResult},
+    icrc3::{
+        archive::QueryArchiveFn,
+        blocks::{ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResult},
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -17,6 +20,7 @@ use std::{
 };
 
 const MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256;
+const MAX_ICRC_ARCHIVE_CALLS: usize = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct TargetMatch {
@@ -58,7 +62,7 @@ fn dispatch_matches(
 struct SharedGlobalOrder {
     existing: Option<BTreeSet<Principal>>,
     admitted_at: BTreeMap<Principal, u64>,
-    last_live: Option<u64>,
+    last_processed: Option<u64>,
 }
 enum PreparedAdmission {
     Global(Principal),
@@ -462,36 +466,33 @@ fn observe_icp(
         }
     }
 }
-fn coalesce(ranges: &[(u64, u64)], start: u64) -> u64 {
-    let mut end = start;
-    loop {
-        let n = ranges
-            .iter()
-            .filter(|(s, e)| *s <= end && end < *e)
-            .fold(end, |x, (_, e)| x.max(*e));
-        if n == end {
-            return end;
+fn covering_archive<'a, T: 'a>(
+    ranges: impl IntoIterator<Item = Result<(u64, u64, &'a T), String>>,
+    requested: &Range<u64>,
+) -> Result<Option<(u64, &'a T)>, String> {
+    let mut selected = None;
+    for range in ranges {
+        let (start, length, callback) = range?;
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| format!("archive interval overflow start={start} length={length}"))?;
+        let end = end.min(requested.end);
+        // Keep the first covering range, while validating all advertised ranges.
+        if selected.is_none() && start <= requested.start && requested.start < end {
+            selected = Some((end, callback));
         }
-        end = n
     }
+    Ok(selected)
 }
-fn validated_archive_prefix(
-    ranges: impl IntoIterator<Item = (u64, u64)>,
-    start: u64,
-    request_end: u64,
-) -> Result<u64, String> {
-    let mut validated = Vec::new();
-    for (range_start, length) in ranges {
-        let range_end = range_start.checked_add(length).ok_or_else(|| {
-            format!("archive interval overflow start={range_start} length={length}")
-        })?;
-        let clipped_start = range_start.max(start);
-        let clipped_end = range_end.min(request_end);
-        if clipped_start < clipped_end {
-            validated.push((clipped_start, clipped_end));
-        }
+
+fn archive_failure(error: String, canister: Principal, method: &str, range: &Range<u64>) -> String {
+    if config::is_reserve_protection(&error) {
+        return error;
     }
-    Ok(coalesce(&validated, start))
+    format!(
+        "archive {canister}.{method} {}..{}: {error}",
+        range.start, range.end
+    )
 }
 
 fn request_end(start: u64, length: u64, boundary: u64) -> Result<u64, String> {
@@ -509,37 +510,41 @@ fn page_length(start: u64, remaining: Option<u64>) -> u64 {
         .min(representable)
 }
 
-fn icrc_archived(r: &GetBlocksResult, start: u64, request_end: u64) -> Result<u64, String> {
-    if r.archived_blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+type IcrcArchiveCallback = QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>;
+
+fn icrc_archived<'a>(
+    groups: &'a [ArchivedBlocks],
+    requested: &Range<u64>,
+) -> Result<Option<(u64, &'a IcrcArchiveCallback)>, String> {
+    if groups.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive archive groups".into());
     }
-    let mut v = Vec::new();
-    for a in &r.archived_blocks {
-        let count = v
-            .len()
-            .checked_add(a.args.len())
-            .ok_or("archive range count overflow")?;
-        if count > config::LEDGER_PAGE_SIZE as usize {
-            return Err("excessive archive ranges".into());
-        }
-        for q in &a.args {
-            let (s, l) = q.as_start_and_length()?;
-            v.push((s, l))
-        }
+    if groups.iter().map(|a| a.args.len()).sum::<usize>() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive archive ranges".into());
     }
-    validated_archive_prefix(v, start, request_end)
+    covering_archive(
+        groups.iter().flat_map(|a| {
+            a.args.iter().map(|q| {
+                let (start, length) = q.as_start_and_length()?;
+                Ok((start, length, &a.callback))
+            })
+        }),
+        requested,
+    )
 }
 
-fn icrc_live_blocks(
+fn icrc_blocks(
     mut blocks: Vec<BlockWithId>,
-    start: u64,
-    request_end: u64,
+    requested: &Range<u64>,
 ) -> Result<Vec<(u64, ICRC3Value)>, String> {
+    if blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive blocks".into());
+    }
     blocks.sort_by(|a, b| a.id.cmp(&b.id));
     let mut unique: Vec<(u64, ICRC3Value)> = Vec::new();
     for block in blocks {
         let id = u64nat(&block.id)?;
-        if id < start || id >= request_end {
+        if !requested.contains(&id) {
             continue;
         }
         if let Some((previous_id, previous_block)) = unique.last() {
@@ -555,51 +560,72 @@ fn icrc_live_blocks(
     Ok(unique)
 }
 
+async fn icrc_prefix(
+    mut response: GetBlocksResult,
+    mut requested: Range<u64>,
+) -> Result<Vec<(u64, ICRC3Value)>, String> {
+    let mut source: Option<IcrcArchiveCallback> = None;
+    let mut calls = 0;
+    loop {
+        let context = |error| match &source {
+            Some(callback) => {
+                archive_failure(error, callback.canister_id, &callback.method, &requested)
+            }
+            None => error,
+        };
+        let referral = icrc_archived(&response.archived_blocks, &requested).map_err(context)?;
+        let blocks = icrc_blocks(response.blocks, &requested).map_err(context)?;
+        if blocks.first().is_some_and(|(id, _)| *id == requested.start) {
+            return Ok(blocks);
+        }
+        let (end, callback) = referral.ok_or_else(|| {
+            context(match blocks.first() {
+                Some((id, _)) => format!("unexplained hole cursor={} block={id}", requested.start),
+                None => "no blocks or covering archive callback".into(),
+            })
+        })?;
+        if calls == MAX_ICRC_ARCHIVE_CALLS {
+            return Err(context("archive callback limit reached".into()));
+        }
+        requested.end = end;
+        let callback = callback.clone();
+        response = icrc3::archive_blocks(&callback, requested.start, end - requested.start)
+            .await
+            .map_err(|error| {
+                archive_failure(error, callback.canister_id, &callback.method, &requested)
+            })?;
+        // Archive log_length describes its local store. It cannot alter the root boundary.
+        source = Some(callback);
+        calls += 1;
+    }
+}
+
 async fn icrc_page(
     r: GetBlocksResult,
-    boundary: u64,
-    requested_start: u64,
-    requested_length: u64,
+    requested: Range<u64>,
     out: &mut BTreeMap<Principal, MatchState>,
-) -> Result<(u64, bool), String> {
-    if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
-        return Err("excessive live blocks".into());
-    }
-    let original = position(&state::read_metadata(), Stream::Observed)
+) -> Result<u64, String> {
+    let blocks = icrc_prefix(r, requested.clone()).await?;
+    let mut at = position(&state::read_metadata(), Stream::Observed)
         .unwrap()
         .1;
-    if original != requested_start {
+    if at != requested.start {
         return Err(format!(
-            "observed request cursor changed expected={requested_start} actual={original}"
+            "observed request cursor changed expected={} actual={at}",
+            requested.start
         ));
     }
-    let requested_end = request_end(requested_start, requested_length, boundary)?;
-    let mut at = original;
-    let archived = icrc_archived(&r, at, requested_end)?;
-    if archived > at {
-        logging::history_gap("observed", at, archived);
-        at = archived;
-        commit(Stream::Observed, true, at)
-    }
-    let blocks = icrc_live_blocks(r.blocks, at, requested_end)?;
-    let mut live = false;
     let mut cache = BTreeMap::new();
     for (id, block) in blocks {
         if id != at {
             return Err(format!("unexplained hole cursor={at} block={id}"));
         }
-        let e = icrc3::decode_block(&block)?;
-        observe_icrc3(id, &e, &mut cache, out);
-        live = true;
-        at = at.checked_add(1).ok_or("observed cursor overflow")?;
+        let event = icrc3::decode_block(&block)?;
+        observe_icrc3(id, &event, &mut cache, out);
+        at = id.checked_add(1).ok_or("observed cursor overflow")?;
     }
-    if at == original && at < boundary {
-        return Err("no live progress or archive evidence".into());
-    }
-    if live {
-        commit(Stream::Observed, true, at);
-    }
-    Ok((at, live))
+    commit(Stream::Observed, true, at);
+    Ok(at)
 }
 /// Only successful scans yield their transient notifications. A failure drops the
 /// entire scan-owned accumulator; page admission/cursor commits remain independent.
@@ -630,9 +656,13 @@ async fn scan_icrc(ledger: Principal) -> Result<CompletedScan, String> {
                 (icrc3::get_blocks(ledger, at, length).await?, length)
             }
         };
-        let (n, live) = icrc_page(r, boundary, at, requested_length, &mut out).await?;
-        at = n;
-        activity |= live
+        at = icrc_page(
+            r,
+            at..request_end(at, requested_length, boundary)?,
+            &mut out,
+        )
+        .await?;
+        activity = true;
     }
     Ok(CompletedScan {
         matches: out,
@@ -640,32 +670,79 @@ async fn scan_icrc(ledger: Principal) -> Result<CompletedScan, String> {
     })
 }
 
-fn legacy_archived(
-    r: &[icp_ledger::ArchivedBlocksRange],
-    start: u64,
-    request_end: u64,
-) -> Result<u64, String> {
-    if r.len() > config::LEDGER_PAGE_SIZE as usize {
+fn legacy_archived<'a>(
+    ranges: &'a [icp_ledger::ArchivedBlocksRange],
+    requested: &Range<u64>,
+) -> Result<Option<(u64, &'a icp_ledger::ArchiveCallback)>, String> {
+    if ranges.len() > config::LEDGER_PAGE_SIZE as usize {
         return Err("excessive archive ranges".into());
     }
-    validated_archive_prefix(
-        r.iter().map(|range| (range.start, range.length)),
-        start,
-        request_end,
+    covering_archive(
+        ranges
+            .iter()
+            .map(|range| Ok((range.start, range.length, &range.callback))),
+        requested,
     )
 }
+
+async fn legacy_prefix(
+    r: icp_ledger::QueryBlocksResponse,
+    requested: &Range<u64>,
+) -> Result<Vec<icp_ledger::Block>, String> {
+    if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
+        return Err("excessive blocks".into());
+    }
+    let referral = legacy_archived(&r.archived_blocks, requested)?;
+    if !r.blocks.is_empty() {
+        let end = r
+            .first_block_index
+            .checked_add(r.blocks.len() as u64)
+            .ok_or("legacy block index overflow")?;
+        if (r.first_block_index..end).contains(&requested.start) {
+            let offset = (requested.start - r.first_block_index) as usize;
+            let length = (end.min(requested.end) - requested.start) as usize;
+            return Ok(r.blocks.into_iter().skip(offset).take(length).collect());
+        }
+    }
+    let Some((end, callback)) = referral else {
+        return Err(
+            if !r.blocks.is_empty() && r.first_block_index > requested.start {
+                format!(
+                    "unexplained hole cursor={} first={}",
+                    requested.start, r.first_block_index
+                )
+            } else {
+                "no blocks or covering archive callback".into()
+            },
+        );
+    };
+    let interval = requested.start..end;
+    let length = end - interval.start;
+    let result = icp_ledger::archive_blocks(callback, interval.start, length)
+        .await
+        .and_then(|blocks| {
+            if blocks.is_empty() || blocks.len() as u64 > length {
+                return Err(format!(
+                    "invalid archive block count={} requested={length}",
+                    blocks.len()
+                ));
+            }
+            Ok(blocks)
+        });
+    result.map_err(|error| {
+        archive_failure(error, callback.0.principal, &callback.0.method, &interval)
+    })
+}
+
 async fn legacy_page(
     r: icp_ledger::QueryBlocksResponse,
     s: Stream,
-    boundary: u64,
     requested: Range<u64>,
     context: &mut AdmissionContext,
     out: &mut BTreeMap<Principal, MatchState>,
     mut shared_globals: Option<&mut SharedGlobalOrder>,
-) -> Result<(u64, bool), String> {
-    if r.blocks.len() > config::LEDGER_PAGE_SIZE as usize {
-        return Err("excessive live blocks".into());
-    }
+) -> Result<u64, String> {
+    let blocks = legacy_prefix(r, &requested).await?;
     let original = position(&state::read_metadata(), s)
         .ok_or("shared cursor invariant violated")?
         .1;
@@ -676,50 +753,23 @@ async fn legacy_page(
             requested.start,
         ));
     }
-    let mut at = original;
-    let archived = legacy_archived(&r.archived_blocks, at, requested.end)?;
-    if archived > at {
-        logging::history_gap(name(s), at, archived);
-        at = archived;
-        commit(s, true, at)
-    }
-    if !r.blocks.is_empty() && r.first_block_index > at {
-        return Err(format!(
-            "unexplained hole cursor={at} first={}",
-            r.first_block_index
-        ));
-    }
     let mut pending = PendingAdmissions::default();
     let mut page_global_admissions = BTreeMap::new();
-    let mut page_last_live = None;
-    let mut live = false;
-    for (offset, b) in r.blocks.into_iter().enumerate() {
-        let id = r
-            .first_block_index
-            .checked_add(offset as u64)
-            .ok_or("legacy block index overflow")?;
-        if id < at {
-            continue;
-        }
-        if id >= requested.end {
-            break;
-        }
-        if id != at {
-            return Err(format!("non-contiguous block expected={at} got={id}"));
-        }
+    let end = original
+        .checked_add(blocks.len() as u64)
+        .ok_or("legacy cursor overflow")?;
+    for (id, b) in (original..end).zip(blocks) {
         // The admitting Faucet transfer is still earlier than the new relation:
         // even watchers of this canister's default account start at later blocks.
         if matches!(s, Stream::Shared) {
-            // No admission writer has run yet. Snapshot once at the first live
-            // block, before observing or admitting that block; archive-only and
-            // empty scans never enumerate globals.
+            // Snapshot global membership once before observing or admitting
+            // the first fetched block.
             if let Some(order) = shared_globals.as_deref_mut() {
                 order
                     .existing
                     .get_or_insert_with(|| state::global_subscribers().into_iter().collect());
             }
             observe_icp(id, &b.transaction.operation, &mut pending, out);
-            page_last_live = Some(id);
         }
         if let Some(icp_ledger::Operation::Transfer { from, to, .. }) = &b.transaction.operation {
             if let Some(admission) =
@@ -730,7 +780,7 @@ async fn legacy_page(
                         if !order
                             .existing
                             .as_ref()
-                            .expect("live snapshot")
+                            .expect("global snapshot")
                             .contains(subscriber)
                         {
                             page_global_admissions.entry(*subscriber).or_insert(id);
@@ -743,27 +793,17 @@ async fn legacy_page(
                 }
             }
         }
-        live = true;
-        at = at.checked_add(1).ok_or("legacy cursor overflow")?;
     }
-    if at == original && at < boundary {
-        return Err("no live progress or archive evidence".into());
-    }
-    if live {
-        // No inter-canister call may separate publication of admissions verified
-        // in this page from the cursor that makes those admissions authoritative.
-        pending.publish();
-        commit(s, true, at);
-        if let Some(order) = shared_globals {
-            for (subscriber, admitted_at) in page_global_admissions {
-                order.admitted_at.entry(subscriber).or_insert(admitted_at);
-            }
-            if let Some(last_live) = page_last_live {
-                order.last_live = Some(last_live);
-            }
+    // Publish the verified admissions and both shared cursors without an await.
+    pending.publish();
+    commit(s, true, end);
+    if let Some(order) = shared_globals {
+        for (subscriber, admitted_at) in page_global_admissions {
+            order.admitted_at.entry(subscriber).or_insert(admitted_at);
         }
+        order.last_processed = Some(end - 1);
     }
-    Ok((at, live))
+    Ok(end)
 }
 async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
     let mut out = BTreeMap::new();
@@ -787,7 +827,7 @@ async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
     let mut shared_globals = matches!(s, Stream::Shared).then(|| SharedGlobalOrder {
         existing: None,
         admitted_at: BTreeMap::new(),
-        last_live: None,
+        last_processed: None,
     });
     let mut context = AdmissionContext {
         runtime: r.clone(),
@@ -812,26 +852,24 @@ async fn scan_legacy(s: Stream, decimals: u8) -> Result<CompletedScan, String> {
                 )
             }
         };
-        let (n, live) = legacy_page(
+        at = legacy_page(
             response,
             s,
-            boundary,
             at..request_end(at, requested_length, boundary)?,
             &mut context,
             &mut out,
             shared_globals.as_mut(),
         )
         .await?;
-        at = n;
-        activity |= live
+        activity = true;
     }
     if let Some(order) = shared_globals {
-        if let Some(last_live) = order.last_live {
+        if let Some(last_processed) = order.last_processed {
             for subscriber in order.existing.unwrap_or_default() {
                 out.entry(subscriber).or_default().global = true;
             }
             for (subscriber, admitted_at) in order.admitted_at {
-                if last_live > admitted_at {
+                if last_processed > admitted_at {
                     out.entry(subscriber).or_default().global = true;
                 }
             }
@@ -1268,83 +1306,31 @@ mod target_match_tests {
     }
 
     #[test]
-    fn archive_interval_coverage_is_bounded_contiguous_and_order_independent() {
-        struct Case {
-            name: &'static str,
-            ranges: Vec<(u64, u64)>,
-            start: u64,
-            request_end: u64,
-            expected: u64,
-        }
-        let cases = [
-            Case {
-                name: "complete",
-                ranges: vec![(10, 10)],
-                start: 10,
-                request_end: 20,
-                expected: 20,
-            },
-            Case {
-                name: "partial",
-                ranges: vec![(10, 4)],
-                start: 10,
-                request_end: 20,
-                expected: 14,
-            },
-            Case {
-                name: "out of order adjacent overlapping repeated",
-                ranges: vec![(15, 5), (10, 3), (13, 4), (10, 3), (12, 6)],
-                start: 10,
-                request_end: 20,
-                expected: 20,
-            },
-            Case {
-                name: "genuine gap",
-                ranges: vec![(14, 6), (10, 3)],
-                start: 10,
-                request_end: 20,
-                expected: 13,
-            },
-            Case {
-                name: "zero length",
-                ranges: vec![(10, 0), (9, 0)],
-                start: 10,
-                request_end: 20,
-                expected: 10,
-            },
-            Case {
-                name: "over broad evidence is clipped",
-                ranges: vec![(0, 100)],
-                start: 10,
-                request_end: 20,
-                expected: 20,
-            },
-            Case {
-                name: "boundary equal to cursor",
-                ranges: vec![(0, 100)],
-                start: 20,
-                request_end: 20,
-                expected: 20,
-            },
-            Case {
-                name: "near u64 boundary",
-                ranges: vec![(u64::MAX - 2, 2)],
-                start: u64::MAX - 2,
-                request_end: u64::MAX,
-                expected: u64::MAX,
-            },
-        ];
-        for case in cases {
+    fn archive_selection_clips_one_covering_range_without_joining_adjacent_ranges() {
+        for (ranges, requested, expected) in [
+            (vec![(15, 5), (8, 5), (13, 4)], 10..20, Some((13, &1))),
+            (vec![(10, 0), (11, 9)], 10..20, None),
+            (vec![(8, 100), (10, 2)], 10..20, Some((20, &0))),
+            (
+                vec![(u64::MAX - 2, 2)],
+                u64::MAX - 1..u64::MAX,
+                Some((u64::MAX, &0)),
+            ),
+        ] {
+            let callbacks = [0, 1, 2];
             assert_eq!(
-                validated_archive_prefix(case.ranges, case.start, case.request_end).unwrap(),
-                case.expected,
-                "{}",
-                case.name
+                covering_archive(
+                    ranges
+                        .into_iter()
+                        .zip(&callbacks)
+                        .map(|((start, length), callback)| Ok((start, length, callback))),
+                    &requested,
+                )
+                .unwrap(),
+                expected,
             );
         }
-        for ranges in [vec![(u64::MAX, 1)], vec![(u64::MAX - 1, 2)]] {
-            assert!(validated_archive_prefix(ranges, 0, u64::MAX).is_err());
-        }
+        assert!(covering_archive([Ok((0, 10, &0)), Ok((u64::MAX, 1, &1))], &(0..10)).is_err());
         assert_eq!(request_end(u64::MAX - 1, 1, u64::MAX).unwrap(), u64::MAX);
         assert!(request_end(u64::MAX, 1, u64::MAX).is_err());
         assert_eq!(page_length(u64::MAX, None), 0);
@@ -1352,24 +1338,26 @@ mod target_match_tests {
 
     #[test]
     fn legacy_archive_wrapper_rejects_excessive_or_overflowing_ranges() {
+        let callback = icp_ledger::ArchiveCallback::new(Principal::anonymous(), "unused".into());
         let excessive = vec![
             icp_ledger::ArchivedBlocksRange {
                 start: 0,
                 length: 0,
+                callback: callback.clone(),
             };
             config::LEDGER_PAGE_SIZE as usize + 1
         ];
         assert_eq!(
-            legacy_archived(&excessive, 0, 10).unwrap_err(),
+            legacy_archived(&excessive, &(0..10)).unwrap_err(),
             "excessive archive ranges"
         );
         assert!(legacy_archived(
             &[icp_ledger::ArchivedBlocksRange {
                 start: u64::MAX,
                 length: 1,
+                callback,
             }],
-            0,
-            10,
+            &(0..10),
         )
         .is_err());
     }
@@ -1394,14 +1382,14 @@ mod target_match_tests {
         let excessive_groups =
             icrc_result((0..=config::LEDGER_PAGE_SIZE).map(|_| Vec::new()).collect());
         assert_eq!(
-            icrc_archived(&excessive_groups, 0, 10).unwrap_err(),
+            icrc_archived(&excessive_groups.archived_blocks, &(0..10)).unwrap_err(),
             "excessive archive groups"
         );
         let excessive_ranges = icrc_result(vec![(0..=config::LEDGER_PAGE_SIZE)
             .map(|_| request(0u8.into(), 0u8.into()))
             .collect()]);
         assert_eq!(
-            icrc_archived(&excessive_ranges, 0, 10).unwrap_err(),
+            icrc_archived(&excessive_ranges.archived_blocks, &(0..10)).unwrap_err(),
             "excessive archive ranges"
         );
         let above_u64 = Nat::from_str("18446744073709551616").unwrap();
@@ -1410,7 +1398,7 @@ mod target_match_tests {
             icrc_result(vec![vec![request(1u8.into(), above_u64)]]),
             icrc_result(vec![vec![request(u64::MAX.into(), 1u8.into())]]),
         ] {
-            assert!(icrc_archived(&malformed, 0, 10).is_err());
+            assert!(icrc_archived(&malformed.archived_blocks, &(0..10)).is_err());
         }
     }
 
@@ -1422,18 +1410,46 @@ mod target_match_tests {
     }
 
     #[test]
-    fn icrc_live_blocks_sort_and_deduplicate_without_selecting_conflicts() {
+    fn icrc_blocks_sort_and_deduplicate_without_selecting_conflicts() {
         assert_eq!(
-            icrc_live_blocks(vec![block(11, 2), block(10, 1), block(10, 1)], 10, 12).unwrap(),
+            icrc_blocks(
+                vec![block(12, 3), block(11, 2), block(10, 1), block(10, 1)],
+                &(10..12)
+            )
+            .unwrap(),
             vec![
                 (10, ICRC3Value::Nat(1u8.into())),
                 (11, ICRC3Value::Nat(2u8.into()))
             ]
         );
         assert_eq!(
-            icrc_live_blocks(vec![block(10, 1), block(10, 2)], 10, 11).unwrap_err(),
+            icrc_blocks(vec![block(10, 1), block(10, 2)], &(10..11)).unwrap_err(),
             "conflicting duplicate block id=10"
         );
+    }
+    #[test]
+    fn icrc_normalization_validates_all_numeric_ids_and_bounds_blocks() {
+        let range = u64::MAX - 2..u64::MAX;
+        assert_eq!(
+            icrc_blocks(
+                vec![
+                    block(u64::MAX, 1),
+                    block(u64::MAX, 2),
+                    block(u64::MAX - 2, 3)
+                ],
+                &range
+            )
+            .unwrap(),
+            vec![(u64::MAX - 2, ICRC3Value::Nat(3u8.into()))]
+        );
+        let mut oversized = block(0, 1);
+        oversized.id = Nat::from(u64::MAX) + Nat::from(1u8);
+        assert_eq!(
+            icrc_blocks(vec![oversized], &range).unwrap_err(),
+            "Nat exceeds u64"
+        );
+        let extra = vec![block(0, 1); config::LEDGER_PAGE_SIZE as usize + 1];
+        assert_eq!(icrc_blocks(extra, &range).unwrap_err(), "excessive blocks");
     }
 }
 

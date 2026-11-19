@@ -425,6 +425,23 @@ mod tests {
         last_caller: Option<Principal>,
     }
 
+    #[derive(CandidType)]
+    struct ArchiveRoute {
+        canister: Principal,
+        method: String,
+        intervals: Vec<(u64, u64)>,
+    }
+
+    impl ArchiveRoute {
+        fn new(canister: Principal, method: &str, intervals: Vec<(u64, u64)>) -> Self {
+            Self {
+                canister,
+                method: method.into(),
+                intervals,
+            }
+        }
+    }
+
     impl Env {
         fn new() -> Result<Self> {
             let env = Self::new_unpriced()?;
@@ -752,6 +769,25 @@ mod tests {
             );
             update::<_, ()>(&self.pic, id, "debug_pricing_once", ())?;
             Ok(id)
+        }
+
+        fn archive(&self, ledger: Principal, end: u64) -> Result<Principal> {
+            let archive = self.pic.create_canister();
+            self.pic.add_cycles(archive, 2_000_000_000_000);
+            let generic = ledger != self.ledger;
+            let (cache, package) = if generic {
+                (&ICRC3_LEDGER_WASM, "mock-icrc3-ledger")
+            } else {
+                (&LEDGER_WASM, "mock-icp-ledger")
+            };
+            self.pic
+                .install_canister(archive, wasm(cache, package, None)?, vec![], None);
+            update::<_, ()>(&self.pic, ledger, "debug_copy_to_archive", (archive, end))?;
+            Ok(archive)
+        }
+
+        fn set_archive_routes(&self, source: Principal, routes: Vec<ArchiveRoute>) -> Result<()> {
+            update(&self.pic, source, "debug_set_archive_routes", routes)
         }
 
         fn poll(&self) -> Result<()> {
@@ -1782,7 +1818,7 @@ mod tests {
             }
             env.poll()?;
             let source = account_id(Principal::from_slice(&[91, 1]), [0; 32]);
-            let skipped = env.append_observed(
+            let archived = env.append_observed(
                 source.clone(),
                 account_id(env.cmc, numbered(7)),
                 900_000_000,
@@ -1792,10 +1828,10 @@ mod tests {
                 &env.pic,
                 env.observed_ledger,
                 "debug_set_first_local_block",
-                skipped + 1,
+                archived + 1,
             )?;
             env.append_observed(source.clone(), account_id(env.cmc, numbered(7)), 1, None)?;
-            let first = env.append_observed(
+            env.append_observed(
                 source.clone(),
                 account_id(env.cmc, numbered(7)),
                 2_000_000,
@@ -1848,7 +1884,7 @@ mod tests {
             assert!(matches.contains(&PokeMatch {
                 subject: env.cmc,
                 target: WatchTarget::Subaccount(7),
-                first_block_index: first,
+                first_block_index: archived,
                 max_amount: 1_500_000_000u64.into()
             }));
             assert!(matches.contains(&PokeMatch {
@@ -3992,64 +4028,74 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn live_page_cursor_is_atomic_across_a_late_malformed_block() -> Result<()> {
-        let env = Env::new_two_ledgers()?;
-        env.poll()?;
-        env.admit(7, None, 1_000_000_000)?;
-        let source = account_id(Principal::from_slice(&[91]), [0; 32]);
-        let matching_index = env.append_observed(
-            source.clone(),
-            account_id(env.subscriber, numbered(7)),
-            1,
-            None,
-        )?;
-        update::<_, u64>(
-            &env.pic,
-            env.observed_ledger,
-            "debug_append_malformed_transfer",
-            (),
-        )?;
-        let before = env.state()?.observed_next_block;
-        let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        env.poll()?;
-        assert_eq!(env.state()?.observed_next_block, before);
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes
-        );
+    fn icrc_prefix_cursor_is_atomic_across_a_late_malformed_block() -> Result<()> {
+        for archived in [false, true] {
+            let env = Env::new_two_ledgers()?;
+            env.poll()?;
+            env.admit(7, None, 1_000_000_000)?;
+            let source = account_id(Principal::from_slice(&[91]), [0; 32]);
+            let matching_index = env.append_observed(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                1,
+                None,
+            )?;
+            update::<_, u64>(
+                &env.pic,
+                env.observed_ledger,
+                "debug_append_malformed_transfer",
+                (),
+            )?;
+            if archived {
+                update::<_, ()>(
+                    &env.pic,
+                    env.observed_ledger,
+                    "debug_set_first_local_block",
+                    matching_index + 2,
+                )?;
+            }
+            let before = env.state()?.observed_next_block;
+            let pokes = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+            env.poll()?;
+            assert_eq!(env.state()?.observed_next_block, before);
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes
+            );
 
-        update::<_, ()>(
-            &env.pic,
-            env.observed_ledger,
-            "debug_repair_last_transfer",
-            Append {
-                from: source,
-                to: account_id(Principal::from_slice(&[92]), [0; 32]),
-                amount_e8s: 1,
-                icrc1_memo: None,
-            },
-        )?;
-        env.poll()?;
-        env.wait_for_pokes(pokes + 1)?;
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes + 1
-        );
-        assert_eq!(
-            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![PokeMatch {
-                subject: env.subscriber,
-                target: WatchTarget::Subaccount(7),
-                first_block_index: matching_index,
-                max_amount: candid::Nat::from(1u8),
-            }]
-        );
+            update::<_, ()>(
+                &env.pic,
+                env.observed_ledger,
+                "debug_repair_last_transfer",
+                Append {
+                    from: source,
+                    to: account_id(Principal::from_slice(&[92]), [0; 32]),
+                    amount_e8s: 1,
+                    icrc1_memo: None,
+                },
+            )?;
+            env.poll()?;
+            env.wait_for_pokes(pokes + 1)?;
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes + 1
+            );
+            assert_eq!(
+                query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+                vec![PokeMatch {
+                    subject: env.subscriber,
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: matching_index,
+                    max_amount: candid::Nat::from(1u8),
+                }]
+            );
+        }
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn archive_only_progress_does_not_poke_a_global_subscriber() -> Result<()> {
+    fn archived_non_transfer_activity_pokes_a_global_subscriber() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.admit_global(GLOBAL_BASE_E8S)?;
@@ -4065,9 +4111,12 @@ mod tests {
             "debug_set_first_local_block",
             1u64,
         )?;
-        let poke_counts = env.poke_counts()?;
+        let before = env.subscriber_observation()?.pokes;
         env.poll()?;
-        assert_eq!(env.poke_counts()?, poke_counts);
+        let received = env.wait_for_pokes(before + 1)?;
+        assert!(received.global_activity);
+        assert!(received.matches.is_empty());
+        assert_eq!(received.last_caller, Some(env.event_horizon));
         assert_eq!(env.state()?.observed_next_block, 1);
         Ok(())
     }
@@ -4256,7 +4305,7 @@ mod tests {
         );
         assert!(env
             .public_logs()?
-            .contains("ICP_ADMISSION_LEDGER_UNAVAILABLE no live progress or archive evidence"));
+            .contains("ICP_ADMISSION_LEDGER_UNAVAILABLE no blocks or covering archive callback"));
         Ok(())
     }
 
@@ -5041,114 +5090,132 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn staged_account_admission_is_not_durable_before_shared_cursor_commit() -> Result<()> {
-        let env = Env::new()?;
-        env.poll()?;
-        let before = env.state()?;
-        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        let source = account_id(Principal::from_slice(&[91]), [0; 32]);
+        for archived in [false, true] {
+            let env = Env::new()?;
+            env.poll()?;
+            let before = env.state()?;
+            let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+            let source = account_id(Principal::from_slice(&[91]), [0; 32]);
 
-        env.append(
-            source.clone(),
-            account_id(env.subscriber, numbered(7)),
-            1,
-            None,
-        )?;
-        env.append_account_admission(7, None, 1_000_000_000)?;
-        let matching_index =
-            env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
+            env.append(
+                source.clone(),
+                account_id(env.subscriber, numbered(7)),
+                1,
+                None,
+            )?;
+            env.append_account_admission(7, None, 1_000_000_000)?;
+            let matching_index =
+                env.append(source, account_id(env.subscriber, numbered(7)), 1, None)?;
 
-        env.set_abort_after_staged_admission(true)?;
-        env.poll()?;
-        assert!(env.subscription(7)?.is_none());
-        let failed = env.state()?;
-        assert_eq!(failed.admission_next_block, before.admission_next_block);
-        assert_eq!(failed.observed_next_block, before.observed_next_block);
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes_before
-        );
+            if archived {
+                env.archive(env.ledger, matching_index + 1)?;
+            }
+            env.set_abort_after_staged_admission(true)?;
+            env.poll()?;
+            assert!(env.subscription(7)?.is_none());
+            let failed = env.state()?;
+            assert_eq!(failed.admission_next_block, before.admission_next_block);
+            assert_eq!(failed.observed_next_block, before.observed_next_block);
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes_before
+            );
 
-        env.set_abort_after_staged_admission(false)?;
-        env.poll()?;
-        env.wait_for_pokes(pokes_before + 1)?;
-        assert!(env.subscription(7)?.is_some());
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes_before + 1,
-            "only the transfer after staged admission may match"
-        );
-        assert_eq!(
-            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
-            vec![PokeMatch {
-                subject: env.subscriber,
-                target: WatchTarget::Subaccount(7),
-                first_block_index: matching_index,
-                max_amount: candid::Nat::from(1u8),
-            }]
-        );
+            env.set_abort_after_staged_admission(false)?;
+            env.poll()?;
+            env.wait_for_pokes(pokes_before + 1)?;
+            assert!(env.subscription(7)?.is_some());
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes_before + 1,
+                "only the transfer after staged admission may match"
+            );
+            assert_eq!(
+                query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?,
+                vec![PokeMatch {
+                    subject: env.subscriber,
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: matching_index,
+                    max_amount: candid::Nat::from(1u8),
+                }]
+            );
+        }
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn staged_global_admission_is_not_durable_before_shared_cursor_commit() -> Result<()> {
-        let env = Env::new()?;
-        env.poll()?;
-        let before = env.state()?;
-        let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        let source = account_id(Principal::from_slice(&[92]), [0; 32]);
-        let unrelated = account_id(Principal::from_slice(&[93]), [0; 32]);
+        for archived in [false, true] {
+            let env = Env::new()?;
+            env.poll()?;
+            let before = env.state()?;
+            let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
+            let source = account_id(Principal::from_slice(&[92]), [0; 32]);
+            let unrelated = account_id(Principal::from_slice(&[93]), [0; 32]);
 
-        env.append(source.clone(), unrelated.clone(), 1, None)?;
-        env.append_global_admission(GLOBAL_BASE_E8S)?;
-        env.append(source, unrelated, 1, None)?;
+            env.append(source.clone(), unrelated.clone(), 1, None)?;
+            env.append_global_admission(GLOBAL_BASE_E8S)?;
+            let last = env.append(source, unrelated, 1, None)?;
 
-        env.set_abort_after_staged_admission(true)?;
-        env.poll()?;
-        assert!(!env.global_subscription()?);
-        let failed = env.state()?;
-        assert_eq!(failed.admission_next_block, before.admission_next_block);
-        assert_eq!(failed.observed_next_block, before.observed_next_block);
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes_before
-        );
+            if archived {
+                env.archive(env.ledger, last + 1)?;
+            }
+            env.set_abort_after_staged_admission(true)?;
+            env.poll()?;
+            assert!(!env.global_subscription()?);
+            let failed = env.state()?;
+            assert_eq!(failed.admission_next_block, before.admission_next_block);
+            assert_eq!(failed.observed_next_block, before.observed_next_block);
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes_before
+            );
 
-        env.set_abort_after_staged_admission(false)?;
-        env.poll()?;
-        env.wait_for_pokes(pokes_before + 1)?;
-        assert!(env.global_subscription()?);
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes_before + 1,
-            "only activity after the global admission may wake it"
-        );
-        assert!(
-            query::<_, Vec<PokeMatch>>(&env.pic, env.subscriber, "debug_last_matches", ())?
-                .is_empty()
-        );
+            env.set_abort_after_staged_admission(false)?;
+            env.poll()?;
+            env.wait_for_pokes(pokes_before + 1)?;
+            assert!(env.global_subscription()?);
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                pokes_before + 1,
+                "only activity after the global admission may wake it"
+            );
+            assert!(query::<_, Vec<PokeMatch>>(
+                &env.pic,
+                env.subscriber,
+                "debug_last_matches",
+                ()
+            )?
+            .is_empty());
+        }
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn staged_distinct_admission_is_not_durable_before_admission_cursor_commit() -> Result<()> {
-        let env = Env::new_two_ledgers()?;
-        env.poll()?;
-        let before = env.state()?;
-        env.append_account_admission(7, None, 1_000_000_000)?;
+        for archived in [false, true] {
+            let env = Env::new_two_ledgers()?;
+            env.poll()?;
+            let before = env.state()?;
+            env.append_account_admission(7, None, 1_000_000_000)?;
 
-        env.set_abort_after_staged_admission(true)?;
-        env.poll()?;
-        assert!(env.subscription(7)?.is_none());
-        let failed = env.state()?;
-        assert_eq!(failed.admission_next_block, before.admission_next_block);
-        assert_eq!(failed.observed_next_block, before.observed_next_block);
+            if archived {
+                env.archive(env.ledger, before.admission_next_block + 1)?;
+            }
+            env.set_abort_after_staged_admission(true)?;
+            env.poll()?;
+            assert!(env.subscription(7)?.is_none());
+            let failed = env.state()?;
+            assert_eq!(failed.admission_next_block, before.admission_next_block);
+            assert_eq!(failed.observed_next_block, before.observed_next_block);
 
-        env.set_abort_after_staged_admission(false)?;
-        env.poll()?;
-        assert!(env.subscription(7)?.is_some());
-        assert!(env.state()?.admission_next_block > before.admission_next_block);
+            env.set_abort_after_staged_admission(false)?;
+            env.poll()?;
+            assert!(env.subscription(7)?.is_some());
+            assert!(env.state()?.admission_next_block > before.admission_next_block);
+        }
         Ok(())
     }
 
@@ -5451,17 +5518,77 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn archived_prefix_is_skipped_and_live_reader_continues() -> Result<()> {
+    fn legacy_archive_ranges_are_bounded_and_failures_hold_the_next_prefix() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
-        let source = account_id(Principal::from_slice(&[8]), [0; 32]);
-        let destination = account_id(Principal::from_slice(&[9]), [0; 32]);
-        for _ in 0..5 {
-            env.append(source.clone(), destination.clone(), 1_000_000, None)?;
+        env.admit_global(GLOBAL_BASE_E8S)?;
+        let start = env.state()?.observed_next_block;
+        env.append_ledger_batch(DebugBatchKind::Irrelevant, 5)?;
+        let first = env.archive(env.ledger, start + 2)?;
+        let second = env.archive(env.ledger, start + 4)?;
+        for (archive, floor) in [(first, start), (second, start + 2)] {
+            update::<_, ()>(
+                &env.pic,
+                archive,
+                "debug_set_archive_window",
+                (floor, floor + 2),
+            )?;
         }
-        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 3u64)?;
+        update::<_, ()>(&env.pic, first, "debug_set_archive_reply_limit", 1u64)?;
+        let routes = |method| {
+            vec![
+                ArchiveRoute::new(second, method, vec![(start + 2, 2)]),
+                ArchiveRoute::new(first, "read_legacy_history", vec![(start, 2)]),
+            ]
+        };
+        let before = env.subscriber_observation()?.pokes;
+
+        for method in ["archive_wrong_wire", "no_such_archive_method"] {
+            env.set_archive_routes(env.ledger, routes(method))?;
+            env.poll()?;
+            assert_eq!(env.state()?.observed_next_block, start + 2);
+            assert_eq!(env.subscriber_observation()?.pokes, before);
+        }
+        env.set_archive_routes(env.ledger, routes("read_legacy_history"))?;
+        for error in [Some(true), Some(false)] {
+            update::<_, ()>(&env.pic, second, "debug_set_archive_error", error)?;
+            env.poll()?;
+            assert_eq!(env.state()?.observed_next_block, start + 2);
+            assert_eq!(env.state()?.admission_next_block, start + 2);
+            assert_eq!(env.subscriber_observation()?.pokes, before);
+        }
+        update::<_, ()>(&env.pic, second, "debug_set_archive_error", None::<bool>)?;
+        env.set_archive_routes(env.ledger, routes("wait_for_legacy_history"))?;
+        update::<_, ()>(&env.pic, second, "debug_hold_archive", true)?;
+        let poll = env
+            .pic
+            .submit_call(
+                env.event_horizon,
+                Principal::anonymous(),
+                "debug_poll_once",
+                encode_one(())?,
+            )
+            .map_err(|e| anyhow!("{e:?}"))?;
+        let mut entered = false;
+        for _ in 0..20 {
+            env.pic.tick();
+            entered = query(&env.pic, second, "debug_archive_entered", ())?;
+            if entered {
+                break;
+            }
+        }
+        assert!(entered, "archive must hold the in-flight request");
+        env.pic.advance_time(std::time::Duration::from_secs(301));
+        env.pic.await_call(poll).map_err(|e| anyhow!("{e:?}"))?;
+        assert_eq!(env.state()?.observed_next_block, start + 2);
+        assert_eq!(env.subscriber_observation()?.pokes, before);
+        update::<_, ()>(&env.pic, second, "debug_hold_archive", false)?;
+        env.set_archive_routes(env.ledger, routes("read_legacy_history"))?;
+
         env.poll()?;
-        assert_eq!(env.state()?.observed_next_block, 5);
+        assert_eq!(env.state()?.observed_next_block, start + 5);
+        assert_eq!(env.state()?.admission_next_block, start + 5);
+        assert!(env.wait_for_pokes(before + 1)?.global_activity);
         Ok(())
     }
 
@@ -5578,114 +5705,89 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn separate_icp_admission_traverses_archive_pages_and_admits_only_live_payout() -> Result<()> {
-        let env = Env::new_two_ledgers()?;
+    fn shared_icp_archive_admits_and_matches_only_later_activity() -> Result<()> {
+        let env = Env::new()?;
         env.poll()?;
-        let compact = env.subscriber.to_text().replace('-', "");
-        let memo = format!("{compact}.7").into_bytes();
-        env.set_route(memo.clone(), 1_000_000_000)?;
-
-        // This observed activity predates admission and must never become retroactive.
-        env.append_observed(
-            account_id(Principal::from_slice(&[93]), [0; 32]),
-            account_id(env.subscriber, numbered(7)),
-            3,
-            None,
-        )?;
-        // An authorized payout hidden behind archive metadata is not reconstructed.
-        env.append(
-            account_id(env.faucet, [0; 32]),
-            account_id(env.event_horizon, [0; 32]),
-            1,
-            Some(memo.clone()),
-        )?;
-        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", 1u64)?;
-        let initial_poke_counts = env.poke_counts()?;
-        env.poll()?;
-        assert!(env.subscription(7)?.is_none());
-        assert_eq!(env.state()?.admission_next_block, 1);
-        assert_eq!(env.state()?.observed_next_block, 1);
-        assert_eq!(env.poke_counts()?, initial_poke_counts);
-
-        env.append_ledger_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
-        let live = env.append(
-            account_id(env.faucet, [0; 32]),
-            account_id(env.event_horizon, [0; 32]),
-            1,
-            Some(memo),
-        )?;
-        assert_eq!(live, 1 + 3 * 256);
-        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", live)?;
-        let calls_before = query::<_, u64>(
-            &env.pic,
-            env.event_horizon,
-            "debug_legacy_query_blocks_calls",
-            (),
-        )?;
-        let catch_up_poke_counts = env.poke_counts()?;
+        let source = account_id(Principal::from_slice(&[93]), [0; 32]);
+        let target = account_id(env.subscriber, numbered(7));
+        env.append(source.clone(), target.clone(), 99, None)?;
+        env.append_account_admission(7, None, 1_000_000_000)?;
+        let first = env.append(source.clone(), target.clone(), 5, None)?;
+        let last = env.append(source, target, 17, None)?;
+        let archive = env.archive(env.ledger, last + 1)?;
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 3u64)?;
+        let before = env.subscriber_observation()?.pokes;
 
         env.poll()?;
 
-        let state = env.state()?;
-        assert_eq!(state.admission_next_block, live + 1);
-        assert_eq!(
-            state.observed_next_block, 1,
-            "observed cursor is independent"
+        assert!(
+            env.subscription(7)?.is_some(),
+            "archived ICP payout must admit"
         );
+        let observation = env.wait_for_pokes(before + 1)?;
+        assert_eq!(observation.last_caller, Some(env.event_horizon));
         assert_eq!(
-            query::<_, u64>(
-                &env.pic,
-                env.event_horizon,
-                "debug_legacy_query_blocks_calls",
-                (),
-            )? - calls_before,
-            4
+            observation.matches,
+            vec![PokeMatch {
+                subject: env.subscriber,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: first,
+                max_amount: 17u8.into(),
+            }]
         );
-        assert!(env.subscription(7)?.is_some());
-        assert_eq!(env.poke_counts()?, catch_up_poke_counts);
-
-        let matching_index = env.append_observed(
-            account_id(Principal::from_slice(&[94]), [0; 32]),
-            account_id(env.subscriber, numbered(7)),
-            5,
-            None,
-        )?;
-        env.poll()?;
-        env.wait_for_matches(&[PokeMatch {
-            subject: env.subscriber,
-            target: WatchTarget::Subaccount(7),
-            first_block_index: matching_index,
-            max_amount: candid::Nat::from(5u8),
-        }])?;
+        assert_eq!(env.state()?.observed_next_block, last + 1);
+        assert_eq!(env.state()?.admission_next_block, last + 1);
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn generic_icrc3_multi_page_archive_catch_up_reaches_live_tail() -> Result<()> {
+    fn separate_icp_admission_recovers_archived_payout() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        env.poll()?;
+        let source = account_id(Principal::from_slice(&[93]), [0; 32]);
+        let target = account_id(env.subscriber, numbered(7));
+        env.append_observed(source.clone(), target.clone(), 3, None)?;
+        env.append_account_admission(7, None, 1_000_000_000)?;
+        env.archive(env.ledger, 1)?;
+        let before = env.poke_counts()?;
+
+        env.poll()?;
+
+        assert!(
+            env.subscription(7)?.is_some(),
+            "archived admission payout must admit"
+        );
+        assert_eq!(env.state()?.admission_next_block, 1);
+        assert_eq!(env.state()?.observed_next_block, 1);
+        assert_eq!(env.poke_counts()?, before);
+
+        let matching_index = env.append_observed(source, target, 5, None)?;
+        env.poll()?;
+        let observation = env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
+            target: WatchTarget::Subaccount(7),
+            first_block_index: matching_index,
+            max_amount: 5u8.into(),
+        }])?;
+        assert_eq!(observation.last_caller, Some(env.event_horizon));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_icrc3_recovers_archived_first_match_before_live_maximum() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
-        env.append_observed_batch(DebugBatchKind::Irrelevant, 3 * 256)?;
-        let live = env.append_observed(
-            account_id(Principal::from_slice(&[8]), [0; 32]),
-            account_id(env.subscriber, numbered(7)),
-            23,
-            None,
-        )?;
-        assert_eq!(live, 3 * 256);
-        update::<_, ()>(
-            &env.pic,
-            env.observed_ledger,
-            "debug_set_first_local_block",
-            live,
-        )?;
-        let calls_before = query::<_, u64>(
-            &env.pic,
-            env.event_horizon,
-            "debug_icrc3_get_blocks_calls",
-            (),
-        )?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 256)?;
+        env.poll()?;
+        let source = account_id(Principal::from_slice(&[8]), [0; 32]);
+        let target = account_id(env.subscriber, numbered(7));
+        let first = env.append_observed(source.clone(), target.clone(), 3, None)?;
+        let maximum = "18446744073709551616".parse::<candid::Nat>()?;
+        let live = env.append_observed_nat(source, target, maximum.clone())?;
+        env.archive(env.observed_ledger, live)?;
         let admission_before = env.state()?.admission_next_block;
         let pokes_before = env.subscriber_observation()?.pokes;
 
@@ -5693,24 +5795,15 @@ mod tests {
 
         assert_eq!(env.state()?.observed_next_block, live + 1);
         assert_eq!(env.state()?.admission_next_block, admission_before);
+        let observation = env.wait_for_pokes(pokes_before + 1)?;
+        assert_eq!(observation.last_caller, Some(env.event_horizon));
         assert_eq!(
-            query::<_, u64>(
-                &env.pic,
-                env.event_horizon,
-                "debug_icrc3_get_blocks_calls",
-                (),
-            )? - calls_before,
-            4,
-            "archive callback evidence must be followed without invoking callbacks"
-        );
-        env.wait_for_pokes(pokes_before + 1)?;
-        assert_eq!(
-            env.subscriber_observation()?.matches,
+            observation.matches,
             vec![PokeMatch {
                 subject: env.subscriber,
                 target: WatchTarget::Subaccount(7),
-                first_block_index: live,
-                max_amount: candid::Nat::from(23u8),
+                first_block_index: first,
+                max_amount: maximum,
             }]
         );
         Ok(())
@@ -5718,7 +5811,104 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn economy_scheduler_traverses_all_shared_archive_pages_in_one_execution() -> Result<()> {
+    fn generic_icrc3_routes_disjoint_ranges_with_bounded_redirects() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        let ledger = env.observed_ledger;
+        // The root exposes an archive route even before bootstrap. A zero-length
+        // read must still establish the prospective tip without calling it.
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
+        let relay = env.archive(ledger, 1)?;
+        let method = "record_icrc_archive_request";
+        let calls = |archive| query::<_, u64>(&env.pic, archive, "debug_archive_calls", ());
+        env.set_archive_routes(ledger, vec![ArchiveRoute::new(relay, method, vec![(0, 1)])])?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 1);
+        assert_eq!(calls(relay)?, 0);
+
+        env.admit_global(GLOBAL_BASE_E8S)?;
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 4)?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 5);
+        assert_eq!(calls(relay)?, 0, "root-local pages use no archive call");
+        let live_only = env.wait_for_pokes(1)?;
+        assert!(live_only.global_activity);
+
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 7)?;
+        let archive = env.archive(ledger, 11)?;
+        // The first group describes a later segment. The second group has two
+        // disjoint arguments. Its first interval deliberately starts below c.
+        env.set_archive_routes(
+            ledger,
+            vec![
+                ArchiveRoute::new(archive, method, vec![(7, 2)]),
+                ArchiveRoute::new(relay, method, vec![(4, 3), (9, 2)]),
+            ],
+        )?;
+        env.set_archive_routes(relay, vec![ArchiveRoute::new(relay, method, vec![(0, 11)])])?;
+        update::<_, ()>(&env.pic, relay, "debug_set_archive_window", (5u64, 7u64))?;
+
+        env.poll()?;
+
+        assert_eq!(calls(relay)?, 16);
+        assert_eq!(calls(archive)?, 0);
+        assert_eq!(env.state()?.observed_next_block, 5);
+        assert_eq!(env.subscriber_observation()?.pokes, live_only.pokes);
+        assert!(env
+            .public_logs()?
+            .contains("archive callback limit reached"));
+
+        // The same root route now resolves through another principal with a
+        // broader referral. A one-block reply requires fresh root discovery.
+        env.set_archive_routes(
+            relay,
+            vec![ArchiveRoute::new(archive, method, vec![(0, 11)])],
+        )?;
+        update::<_, ()>(&env.pic, relay, "debug_set_archive_window", (5u64, 11u64))?;
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 1u64)?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 12);
+        assert_eq!(calls(relay)?, 20);
+        assert_eq!(calls(archive)?, 6);
+        let recovered = env.wait_for_pokes(live_only.pokes + 1)?;
+        assert!(recovered.global_activity);
+        assert_eq!(recovered.last_caller, Some(env.event_horizon));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn unavailable_archive_holds_cursor_and_live_suffix_until_recovery() -> Result<()> {
+        let env = Env::new()?;
+        env.poll()?;
+        env.admit(7, None, 1_000_000_000)?;
+        let source = account_id(Principal::from_slice(&[93]), [0; 32]);
+        let target = account_id(env.subscriber, numbered(7));
+        let first = env.append(source.clone(), target.clone(), 5, None)?;
+        let live = env.append(source, target, 17, None)?;
+        let archive = env.archive(env.ledger, live)?;
+        let before = env.poke_counts()?;
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 0u64)?;
+
+        env.poll()?;
+
+        assert_eq!(env.state()?.observed_next_block, first);
+        assert_eq!(env.state()?.admission_next_block, first);
+        assert_eq!(env.poke_counts()?, before);
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 1u64)?;
+        env.poll()?;
+        env.wait_for_matches(&[PokeMatch {
+            subject: env.subscriber,
+            target: WatchTarget::Subaccount(7),
+            first_block_index: first,
+            max_amount: 17u8.into(),
+        }])?;
+        assert_eq!(env.state()?.observed_next_block, live + 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn economy_scheduler_releases_lane_on_archive_failure_then_catches_up() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
         env.admit(7, None, 1_000_000_000)?;
@@ -5731,7 +5921,8 @@ mod tests {
             None,
         )?;
         assert_eq!(live, start + 3 * 256);
-        update::<_, ()>(&env.pic, env.ledger, "debug_set_first_local_block", live)?;
+        let archive = env.archive(env.ledger, live)?;
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 0u64)?;
         env.set_scheduler_liquid_cycles_override(Some(2_000_000_000_000))?;
         let calls_before = query::<_, u64>(
             &env.pic,
@@ -5741,6 +5932,19 @@ mod tests {
         )?;
         let starts_before = env.scheduler_lane_counts("poll")?[0];
         update::<_, ()>(&env.pic, env.event_horizon, "debug_start_schedulers", ())?;
+        for _ in 0..40 {
+            env.pic.tick();
+            if env.public_logs()?.contains("invalid archive block count") {
+                break;
+            }
+        }
+        assert_eq!(env.state()?.observed_next_block, start);
+        assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
+        assert_eq!(env.scheduler_lane_counts("poll")?[0] - starts_before, 1);
+        assert!(env.public_logs()?.contains("invalid archive block count"));
+        assert_eq!(env.subscriber_observation()?.pokes, 0);
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 256u64)?;
+        env.pic.advance_time(std::time::Duration::from_secs(3601));
         for _ in 0..100 {
             env.pic.tick();
             if env.state()?.observed_next_block == live + 1 {
@@ -5751,7 +5955,7 @@ mod tests {
         assert_eq!(env.state()?.polling_mode, PollingMode::Economy);
         assert_eq!(env.state()?.observed_next_block, live + 1);
         assert_eq!(env.state()?.admission_next_block, live + 1);
-        assert_eq!(env.scheduler_lane_counts("poll")?[0] - starts_before, 1);
+        assert_eq!(env.scheduler_lane_counts("poll")?[0] - starts_before, 2);
         assert_eq!(
             query::<_, u64>(
                 &env.pic,
@@ -5759,8 +5963,8 @@ mod tests {
                 "debug_legacy_query_blocks_calls",
                 (),
             )? - calls_before,
-            4,
-            "one scheduled poll must consume all pages"
+            5,
+            "one failed root page followed by a complete scheduled catch-up"
         );
         assert_eq!(env.scheduler_lane_state("poll")?, [false, true]);
         env.wait_for_matches(&[PokeMatch {
@@ -5774,16 +5978,20 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn invalid_icrc_envelope_cannot_commit_archive_evidence_before_rejection() -> Result<()> {
+    fn invalid_icrc_envelope_fails_before_archive_retrieval() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         env.append_observed_batch(DebugBatchKind::Irrelevant, 256)?;
-        update::<_, ()>(
-            &env.pic,
+        let archive = env.archive(env.observed_ledger, 256)?;
+        env.set_archive_routes(
             env.observed_ledger,
-            "debug_set_first_local_block",
-            256u64,
+            vec![ArchiveRoute::new(
+                archive,
+                "record_icrc_archive_request",
+                vec![(0, 256)],
+            )],
         )?;
+        let calls = || query::<_, u64>(&env.pic, archive, "debug_archive_calls", ());
         update::<_, ()>(
             &env.pic,
             env.observed_ledger,
@@ -5797,12 +6005,13 @@ mod tests {
         assert_eq!(
             env.state()?.observed_next_block,
             0,
-            "structurally invalid live vector must be rejected before archive commit"
+            "structurally invalid block vector must be rejected before archive retrieval"
         );
         assert!(env
             .public_logs()?
-            .contains("OBSERVED_LEDGER_UNAVAILABLE excessive live blocks"));
+            .contains("OBSERVED_LEDGER_UNAVAILABLE excessive blocks"));
         assert_eq!(env.poke_counts()?, poke_counts);
+        assert_eq!(calls()?, 0);
 
         update::<_, ()>(
             &env.pic,
@@ -5812,6 +6021,7 @@ mod tests {
         )?;
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, 256);
+        assert_eq!(calls()?, 1);
         assert_eq!(env.poke_counts()?, poke_counts);
         Ok(())
     }
@@ -5841,7 +6051,7 @@ mod tests {
         assert_eq!(
             env.state()?.observed_next_block,
             128,
-            "valid archive proof is durable but malformed live results are not"
+            "the fetched archive prefix is durable through a malformed root-local suffix"
         );
         assert_eq!(env.poke_counts()?, poke_counts);
         assert!(env
@@ -5970,7 +6180,7 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn sparse_reader_failure_and_archive_logs_follow_episode_boundaries() -> Result<()> {
+    fn sparse_reader_failures_reset_on_recovery_and_archive_success_is_quiet() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         env.poll()?;
         update::<_, u64>(
@@ -6053,15 +6263,15 @@ mod tests {
             env.public_logs()?
                 .matches("HISTORY_GAP stream=observed")
                 .count(),
-            1,
-            "one archive episode must not emit one log per page"
+            0,
+            "successful archive reads are ordinary processing"
         );
         Ok(())
     }
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn unexplained_ledger_hole_preserves_cursor_until_archive_evidence_arrives() -> Result<()> {
+    fn unexplained_ledger_hole_preserves_cursor_until_callback_is_available() -> Result<()> {
         let env = Env::new()?;
         env.poll()?;
         let source = account_id(Principal::from_slice(&[8]), [0; 32]);
@@ -6105,54 +6315,63 @@ mod tests {
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
     fn transaction_after_pinned_boundary_waits_for_following_poll() -> Result<()> {
-        let env = Env::new()?;
-        env.poll()?;
-        let memo = env.admit(7, None, 1_000_000_000)?;
+        for archived in [false, true] {
+            let env = Env::new()?;
+            env.poll()?;
+            let memo = env.admit(7, None, 1_000_000_000)?;
 
-        // Put a qualifying Faucet transfer at the head so processing the pinned page
-        // reaches the existing Historian await after the Ledger response is captured.
-        env.append(
-            account_id(env.faucet, [0; 32]),
-            account_id(env.event_horizon, [0; 32]),
-            1,
-            Some(memo),
-        )?;
-        let poll = env
-            .pic
-            .submit_call(
-                env.event_horizon,
-                Principal::anonymous(),
-                "debug_poll_once",
-                encode_one(())?,
-            )
-            .map_err(|e| anyhow!("submit poll: {e:?}"))?;
-        // First round starts the poll; second executes the Ledger query and fixes its
-        // chain_length response before this transaction is appended.
-        env.pic.tick();
-        env.pic.tick();
+            // Put a qualifying Faucet transfer at the head so processing the pinned page
+            // reaches the existing Historian await after the Ledger response is captured.
+            let payout = env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(env.event_horizon, [0; 32]),
+                1,
+                Some(memo),
+            )?;
+            if archived {
+                env.archive(env.ledger, payout + 1)?;
+            }
+            let poll = env
+                .pic
+                .submit_call(
+                    env.event_horizon,
+                    Principal::anonymous(),
+                    "debug_poll_once",
+                    encode_one(())?,
+                )
+                .map_err(|e| anyhow!("submit poll: {e:?}"))?;
+            // First round starts the poll; second executes the Ledger query and fixes its
+            // chain_length response before this transaction is appended.
+            env.pic.tick();
+            env.pic.tick();
+            if archived {
+                // Begin the archive call with the root response already pinned.
+                env.pic.tick();
+            }
 
-        env.append(
-            account_id(Principal::from_slice(&[9]), [0; 32]),
-            account_id(env.subscriber, numbered(7)),
-            1,
-            None,
-        )?;
-        env.pic
-            .await_call(poll)
-            .map_err(|e| anyhow!("await poll: {e:?}"))?;
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            0,
-            "transaction beyond the pinned boundary must not be poked in this poll"
-        );
+            env.append(
+                account_id(Principal::from_slice(&[9]), [0; 32]),
+                account_id(env.subscriber, numbered(7)),
+                1,
+                None,
+            )?;
+            env.pic
+                .await_call(poll)
+                .map_err(|e| anyhow!("await poll: {e:?}"))?;
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                0,
+                "transaction beyond the pinned boundary must not be poked in this poll"
+            );
 
-        env.poll()?;
-        env.wait_for_pokes(1)?;
-        assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            1,
-            "following poll must process the deferred transaction"
-        );
+            env.poll()?;
+            env.wait_for_pokes(1)?;
+            assert_eq!(
+                query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
+                1,
+                "following poll must process the deferred transaction"
+            );
+        }
         Ok(())
     }
 
@@ -6861,7 +7080,6 @@ mod tests {
             query::<_, InstanceInfo>(&env.pic, env.event_horizon, "get_instance", ())?
                 .surplus_canister;
         let pokes_before = query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?;
-        let poke_counts_before = env.poke_counts()?;
         env.upgrade_same_debug_wasm()?;
         let after = env.state()?;
         assert_eq!(after.observed_next_block, before.observed_next_block);
@@ -6894,16 +7112,17 @@ mod tests {
             Some(Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai")?)
         );
         env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, archive_boundary);
+        assert_eq!(env.state()?.admission_next_block, archive_boundary);
+        assert!(env.wait_for_pokes(pokes_before + 1)?.global_activity);
+        env.poll()?;
         for _ in 0..3 {
             env.pic.tick();
         }
-        assert_eq!(env.state()?.observed_next_block, archive_boundary);
-        assert_eq!(env.state()?.admission_next_block, archive_boundary);
-        assert_eq!(env.poke_counts()?, poke_counts_before);
         assert_eq!(
-            query::<_, u64>(&env.pic, env.subscriber, "debug_pokes", ())?,
-            pokes_before,
-            "upgrade does not replay already committed cursor activity"
+            env.subscriber_observation()?.pokes,
+            pokes_before + 1,
+            "the next poll does not replay committed history"
         );
         Ok(())
     }
@@ -7840,14 +8059,13 @@ mod tests {
         pic.advance_time(std::time::Duration::from_secs(301));
         poll()?;
         assert_eq!(state()?.admission_next_block, 1);
-        assert_eq!(state()?.subscriptions, 0);
+        assert_eq!(state()?.subscriptions, 1);
         let logs = pic
             .fetch_canister_logs(generic, Principal::anonymous())
             .map_err(|e| anyhow!("{e:?}"))?;
         assert!(logs
             .iter()
-            .any(|log| String::from_utf8_lossy(&log.content)
-                .contains("HISTORY_GAP stream=admission")));
+            .all(|log| !String::from_utf8_lossy(&log.content).contains("HISTORY_GAP")));
 
         update::<_, ()>(
             pic,

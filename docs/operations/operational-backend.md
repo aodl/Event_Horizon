@@ -2,7 +2,7 @@
 
 ## Poll lifecycle
 
-A first successful zero-length Ledger read bootstraps prospectively. Each later poll pins the first response's exclusive `chain_length`, processes only that interval, and persists page progress. Proven archived prefixes are logged and skipped without archive calls. A legacy empty `blocks` vector gives no meaning to `first_block_index`; only explicit contiguous archive ranges can advance it. Partial evidence advances only its covered prefix, and a response below the pinned boundary with neither live blocks nor usable evidence fails without moving the cursor.
+A first successful zero-length root Ledger read bootstraps prospectively. Each later poll pins the first root response's exclusive `chain_length` or `log_length`. The reader commits contiguous prefixes of blocks supplied by the root or its advertised archive callbacks. With empty legacy root blocks, `first_block_index` is ignored. ICRC-3 referrals are clipped to the delegated range and are limited to 16 archive calls per prefix. Longer routes stall until the route or implementation changes.
 
 Each transfer performs the existing self lookup plus indexed account-prefix iteration over external watchers. Individual relation thresholds accumulate `subscriber -> (subject, WatchTarget) -> {minimum qualifying u64 block index; maximum qualifying Nat}`. A combined 256-identity cap applies. Dispatch emits one `poke(PokeNotification)` with an explicit global flag and unified subject-qualified matches, including self. One attempt per subscriber remains. See the [subscriber protocol](../subscriber-guide.md#callback-and-targets).
 
@@ -21,10 +21,10 @@ coalesced Index follow-up approximately five seconds after initial reconciliatio
 Public logs are intentionally episode-based. A repeated reader failure may be
 suppressed until a successful scan clears that failure episode. A daily
 `HEALTH` line proves that maintenance ran, not that either reader completed or
-is caught up. Cursor growth may include explicitly skipped archived blocks,
-and Economy mode or downtime can still produce genuine archive skips; this
-service does not become lossless merely because the empty-page interpretation
-is corrected.
+is caught up. If a required archive stays unavailable or the cycle reserve
+binds, its unread cursor stays in place. Ordinary polling resumes from that
+position once the reader can retrieve and process the block. A failure later
+in a scan can discard accumulated pokes for earlier committed prefixes.
 
 For post-upgrade acceptance, compare a later reader cursor with a read-only
 Ledger-tip observation taken near the same time, while accounting for the
@@ -100,4 +100,4 @@ Only successful CMC minting permits the next step. The lane re-reads liquid cycl
 
 When a generic instance configures an ICP admission notifier, its existing poll lane coalesces relevant authenticated wake-ups. A wake can advance the next poll, with at least 60 seconds between admission scan starts within one runtime. Without a wake, fallback becomes eligible five minutes after the last start and runs on the next ordinary poll. This creates no separate fallback timer. At a steady cadence, Fast first checks at six minutes, Standard at ten minutes, and Economy at one hour. Reserve Protection suspends admission scans while the reserve applies.
 
-Five minutes was chosen over ten to give modes that poll more frequently an earlier chance to read payouts before the ICP Ledger archives them. A read-only mainnet `query_blocks` sample during implementation reported chain length 40,540,744 and first live block 40,539,000, a live window of 1,744 blocks at that instant. This is a block-count observation. The ledger archives by its own policy and the window provides no time-based retention guarantee. Delayed notifications, heavier ledger activity, and slower polling can still produce `HISTORY_GAP`. [ICP Ledger archive documentation](https://docs.internetcomputer.org/references/system-canisters/#icp-ledger-archives)
+The five-minute fallback makes admission eligible for reconciliation when hints are delayed or absent. The ordinary reader can recover unread archived payouts while the archive and sufficient cycles are available. [ICP Ledger archive documentation](https://docs.internetcomputer.org/references/system-canisters/#icp-ledger-archives)

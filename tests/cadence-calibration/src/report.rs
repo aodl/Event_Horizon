@@ -142,7 +142,7 @@ pub fn run(directory: &Path) -> Result<String> {
         let generic_per_poll =
             generic_idle.net_cycles_consumed / u128::from(generic_idle.completed_polls);
         report.push_str(&format!(
-            "\nIn this fixture, the generic reader plus its separate ICP admission scan cost {} cycles per idle poll versus {} for the canonical shared scan: {} additional cycles ({:.1}% more). Archive-prefix rows show that Event Horizon advances across validated archive metadata without fetching archive callbacks, then decodes the live tail; their cursor advance is intentionally larger than decoded-block count.\n",
+            "\nIn this fixture, the generic reader plus its separate ICP admission scan cost {} cycles per idle poll versus {} for the canonical shared scan: {} additional cycles ({:.1}% more). The archive-prefix rows record cursor progress and processed block counts separately.\n",
             integer(generic_per_poll),
             integer(canonical_per_poll),
             integer(generic_per_poll.saturating_sub(canonical_per_poll)),

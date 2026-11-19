@@ -61,7 +61,7 @@ Full adds:
 - all five active tier timers with repeated idle polls;
 - three additional Very Fast idle trials from fresh equivalent PocketIC fixtures for repeatability;
 - canonical ICP shared-scan and separate generic ICRC-3 readers at idle, 1, 5, and 20 blocks/second plus 1,024- and 4,096-block bursts;
-- archive-prefix skipping and live-tail decoding for both reader architectures;
+- archive-prefix retrieval and live-tail decoding for both reader architectures;
 - settled global fan-out at 0, 1, 10, 100, 256, and 1,024 subscribers;
 - matching and non-matching specific subscriptions, coalescing, mixed global/specific delivery, a representative expanded range, and unified `poke(PokeNotification)` execution;
 - simulated transaction-to-receiver latency in every active tier plus a burst/coalescing case;
@@ -92,7 +92,7 @@ Record SHA-256 hashes of both inputs before and after modelling. For alias/failu
 
 `maximum_active_pre_poll_pending_blocks` measures waiting immediately before completed active polls, including peaks inside skipped batches. `maximum_active_post_poll_outstanding_blocks` measures residual processing lag after those polls. Transition snapshots record outstanding blocks at the first downgrade and first reserve entry. `additional_reserve_backlog_blocks` counts new blocks arriving during all Reserve Protection episodes; later recovery may drain them. `ending_backlog_blocks` includes all remaining work, and `maximum_backlog_blocks` includes waiting and suspended-poll accumulation. The existing ending-latency heuristic is conditional on active polling; it cannot estimate recovery time while Reserve Protection suspends polling.
 
-At one block/second and the assumed 4,096-block capacity, Economy's 3,600, Standard's 600 and Fast's 120 waiting blocks clear each completed poll. Slower response is not persistent throughput backlog. Arrivals exceeding capacity produce growing post-poll lag; suspended polling produces reserve backlog. Backlog does not prove archival loss: live retention and explicit archive evidence determine whether history becomes unavailable. The protocol remains best effort and never traverses archives.
+At one block/second and the assumed 4,096-block capacity, Economy's 3,600, Standard's 600 and Fast's 120 waiting blocks clear each completed poll. Slower response is not persistent throughput backlog. Arrivals exceeding capacity produce growing post-poll lag; suspended polling produces reserve backlog. A required unread block can be fetched through its ledger-advertised archive callback. Unavailable blocks hold the cursor and notification delivery remains best effort.
 
 ## Financial interpretation
 
@@ -122,7 +122,7 @@ charged twice when one notification carries both the global flag and its
 independently filtered specific matches. This is a deterministic distribution assumption, not a claim that
 every relevant block matches every subscriber.
 
-The batch projector tracks which completed polls actually process live blocks. It collapses repeating per-poll states for long horizons, while a bounded per-poll reference checks burst and backlog cases. Each workload supplies an **assumed** blocks-per-poll capacity (4,096 in the default fixture). PocketIC completing a 4,096-block backlog supports that test size but does not establish a protocol maximum. Archived prefixes skipped without live decoding do not generate notifications in the workload model.
+The batch projector tracks which completed polls actually process live blocks. It collapses repeating per-poll states for long horizons, while a bounded per-poll reference checks burst and backlog cases. Each workload supplies an **assumed** blocks-per-poll capacity (4,096 in the default fixture). PocketIC completing a 4,096-block backlog supports that test size but does not establish a protocol maximum. The historical workload model treats archived prefixes as skipped and does not model archive recovery or its cycle cost.
 
 The model calibrates canonical ICP and generic ICRC-3 polling independently. For each available architecture it estimates an idle poll, residual per-block coefficient, and additional-page residual. Notification cost comes from the settled 0-subscriber to largest global-fan-out slope.
 

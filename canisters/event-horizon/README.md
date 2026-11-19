@@ -57,6 +57,11 @@ own cursors and bounded archive-aware reconciliation; see the
 [subscriber guide](../../docs/subscriber-guide.md#direct-ledger-reconciliation).
 Current Jupiter source implements this ABI; live receiver installation must be verified separately in the [pre-release report](../../docs/codex/pre-release-resume.md).
 
+Both backend readers use ledger-advertised archive callbacks to recover unread
+blocks from retained cursors. Each poll keeps its initial root-ledger tip and
+commits fetched contiguous prefixes using the ordinary matching and admission
+rules.
+
 Within each completed poll, the backend attempts all actually globally matched
 recipients first, including mixed matches with specific payloads, then
 specific-only recipients. Each phase uses ascending principal order regardless

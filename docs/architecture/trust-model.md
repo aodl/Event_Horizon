@@ -11,14 +11,14 @@ thresholds. An authenticated Event Horizon callback proves its source, not that
 the subscriber wanted the subscription. Local interest/authorisation is a
 subscriber boundary, separate from Event Horizon's funding-based admission.
 
-- Canonical ICP defines Faucet admission for every instance. It also defines observed activity and `chain_length` boundaries only for the ICP instance; non-ICP observed activity and `log_length` boundaries come from the configured ICRC-3 Ledger.
+- Canonical ICP defines Faucet admission for every instance. It also defines observed activity and `chain_length` boundaries only for the ICP instance; non-ICP observed activity and `log_length` boundaries come from the configured ICRC-3 Ledger. Each reader also trusts the archive callbacks advertised by its root ledger and, within the delegated interval, up to 16 ICRC-3 archive calls per prefix. Subscriber parameters cannot supply archive routes.
 - Jupiter Faucet origin plus a complete Jupiter Historian exact-route
   productive-endowment total define admission. Jupiter Faucet's source policy
   owns alias mappings; Historian publishes permanent identity aliases and verifies history and exact route totals; it does not
   define those mappings.
 - The CMC's ICP/XDR conversion-rate query is the only pricing oracle.
 - Liquid cycles observed hourly are the only adaptive-surplus health signal.
-- `get_instance`, `get_pricing` and local-state-only `preview_subscription` are the backend's only production application queries. Preview resolves a proposed declaration without admitting or exposing the subscription registry. Generic instances can trust a configured principal to request a scan via `poke`. Only the existing live ICP reader and Historian evidence can admit a subscription.
+- `get_instance`, `get_pricing` and local-state-only `preview_subscription` are the backend's only production application queries. Preview resolves a proposed declaration without admitting or exposing the subscription registry. Generic instances can trust a configured principal to request a scan via `poke`. Admission requires the existing ICP reader and Historian evidence, including when the ICP payout is retrieved from an archive.
 - Range declarations are protocol-bounded to 256 admission-time watched-account merges; they add no per-transfer scan, per-range scheduler, or additional poke allowance.
 - NNS Governance is a fixed ICP trust anchor. SNS neuron support additionally trusts immutable `sns_root`, its bounded Root response, and the observed Ledger's Governance-default minting account; Root and Governance are not polling dependencies after profile verification.
 - Poke targets, `first_block_index` and `max_amount` are non-authoritative hints. The minimum qualifying index and maximum individual amount may refer to different transactions; neither authorizes skipping the subscriber’s durable cursor. Scoped receivers should normally authenticate the caller, resolve its immutable Ledger context, then reject unapproved targets and below-local-threshold amounts locally before expensive Ledger/Index calls. Their approved-interest registry is independent of admitted subscriptions.

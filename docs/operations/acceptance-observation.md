@@ -8,9 +8,8 @@ maintenance and frontend checks do not require Jupiter upgrades or live callback
 evidence. No pokes are expected without an admitted subscriber. A missing alias
 query may produce `ALIASES_UNAVAILABLE`: record it as an external subscription
 readiness limitation, and investigate if polling stalls or other problems occur.
-Account explicitly for documented archive-skipping `HISTORY_GAP` records; they
-do not prove complete historical processing. Unexpected reader errors, failed
-cursor progress and inadequate cadence require separate assessment. Use timestamped
+Assess unexpected reader errors, including unavailable archives, separately
+from cursor lag, reserve suspension and inadequate cadence. Use timestamped
 reader evidence; the frontend's Ledger history total is not a processing counter.
 
 Run hourly or daily during focused acceptance testing and, after separately

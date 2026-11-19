@@ -442,8 +442,8 @@ Begin with unsubscribed observation; controller removal remains a separate
 operational decision. Verify at least:
 
 1. the live Ledger reader makes progress, with timestamped lag and processing evidence;
-2. every `HISTORY_GAP` is explicitly accounted for as documented archive skipping;
-   unexpected reader failures or lack of cursor progress require investigation;
+2. unexpected reader failures or lack of cursor progress are investigated,
+   including unavailable archive reads and reserve suspension;
 3. funding/recovery maintenance remains healthy, and ICP-to-cycles conversion
    returns to `Idle` without operator intervention when work is present;
 4. the reported polling mode agrees with liquid cycles and hysteresis, distinguishing
@@ -463,14 +463,11 @@ operational decision. Verify at least:
 
 For reader-patch acceptance, take a read-only Ledger-tip observation near a
 later cursor observation and compare the two with timestamps. The Ledger may
-grow between samples, and cursor advancement can include explicitly skipped
-archive ranges, so equality between differently timed observations is neither
-required nor sufficient. Confirm fresh processing and failure-episode behavior
+grow between samples. Use both timestamps when assessing lag. Confirm fresh processing and failure-episode behavior
 as well; do not validate the patch solely by the absence of one log line.
 
-Archive skipping does not provide complete historical coverage. Distinguish
-explicitly proved archive gaps from failed reads, stalled cursors, reserve
-suspension and a cadence too slow for the intended future service. Before funded
+Archive recovery starts at the retained cursor. Investigate stalled cursors
+in the context of reader errors, reserve suspension and polling cadence. Before funded
 activation, decide whether measured cadence and cycle reserves are adequate.
 
 After separately authorised subscription activation, also verify that the live

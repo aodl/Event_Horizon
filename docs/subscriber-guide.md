@@ -298,9 +298,9 @@ pending hint). Use the Ledger context from the trusted caller registry:
   `archived_blocks` callback arguments to retrieve archived portions when needed.
   An ICRC-3 ID belongs to this observed Ledger, never the ICP admission Ledger.
 
-Subscribers must support the appropriate archive retrieval themselves if they
-need that history. Event Horizon never follows archives and serves no historical
-transaction data. See the primary [ICP Ledger interface](https://github.com/dfinity/ic/blob/master/rs/ledger_suite/icp/ledger.did)
+Event Horizon can derive hints from blocks retrieved through ledger archive
+callbacks. The poke contains aggregates only. Subscribers retrieve authoritative
+history through the appropriate ledger and archive interfaces. See the primary [ICP Ledger interface](https://github.com/dfinity/ic/blob/master/rs/ledger_suite/icp/ledger.did)
 and [ICRC-3 specification](https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3).
 Preserve `nat64` indices exactly (for example JavaScript `BigInt`, not `Number`).
 

@@ -363,7 +363,7 @@ assert 'BTreeMap<Principal, MatchState>' in polling
 legacy_page = polling[polling.index('async fn legacy_page'):polling.index('async fn scan_legacy')]
 # Global eligibility/order is protected by installed-Wasm admission-in-first/last
 # block regressions, rather than forcing eager traversal at a source location.
-assert 'SharedGlobalOrder' in polling and 'last_live > admitted_at' in polling
+assert 'SharedGlobalOrder' in polling and 'last_processed > admitted_at' in polling
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
 assert 'BTreeMap<(Principal, WatchTarget), TargetMatch>' in polling
 for field in ['first_block_index: m.first_block_index', 'max_amount: m.max_amount']:
@@ -376,7 +376,10 @@ assert 'LegacyTransferArg' in funding and 'legacy_transfer' in funding
 assert 'Call::unbounded_wait(ledger, "transfer")' in ledger
 assert 'scan_legacy' in polling and 'scan_icrc' in polling
 assert 'r.observed_ledger==r.icp_ledger' in polling.replace(' ', '')
-assert 'Call::bounded_wait(ledger, "query_blocks")' in ledger
+assert 'read_blocks(ledger, "query_blocks", start, length)' in ledger
+assert 'read_blocks(callback.0.principal, &callback.0.method, start, length)' in ledger
+assert 'Call::bounded_wait(ledger, method).with_arg(&GetBlocksArgs' in ledger
+assert 'RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())' in ledger
 assert 'icrc3_get_blocks' in (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
 mock_icp=(root/'tests/mocks/mock-icp-ledger/src/lib.rs').read_text()
 assert '#[cfg(all(feature = "generic_icrc3", not(feature = "interleaving_gate")))]\n#[ic_cdk::query]\nfn icrc3_get_blocks' in mock_icp
