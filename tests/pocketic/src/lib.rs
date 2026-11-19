@@ -4194,6 +4194,12 @@ mod tests {
             "debug_append_malformed_transfer",
             (),
         )?;
+        update::<_, ()>(
+            &env.pic,
+            env.observed_ledger,
+            "debug_set_first_local_block",
+            1u64,
+        )?;
         env.poll()?;
         assert_eq!(
             env.state()?.observed_next_block,
@@ -4306,6 +4312,31 @@ mod tests {
         assert!(env
             .public_logs()?
             .contains("ICP_ADMISSION_LEDGER_UNAVAILABLE no blocks or covering archive callback"));
+        // Make the same ICP position discoverable, but leave its archive
+        // temporarily empty. Generic matching still completes and dispatches.
+        env.set_legacy_reject_starts(vec![])?;
+        update::<_, ()>(&env.pic, env.ledger, "debug_suppress_archive_info", false)?;
+        let archive = env.archive(env.ledger, no_progress_cursor + 1)?;
+        update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 0u64)?;
+        let matching_index = env.append_observed(
+            account_id(Principal::from_slice(&[95]), [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            2,
+            None,
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.admission_next_block, no_progress_cursor);
+        assert_eq!(env.state()?.observed_next_block, matching_index + 1);
+        assert_eq!(
+            env.wait_for_matches(&[PokeMatch {
+                subject: env.subscriber,
+                target: WatchTarget::Subaccount(7),
+                first_block_index: matching_index,
+                max_amount: 2u8.into(),
+            }])?
+            .last_caller,
+            Some(env.event_horizon)
+        );
         Ok(())
     }
 
@@ -5819,7 +5850,9 @@ mod tests {
         env.append_observed_batch(DebugBatchKind::Irrelevant, 1)?;
         let relay = env.archive(ledger, 1)?;
         let method = "record_icrc_archive_request";
-        let calls = |archive| query::<_, u64>(&env.pic, archive, "debug_archive_calls", ());
+        let requests =
+            |archive| query::<_, Vec<(u64, u64)>>(&env.pic, archive, "debug_archive_requests", ());
+        let calls = |archive| Ok::<_, anyhow::Error>(requests(archive)?.len());
         env.set_archive_routes(ledger, vec![ArchiveRoute::new(relay, method, vec![(0, 1)])])?;
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, 1);
@@ -5868,10 +5901,40 @@ mod tests {
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, 12);
         assert_eq!(calls(relay)?, 20);
-        assert_eq!(calls(archive)?, 6);
+        assert_eq!(
+            requests(archive)?,
+            vec![(5, 2), (6, 1), (7, 2), (8, 1), (9, 2), (10, 1)]
+        );
         let recovered = env.wait_for_pokes(live_only.pokes + 1)?;
         assert!(recovered.global_activity);
         assert_eq!(recovered.last_caller, Some(env.event_horizon));
+        env.append_observed_batch(DebugBatchKind::Irrelevant, 4)?;
+        let archive = env.archive(ledger, 15)?;
+        env.set_archive_routes(
+            ledger,
+            vec![ArchiveRoute::new(archive, method, vec![(12, 3)])],
+        )?;
+        update::<_, ()>(
+            &env.pic,
+            archive,
+            "debug_set_archive_missing_index",
+            Some(13u64),
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 12);
+        assert_eq!(env.subscriber_observation()?.pokes, recovered.pokes);
+        assert!(env
+            .public_logs()?
+            .contains("unexplained hole cursor=13 block=14"));
+        update::<_, ()>(
+            &env.pic,
+            archive,
+            "debug_set_archive_missing_index",
+            None::<u64>,
+        )?;
+        env.poll()?;
+        assert_eq!(env.state()?.observed_next_block, 16);
+        assert!(env.wait_for_pokes(recovered.pokes + 1)?.global_activity);
         Ok(())
     }
 
@@ -5991,7 +6054,8 @@ mod tests {
                 vec![(0, 256)],
             )],
         )?;
-        let calls = || query::<_, u64>(&env.pic, archive, "debug_archive_calls", ());
+        let requests =
+            || query::<_, Vec<(u64, u64)>>(&env.pic, archive, "debug_archive_requests", ());
         update::<_, ()>(
             &env.pic,
             env.observed_ledger,
@@ -6011,7 +6075,7 @@ mod tests {
             .public_logs()?
             .contains("OBSERVED_LEDGER_UNAVAILABLE excessive blocks"));
         assert_eq!(env.poke_counts()?, poke_counts);
-        assert_eq!(calls()?, 0);
+        assert!(requests()?.is_empty());
 
         update::<_, ()>(
             &env.pic,
@@ -6021,7 +6085,7 @@ mod tests {
         )?;
         env.poll()?;
         assert_eq!(env.state()?.observed_next_block, 256);
-        assert_eq!(calls()?, 1);
+        assert_eq!(requests()?, vec![(0, 256)]);
         assert_eq!(env.poke_counts()?, poke_counts);
         Ok(())
     }

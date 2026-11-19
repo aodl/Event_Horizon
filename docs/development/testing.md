@@ -13,7 +13,8 @@ Event Horizon uses the same test vocabulary as Jupiter Faucet where the projects
 | Opt-in cadence calibration | `./tools/scripts/calibrate-cadence smoke` |
 
 The historical installed-version scenario requires the canonical candidate at
-`release-artifacts/event_horizon.wasm` and checks its reviewed SHA-256. On a
+`release-artifacts/event_horizon.wasm` and verifies its SHA-256 against the generated artifact manifest. The historical
+inputs have independently pinned hashes. On a
 fresh checkout, prepare it from the clean manifested revision **before** running
 `test_pocketic_integration`, `test_all`, or that isolated scenario:
 

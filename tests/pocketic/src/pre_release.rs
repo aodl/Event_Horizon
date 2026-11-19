@@ -23,11 +23,14 @@ fn observed_54d8b4b_production_upgrades_preserving_financial_state() -> Result<(
         format!("{:x}", Sha256::digest(&old)),
         "e012e7138cfe2d251bd24edf868cb74aa5fd35856412facd926b65ad519cdcca"
     );
-    let candidate = std::fs::read(root.join("release-artifacts/event_horizon.wasm"))?;
-    assert_eq!(
-        format!("{:x}", Sha256::digest(&candidate)),
-        "246e639cef13ecbd39d23b240924609fc12493381f7332ed969f7ca6b11f4821"
-    );
+    let artifacts = root.join("release-artifacts");
+    let candidate = std::fs::read(artifacts.join("event_horizon.wasm"))?;
+    let manifest = std::fs::read_to_string(artifacts.join("release-artifacts.sha256"))?;
+    let candidate_hash = manifest
+        .lines()
+        .find_map(|line| line.strip_suffix("  event_horizon.wasm"))
+        .context("canonical artifact manifest is missing the backend hash")?;
+    assert_eq!(format!("{:x}", Sha256::digest(&candidate)), candidate_hash);
     for surplus in [false, true] {
         for transfer_pending in [false, true] {
             let env = Env::with_anchors(

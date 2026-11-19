@@ -224,7 +224,9 @@ struct State {
     archive_window: Option<(u64, u64)>,
     archive_error: Option<bool>,
     #[cfg(feature = "generic_icrc3")]
-    archive_calls: u64,
+    archive_requests: Vec<(u64, u64)>,
+    #[cfg(feature = "generic_icrc3")]
+    archive_missing_index: Option<u64>,
     empty_first_overrides: Vec<DebugEmptyFirstOverride>,
     query_blocks_reject_starts: Vec<u64>,
     #[cfg(feature = "generic_icrc3")]
@@ -261,7 +263,9 @@ impl Default for State {
             archive_window: None,
             archive_error: None,
             #[cfg(feature = "generic_icrc3")]
-            archive_calls: 0,
+            archive_requests: vec![],
+            #[cfg(feature = "generic_icrc3")]
+            archive_missing_index: None,
             empty_first_overrides: vec![],
             query_blocks_reject_starts: vec![],
             #[cfg(feature = "generic_icrc3")]
@@ -1167,14 +1171,25 @@ fn icrc_referrals(routes: &[ArchiveRoute]) -> Vec<ArchivedBlocks> {
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::update]
 fn record_icrc_archive_request(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
-    STATE.with(|state| state.borrow_mut().archive_calls += 1);
+    STATE.with(|state| {
+        state
+            .borrow_mut()
+            .archive_requests
+            .extend(args.iter().map(|arg| arg.as_start_and_length().unwrap()));
+    });
     read_icrc_history(args)
 }
 
 #[cfg(feature = "generic_icrc3")]
 #[ic_cdk::query]
-fn debug_archive_calls() -> u64 {
-    STATE.with(|state| state.borrow().archive_calls)
+fn debug_archive_requests() -> Vec<(u64, u64)> {
+    STATE.with(|state| state.borrow().archive_requests.clone())
+}
+
+#[cfg(feature = "generic_icrc3")]
+#[ic_cdk::update]
+fn debug_set_archive_missing_index(index: Option<u64>) {
+    STATE.with(|state| state.borrow_mut().archive_missing_index = index);
 }
 
 #[cfg(feature = "generic_icrc3")]
@@ -1196,10 +1211,15 @@ fn read_icrc_history(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
                     archived_blocks: icrc_referrals(&state.archive_routes),
                 };
             }
-            blocks.extend((start..end).map(|id| BlockWithId {
-                id: id.into(),
-                block: state.icrc_blocks[id as usize].clone(),
-            }));
+            blocks.extend(
+                (start..end)
+                    .rev()
+                    .filter(|id| Some(*id) != state.archive_missing_index)
+                    .map(|id| BlockWithId {
+                        id: id.into(),
+                        block: state.icrc_blocks[id as usize].clone(),
+                    }),
+            );
         }
         GetBlocksResult {
             log_length: blocks.len().into(),

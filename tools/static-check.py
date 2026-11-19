@@ -380,7 +380,11 @@ assert 'read_blocks(ledger, "query_blocks", start, length)' in ledger
 assert 'read_blocks(callback.0.principal, &callback.0.method, start, length)' in ledger
 assert 'Call::bounded_wait(ledger, method).with_arg(&GetBlocksArgs' in ledger
 assert 'RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())' in ledger
-assert 'icrc3_get_blocks' in (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
+icrc_client = (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
+assert 'read_blocks(ledger, "icrc3_get_blocks", start, length)' in icrc_client
+assert 'read_blocks(callback.canister_id, &callback.method, start, length)' in icrc_client
+assert 'Call::bounded_wait(ledger, method)' in icrc_client
+assert 'RESERVE_PROTECTION_CYCLES.saturating_add(call.get_cost())' in icrc_client
 mock_icp=(root/'tests/mocks/mock-icp-ledger/src/lib.rs').read_text()
 assert '#[cfg(all(feature = "generic_icrc3", not(feature = "interleaving_gate")))]\n#[ic_cdk::query]\nfn icrc3_get_blocks' in mock_icp
 assert 'default = ["generic_icrc3"]' in (root/'tests/mocks/mock-icrc3-ledger/Cargo.toml').read_text()
