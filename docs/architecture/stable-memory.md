@@ -24,7 +24,7 @@ ID 8 defaults to an uninitialized level-zero policy. This is live protocol state
 
 Subscription values use the final schema `{ subscriber; target : WatchTarget; minimum_units : Nat }`, where the closed target is `Subaccount(u64)` or `NeuronNonce(u64)`. `minimum_units = 0` remains the omitted-threshold sentinel; other values are arbitrary-precision observed-token units. Each admitted self range expands once into the ID 1 map; external ranges use ID 11. Its bounded key remains based on the actual destination: canonical ICP stores `0x00` plus the 32-byte legacy AccountIdentifier; non-ICP stores `0x01`, one principal-length byte, principal bytes, and the effective 32-byte ICRC subaccount. No neuron or range map is added.
 
-ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. There is deliberately no decoder or migration from prior acceptance schemas; the earlier zero-state acceptance transition used reinstall. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
+ID 2's final `InstanceConfig` contains immutable `observed_ledger`, immutable optional `sns_root`, immutable optional `surplus_canister`, immutable optional `icp_admission_notifier`, and the once-discovered profile. The profile includes optional verified `neuron_governance`. The earlier zero-state acceptance transition used reinstall. For the notifier field, the historical Candid record decodes directly with an absent field. Current-schema upgrades take no configuration argument and preserve this final representation automatically.
 
 The stable pricing `Price` remains `{ account_icp, global_icp }`. Under the
 10/20/1,000 ICP reference bases, public `get_pricing` values derive
@@ -57,3 +57,5 @@ needed. Values retain subject plus the unchanged subscription fields. Self and
 external stores coexist; threshold merges affect only an identical relation.
 Pending shared-reader admissions use the same relation identity, publish only
 after page success, and commit with the cursor without an intervening await.
+
+The immutable instance cell encodes `icp_admission_notifier` as an optional Candid field. Historical bytes decode as null. The maximum supported record encodes to 266 bytes, so the declared cell bound is 272 bytes. The memory ID, cell header and all durable cursors are unchanged. Notification scheduling is reconstructed on upgrade.

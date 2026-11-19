@@ -176,7 +176,9 @@ macro_rules! candid_value {
 }
 
 candid_value!(SubscriptionValue, Subscription, 256);
-candid_value!(InstanceConfigValue, Option<InstanceConfig>, 256);
+// Maximum supported profile and principals encode to 266 bytes. The length-
+// prefixed StableCell layout and its memory ID are independent of this bound.
+candid_value!(InstanceConfigValue, Option<InstanceConfig>, 272);
 candid_value!(MetadataValue, Metadata, 256);
 candid_value!(ObservationValue, Observation, 128);
 candid_value!(PricingStateValue, PricingState, 512);
@@ -914,6 +916,41 @@ mod external_key_tests {
 mod unchanged_write_tests {
     use super::*;
     #[test]
+    fn instance_config_accepts_historical_bytes_and_fits_existing_cell() {
+        #[derive(CandidType)]
+        struct Historical {
+            observed_ledger: candid::Principal,
+            observed_profile: Option<crate::instance::ObservedLedgerProfile>,
+            sns_root: Option<candid::Principal>,
+            surplus_canister: Option<candid::Principal>,
+        }
+        let principal = candid::Principal::from_slice(&[1; 29]);
+        let historical = Historical {
+            observed_ledger: principal,
+            observed_profile: Some(crate::instance::ObservedLedgerProfile {
+                symbol: "X".repeat(32),
+                decimals: 8,
+                supports_icrc2_transfer_from: true,
+                neuron_governance: Some(principal),
+            }),
+            sns_root: Some(principal),
+            surplus_canister: Some(principal),
+        };
+        let bytes = encode_one(Some(historical)).unwrap();
+        let mut config = InstanceConfigValue::from_bytes(Cow::Owned(bytes))
+            .0
+            .unwrap();
+        assert_eq!(config.icp_admission_notifier, None);
+        assert_eq!(config.observed_ledger, principal);
+        assert_eq!(config.observed_profile.as_ref().unwrap().symbol.len(), 32);
+        config.icp_admission_notifier = Some(principal);
+        let value = InstanceConfigValue(Some(config));
+        let bytes = value.to_bytes_checked();
+        assert_eq!(bytes.len(), 266);
+        assert_eq!(InstanceConfigValue::from_bytes(bytes), value);
+    }
+
+    #[test]
     fn unchanged_effective_values_skip_map_writes_but_alias_metadata_advances() {
         std::thread::spawn(|| {
             let a = candid::Principal::from_slice(&[1, 1]);
@@ -923,6 +960,7 @@ mod unchanged_write_tests {
                 observed_profile: None,
                 sns_root: None,
                 surplus_canister: None,
+                icp_admission_notifier: None,
             });
             let sub = |minimum| Subscription {
                 subscriber: a,

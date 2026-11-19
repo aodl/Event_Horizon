@@ -452,7 +452,7 @@ operational decision. Verify at least:
 6. actual cycle burn is compatible with the starting threshold table;
 7. the installed backend module hash matches the canonical reproducible artifact;
 8. daily CMC observations, seven-day freezes, month activation, and stale carry-forward behave as specified;
-9. the production export audit reports exactly `get_instance`, `get_pricing`, and `preview_subscription` as application queries;
+9. the production export audit reports exactly `get_instance`, `get_pricing`, and `preview_subscription` as application queries and `poke` as the sole application update;
 10. the frontend export audit reports only `http_request`, and direct browser instance/pricing reads use the selected reviewed static-registry backend principal compiled into the certified frontend artifact;
 11. low-cycle tests confirm daily pricing observation skips preserve the reserve without affecting core polling or funding maintenance;
 12. current-schema `FundingState` upgrade/recovery tests pass for retained transfer, CMC notify, and surplus transfer pending states;

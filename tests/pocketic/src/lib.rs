@@ -163,6 +163,26 @@ mod tests {
         sns_root: Option<Principal>,
         surplus_canister: Option<Principal>,
     }
+    #[derive(CandidType)]
+    struct DebugNotifierInitArgs {
+        observed_ledger: Principal,
+        icp_ledger: Principal,
+        cmc_canister: Principal,
+        historian_canister: Principal,
+        faucet_canister: Principal,
+        surplus_canister: Option<Principal>,
+        sns_root: Option<Principal>,
+        icp_admission_notifier: Option<Principal>,
+    }
+
+    #[derive(CandidType)]
+    struct NotifierInitArgs {
+        observed_ledger: Principal,
+        sns_root: Option<Principal>,
+        surplus_canister: Option<Principal>,
+        icp_admission_notifier: Option<Principal>,
+    }
+
     #[derive(CandidType, Deserialize)]
     struct SetRoute {
         destination_canister_id: Principal,
@@ -260,6 +280,7 @@ mod tests {
         sns_root: Option<Principal>,
         icp_ledger: Principal,
         surplus_canister: Option<Principal>,
+        icp_admission_notifier: Option<Principal>,
     }
     #[derive(CandidType, Deserialize, Debug)]
     struct ObservedProfile {
@@ -707,6 +728,32 @@ mod tests {
                 sns_root,
             })
         }
+        fn install_debug_reader(
+            &self,
+            observed_ledger: Principal,
+            notifier: Option<Principal>,
+        ) -> Result<Principal> {
+            let id = self.pic.create_canister();
+            self.pic.add_cycles(id, 200_000_000_000_000);
+            self.pic.install_canister(
+                id,
+                wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+                encode_one(DebugNotifierInitArgs {
+                    observed_ledger,
+                    icp_ledger: self.ledger,
+                    cmc_canister: self.cmc,
+                    historian_canister: self.historian,
+                    faucet_canister: self.faucet,
+                    surplus_canister: None,
+                    sns_root: None,
+                    icp_admission_notifier: notifier,
+                })?,
+                None,
+            );
+            update::<_, ()>(&self.pic, id, "debug_pricing_once", ())?;
+            Ok(id)
+        }
+
         fn poll(&self) -> Result<()> {
             update::<_, ()>(&self.pic, self.event_horizon, "debug_poll_once", ())
         }
@@ -3720,6 +3767,55 @@ mod tests {
                 max_amount: candid::Nat::from(1u8),
             }]
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn notifier_bootstraps_admission_during_observed_profile_outage() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        let pic = &env.pic;
+        let generic = env.install_debug_reader(env.observed_ledger, Some(env.event_horizon))?;
+        let poll = || update::<_, ()>(pic, generic, "debug_poll_once", ());
+        let state = || query::<_, DebugState>(pic, generic, "debug_state", ());
+
+        env.set_observed_profile_available(false)?;
+        poll()?;
+        let parked = state()?;
+        assert!(parked.admission_bootstrapped);
+        assert!(!parked.observed_bootstrapped);
+
+        let memo = format!("{}.7", env.subscriber.to_text().replace('-', "")).into_bytes();
+        update::<_, ()>(
+            pic,
+            env.historian,
+            "debug_set_route",
+            SetRoute {
+                destination_canister_id: generic,
+                memo: memo.clone(),
+                total_e8s: 1_000_000_000,
+            },
+        )?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(generic, [0; 32]),
+            1,
+            Some(memo),
+        )?;
+        pic.advance_time(std::time::Duration::from_secs(301));
+        poll()?;
+        assert_eq!(state()?.admission_next_block, parked.admission_next_block);
+        assert_eq!(state()?.subscriptions, 0);
+
+        env.set_observed_profile_available(true)?;
+        poll()?;
+        let recovered = state()?;
+        assert!(recovered.observed_bootstrapped);
+        assert_eq!(
+            recovered.admission_next_block,
+            parked.admission_next_block + 1
+        );
+        assert_eq!(recovered.subscriptions, 1);
         Ok(())
     }
 
@@ -7450,8 +7546,668 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measures paired clean PocketIC fixtures"]
+    fn admission_cycles_quiet() -> Result<()> {
+        measure_generic_admission_notifier("quiet", 1)
+    }
+
+    #[test]
+    #[ignore = "measures paired clean PocketIC fixtures"]
+    fn admission_cycles_unrelated_activity() -> Result<()> {
+        measure_generic_admission_notifier("unrelated", 1)
+    }
+
+    #[test]
+    #[ignore = "measures paired clean PocketIC fixtures"]
+    fn admission_cycles_occasional_payouts() -> Result<()> {
+        measure_generic_admission_notifier("payouts", 1)
+    }
+
+    #[test]
+    #[ignore = "measures paired clean PocketIC fixtures"]
+    fn admission_cycles_shared_notifier() -> Result<()> {
+        measure_generic_admission_notifier("shared-payouts", 2)
+    }
+
+    fn measure_generic_admission_notifier(scenario: &str, instances: usize) -> Result<()> {
+        // Paired, isolated replicas. Read counters come from the existing debug
+        // adapters, while cycle deltas include both ends of each ledger call.
+        // Manual polling fixes cadence so timer and unrelated maintenance work
+        // do not obscure the comparison. This measures fixture costs, not fees
+        // or cross-subnet prices on mainnet.
+        let mut samples = Vec::new();
+        for notified in [false, true] {
+            let env = Env::new_two_ledgers()?;
+            let pic = &env.pic;
+            let canonical = env.install_debug_reader(env.ledger, None)?;
+            let generics = (0..instances)
+                .map(|_| {
+                    env.install_debug_reader(env.observed_ledger, notified.then_some(canonical))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let poll = |id| update::<_, ()>(pic, id, "debug_poll_once", ());
+            let payout = |receiver, subscriber: Principal, target| -> Result<()> {
+                let memo =
+                    format!("{}.{target}", subscriber.to_text().replace('-', "")).into_bytes();
+                update::<_, ()>(
+                    pic,
+                    env.historian,
+                    "debug_set_route",
+                    SetRoute {
+                        destination_canister_id: receiver,
+                        memo: memo.clone(),
+                        total_e8s: 1_000_000_000,
+                    },
+                )?;
+                env.append(
+                    account_id(env.faucet, [0; 32]),
+                    account_id(receiver, [0; 32]),
+                    1,
+                    Some(memo),
+                )?;
+                Ok(())
+            };
+            poll(canonical)?;
+            for id in &generics {
+                poll(*id)?;
+                if notified {
+                    payout(canonical, *id, 0)?;
+                }
+            }
+            poll(canonical)?;
+            let ids = [canonical, env.ledger, env.observed_ledger, env.historian]
+                .into_iter()
+                .chain(generics.iter().copied())
+                .collect::<Vec<_>>();
+            let snapshot = || {
+                ids.iter()
+                    .map(|id| pic.cycle_balance(*id))
+                    .collect::<Vec<_>>()
+            };
+            let reads = |id, method| query::<_, u64>(pic, id, method, ());
+            let read_snapshot = || -> Result<(u64, u64, u64)> {
+                Ok((
+                    reads(canonical, "debug_legacy_query_blocks_calls")?,
+                    generics
+                        .iter()
+                        .map(|id| reads(*id, "debug_legacy_query_blocks_calls"))
+                        .sum::<Result<u64>>()?,
+                    generics
+                        .iter()
+                        .map(|id| reads(*id, "debug_icrc3_get_blocks_calls"))
+                        .sum::<Result<u64>>()?,
+                ))
+            };
+            let before = snapshot();
+            let (canonical_before, admission_before, observed_before) = read_snapshot()?;
+            let wakes_before = query::<_, Vec<u64>>(pic, canonical, "debug_poke_counts", ())?;
+            for step in 1..=36 {
+                pic.advance_time(std::time::Duration::from_secs(10));
+                if scenario == "unrelated" {
+                    for _ in 0..10 {
+                        env.append(
+                            account_id(env.subscriber, [0; 32]),
+                            account_id(env.subscriber_second, [0; 32]),
+                            1,
+                            None,
+                        )?;
+                    }
+                }
+                if scenario.ends_with("payouts") && [8, 24].contains(&step) {
+                    for id in &generics {
+                        payout(*id, env.subscriber, step)?;
+                    }
+                }
+                poll(canonical)?;
+                for _ in 0..3 {
+                    pic.tick();
+                }
+                for id in &generics {
+                    poll(*id)?;
+                }
+            }
+            let after = snapshot();
+            let costs = before
+                .iter()
+                .zip(after)
+                .map(|(a, b)| a.saturating_sub(b))
+                .collect::<Vec<_>>();
+            let (canonical_after, admission_after, observed_after) = read_snapshot()?;
+            let calls = (
+                canonical_after - canonical_before,
+                admission_after - admission_before,
+                observed_after - observed_before,
+            );
+            let wakes = query::<_, Vec<u64>>(pic, canonical, "debug_poke_counts", ())?;
+            let measured = costs.iter().sum::<u128>();
+            println!("admission_benchmark scenario={scenario} notified={notified} instances={instances} canonical_reads={} admission_reads={} observed_reads={} pokes={} cycles_canonical={} cycles_icp={} cycles_observed={} cycles_historian={} cycles_generics={} cycles_combined={measured}",
+                calls.0, calls.1, calls.2, wakes[1] - wakes_before[1], costs[0], costs[1], costs[2], costs[3], costs[4..].iter().sum::<u128>());
+            if scenario.ends_with("payouts") {
+                for id in &generics {
+                    let state: DebugState = query(pic, *id, "debug_state", ())?;
+                    assert_eq!(state.subscriptions, 2);
+                }
+            }
+            samples.push((calls, measured));
+        }
+        assert_eq!(
+            (samples[0].0).2,
+            (samples[1].0).2,
+            "same observed-reader cadence"
+        );
+        assert!(
+            (samples[1].0).1 < (samples[0].0).1,
+            "fewer ICP admission calls for {scenario}"
+        );
+        assert!(
+            samples[1].1 < samples[0].1,
+            "lower combined cycle cost for {scenario}"
+        );
+        Ok(())
+    }
+
+    #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn production_wasm_exposes_only_approved_read_only_queries() -> Result<()> {
+    fn generic_admission_hints_filter_coalesce_throttle_and_recover() -> Result<()> {
+        let env = Env::new_two_ledgers()?;
+        let pic = &env.pic;
+        let notifier = env.event_horizon;
+        let generic = env.install_debug_reader(env.observed_ledger, Some(notifier))?;
+        let poll = || update::<_, ()>(pic, generic, "debug_poll_once", ());
+        let reads = || query::<_, u64>(pic, generic, "debug_legacy_query_blocks_calls", ());
+        let state = || query::<_, DebugState>(pic, generic, "debug_state", ());
+        let reply = |caller, matches, global_activity| {
+            pic.update_call(
+                generic,
+                caller,
+                "poke",
+                encode_one(PokeNotification {
+                    global_activity,
+                    matches,
+                })
+                .unwrap(),
+            )
+        };
+        let valid = PokeMatch {
+            subject: generic,
+            target: WatchTarget::Subaccount(0),
+            first_block_index: u64::MAX,
+            max_amount: candid::Nat(candid::Nat::from(1u64).0 << 32768usize),
+        };
+        poll()?;
+        assert_eq!(reads()?, 1);
+        pic.advance_time(std::time::Duration::from_secs(61));
+        for caller in [Principal::anonymous(), env.subscriber] {
+            assert!(reply(caller, vec![valid.clone()], false).is_err());
+        }
+        let unrelated = [
+            PokeMatch {
+                target: WatchTarget::Subaccount(1),
+                ..valid.clone()
+            },
+            PokeMatch {
+                target: WatchTarget::NeuronNonce(0),
+                ..valid.clone()
+            },
+            PokeMatch {
+                subject: env.subscriber,
+                ..valid.clone()
+            },
+        ];
+        reply(notifier, unrelated.to_vec(), true).unwrap();
+        reply(notifier, vec![], true).unwrap();
+        poll()?;
+        assert_eq!(reads()?, 1);
+        for _ in 0..3 {
+            reply(notifier, vec![unrelated[2].clone(), valid.clone()], true).unwrap();
+        }
+        poll()?;
+        assert_eq!(reads()?, 2);
+        assert_eq!(
+            state()?.admission_next_block,
+            0,
+            "payload cannot advance a cursor"
+        );
+        assert_eq!(state()?.subscriptions, 0);
+        reply(notifier, vec![valid], false).unwrap();
+        poll()?;
+        assert_eq!(reads()?, 2);
+        pic.advance_time(std::time::Duration::from_secs(61));
+        update::<_, ()>(
+            pic,
+            env.ledger,
+            "debug_set_query_blocks_reject_starts",
+            vec![0u64],
+        )?;
+        poll()?;
+        assert_eq!(reads()?, 3);
+        assert_eq!(state()?.admission_next_block, 0);
+        update::<_, ()>(
+            pic,
+            env.ledger,
+            "debug_set_query_blocks_reject_starts",
+            Vec::<u64>::new(),
+        )?;
+        poll()?;
+        assert_eq!(reads()?, 3, "failed attempt also obeys the minimum");
+        pic.advance_time(std::time::Duration::from_secs(61));
+        poll()?;
+        assert_eq!(reads()?, 4, "failed attempt keeps pending work");
+        pic.advance_time(std::time::Duration::from_secs(299));
+        poll()?;
+        assert_eq!(reads()?, 4);
+        pic.advance_time(std::time::Duration::from_secs(2));
+        poll()?;
+        assert_eq!(reads()?, 5, "idle reader reconciles without a notification");
+        let before = state()?;
+        pic.upgrade_canister(
+            generic,
+            wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?,
+            vec![],
+            None,
+        )
+        .map_err(|e| anyhow!("{e:?}"))?;
+        assert_eq!(
+            query::<_, InstanceInfo>(pic, generic, "get_instance", ())?.icp_admission_notifier,
+            Some(notifier)
+        );
+        assert_eq!(state()?.admission_next_block, before.admission_next_block);
+        assert_eq!(state()?.observed_next_block, before.observed_next_block);
+        assert_eq!(state()?.subscriptions, before.subscriptions);
+        assert_eq!(state()?.cmc_state, before.cmc_state);
+        poll()?;
+        assert_eq!(reads()?, 1, "upgrade recovers without a transient hint");
+
+        let archived_memo =
+            format!("{}.11", env.subscriber.to_text().replace('-', "")).into_bytes();
+        update::<_, ()>(
+            pic,
+            env.historian,
+            "debug_set_route",
+            SetRoute {
+                destination_canister_id: generic,
+                memo: archived_memo.clone(),
+                total_e8s: 1_000_000_000,
+            },
+        )?;
+        env.append(
+            account_id(env.faucet, [0; 32]),
+            account_id(generic, [0; 32]),
+            1,
+            Some(archived_memo),
+        )?;
+        update::<_, ()>(pic, env.ledger, "debug_set_first_local_block", 1u64)?;
+        pic.advance_time(std::time::Duration::from_secs(301));
+        poll()?;
+        assert_eq!(state()?.admission_next_block, 1);
+        assert_eq!(state()?.subscriptions, 0);
+        let logs = pic
+            .fetch_canister_logs(generic, Principal::anonymous())
+            .map_err(|e| anyhow!("{e:?}"))?;
+        assert!(logs
+            .iter()
+            .any(|log| String::from_utf8_lossy(&log.content)
+                .contains("HISTORY_GAP stream=admission")));
+
+        update::<_, ()>(
+            pic,
+            generic,
+            "debug_set_scheduler_liquid_cycles_override",
+            Some(10u128),
+        )?;
+        update::<_, ()>(pic, generic, "debug_start_schedulers", ())?;
+        pic.update_call(
+            generic,
+            notifier,
+            "poke",
+            encode_one(PokeNotification {
+                global_activity: false,
+                matches: vec![PokeMatch {
+                    subject: generic,
+                    target: WatchTarget::Subaccount(0),
+                    first_block_index: 1,
+                    max_amount: 0u8.into(),
+                }],
+            })?,
+        )
+        .map_err(|e| anyhow!("{e:?}"))?;
+        pic.advance_time(std::time::Duration::from_secs(3601));
+        for _ in 0..12 {
+            pic.tick();
+        }
+        assert_eq!(
+            reads()?,
+            2,
+            "pending poke cannot wake admission in Reserve Protection"
+        );
+        assert_eq!(query::<_, u8>(pic, generic, "debug_timer_count", ())?, 3);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn notifier_fallback_uses_standard_and_economy_poll_timers() -> Result<()> {
+        for (mode, cycles, cadence) in [
+            (PollingMode::Standard, 5_000_000_000_000u128, 600),
+            (PollingMode::Economy, 2_000_000_000_000u128, 3600),
+        ] {
+            let env = Env::new_two_ledgers()?;
+            let pic = &env.pic;
+            let generic = env.install_debug_reader(env.observed_ledger, Some(env.event_horizon))?;
+            let reads = || query::<_, u64>(pic, generic, "debug_legacy_query_blocks_calls", ());
+            let tick = || {
+                for _ in 0..30 {
+                    pic.tick();
+                }
+            };
+            let advance = |seconds| pic.advance_time(std::time::Duration::from_secs(seconds));
+            update::<_, ()>(
+                pic,
+                generic,
+                "debug_set_scheduler_liquid_cycles_override",
+                Some(cycles),
+            )?;
+            update::<_, ()>(pic, generic, "debug_start_schedulers", ())?;
+            tick();
+            assert_eq!(
+                query::<_, DebugState>(pic, generic, "debug_state", ())?.polling_mode,
+                mode
+            );
+            assert_eq!(reads()?, 1);
+
+            advance(301);
+            tick();
+            assert_eq!(reads()?, 1, "fallback eligibility does not arm a timer");
+            advance(cadence - 302);
+            tick();
+            assert_eq!(reads()?, 1, "still before the ordinary poll");
+            advance(2);
+            tick();
+            assert_eq!(reads()?, 2, "the ordinary poll reconciles once");
+
+            for _ in 0..3 {
+                pic.update_call(
+                    generic,
+                    env.event_horizon,
+                    "poke",
+                    encode_one(PokeNotification {
+                        global_activity: false,
+                        matches: vec![PokeMatch {
+                            subject: generic,
+                            target: WatchTarget::Subaccount(0),
+                            first_block_index: 0,
+                            max_amount: 0u8.into(),
+                        }],
+                    })?,
+                )
+                .map_err(|error| anyhow!("poke: {error:?}"))?;
+            }
+            advance(59);
+            tick();
+            assert_eq!(reads()?, 2, "wakes respect the minimum spacing");
+            advance(2);
+            tick();
+            assert_eq!(reads()?, 3, "coalesced wakes advance the ordinary timer");
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "uses deterministic PocketIC rounds and a controlled Historian response"]
+    fn pending_admission_survives_observation_and_a_pinned_admission_boundary() -> Result<()> {
+        #[derive(CandidType, Deserialize)]
+        struct Gate {
+            entered: u64,
+            waiting: bool,
+        }
+        wasm(&HISTORIAN_WASM, "mock-historian", Some("interleaving_gate"))?;
+        let held_ledger = wasm(
+            &OnceLock::new(),
+            "mock-icrc3-ledger",
+            Some("interleaving_gate"),
+        )?;
+        let env = Env::new_two_ledgers()?;
+        let pic = &env.pic;
+        pic.reinstall_canister(env.observed_ledger, held_ledger, vec![], None)
+            .map_err(|e| anyhow!("{e:?}"))?;
+        let notifier = env.event_horizon;
+        let generic = env.install_debug_reader(env.observed_ledger, Some(notifier))?;
+        let send_hint = || -> Result<()> {
+            pic.update_call(
+                generic,
+                notifier,
+                "poke",
+                encode_one(PokeNotification {
+                    global_activity: false,
+                    matches: vec![PokeMatch {
+                        subject: generic,
+                        target: WatchTarget::Subaccount(0),
+                        first_block_index: 0,
+                        max_amount: 0u8.into(),
+                    }],
+                })?,
+            )
+            .map_err(|e| anyhow!("{e:?}"))?;
+            Ok(())
+        };
+        let poll = || update::<_, ()>(pic, generic, "debug_poll_once", ());
+        let state = || query::<_, DebugState>(pic, generic, "debug_state", ());
+        let observed_reads = || query::<_, u64>(pic, generic, "debug_icrc3_get_blocks_calls", ());
+        let payout = |target| -> Result<()> {
+            let memo =
+                format!("{}.{target}", env.subscriber.to_text().replace('-', "")).into_bytes();
+            update::<_, ()>(
+                pic,
+                env.historian,
+                "debug_set_route",
+                SetRoute {
+                    destination_canister_id: generic,
+                    memo: memo.clone(),
+                    total_e8s: 1_000_000_000,
+                },
+            )?;
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(generic, [0; 32]),
+                1,
+                Some(memo),
+            )?;
+            Ok(())
+        };
+        poll()?;
+        pic.advance_time(std::time::Duration::from_secs(61));
+        env.append_observed(
+            account_id(env.subscriber_second, [0; 32]),
+            account_id(env.subscriber, numbered(7)),
+            1,
+            None,
+        )?;
+        payout(7)?;
+        update::<_, ()>(pic, env.historian, "debug_route_gate", true)?;
+        update::<_, ()>(pic, env.observed_ledger, "debug_blocks_gate", true)?;
+        let prior_reads = observed_reads()?;
+        let first_poll = pic
+            .submit_call(
+                generic,
+                Principal::anonymous(),
+                "debug_poll_once",
+                encode_one(())?,
+            )
+            .map_err(|e| anyhow!("{e:?}"))?;
+        let entered =
+            || query::<_, bool>(pic, env.observed_ledger, "debug_blocks_gate_entered", ());
+        for _ in 0..30 {
+            if entered()? {
+                break;
+            }
+            pic.tick();
+        }
+        assert!(entered()?);
+        assert_eq!(observed_reads()?, prior_reads + 1);
+        assert_eq!(
+            state()?.observed_next_block,
+            0,
+            "reader is awaiting observation"
+        );
+        send_hint()?;
+        update::<_, ()>(pic, env.observed_ledger, "debug_blocks_gate", false)?;
+
+        for _ in 0..30 {
+            if query::<_, Gate>(pic, env.historian, "debug_route_gate_state", ())?.entered > 0 {
+                break;
+            }
+            pic.tick();
+        }
+        let gate: Gate = query(pic, env.historian, "debug_route_gate_state", ())?;
+        assert_eq!(
+            gate.entered, 1,
+            "first hint reaches admission in the same pass"
+        );
+        assert!(gate.waiting);
+        assert_eq!(state()?.observed_next_block, 1);
+        assert_eq!(state()?.admission_next_block, 0, "page has not committed");
+        assert_eq!(state()?.subscriptions, 0);
+        payout(8)?;
+        send_hint()?;
+        send_hint()?;
+        update::<_, ()>(pic, env.historian, "debug_route_gate", false)?;
+        pic.await_call(first_poll).map_err(|e| anyhow!("{e:?}"))?;
+        assert_eq!(
+            state()?.admission_next_block,
+            1,
+            "first scan keeps the pinned boundary"
+        );
+        assert_eq!(state()?.subscriptions, 1);
+        assert_eq!(query::<_, u64>(pic, env.subscriber, "debug_pokes", ())?, 0);
+        poll()?;
+        assert_eq!(state()?.admission_next_block, 1);
+        pic.advance_time(std::time::Duration::from_secs(61));
+        poll()?;
+        assert_eq!(
+            state()?.admission_next_block,
+            2,
+            "pending hint survives the in-flight scan"
+        );
+        assert_eq!(state()?.subscriptions, 2);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn production_canonical_wakes_generic_admission_with_real_oneway_poke() -> Result<()> {
+        let production = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
+        let debug = wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?;
+        let env = Env::with_anchors(debug, 8_000_000_000_000, false, true, false, true)?;
+        let pic = &env.pic;
+        let install = |observed, notifier, cycles| -> Result<Principal> {
+            let id = pic.create_canister();
+            pic.add_cycles(id, cycles);
+            pic.install_canister(
+                id,
+                production.clone(),
+                encode_one(NotifierInitArgs {
+                    observed_ledger: observed,
+                    sns_root: None,
+                    surplus_canister: None,
+                    icp_admission_notifier: notifier,
+                })?,
+                None,
+            );
+            Ok(id)
+        };
+        let canonical = install(env.ledger, None, 200_000_000_000_000)?;
+        let generic = install(env.observed_ledger, Some(canonical), 8_000_000_000_000)?;
+        let tick = |rounds| {
+            for _ in 0..rounds {
+                pic.tick();
+            }
+        };
+        tick(40);
+        for (id, notifier) in [(canonical, None), (generic, Some(canonical))] {
+            let instance: InstanceInfo = query(pic, id, "get_instance", ())?;
+            assert_eq!(instance.icp_admission_notifier, notifier);
+            assert!(instance.observed_profile.is_some());
+            assert!(query::<_, Pricing>(pic, id, "get_pricing", ())?.initialized);
+        }
+        let payout = |receiver, subscriber: Principal, target, funded| -> Result<()> {
+            let memo = format!("{}.{target}", subscriber.to_text().replace('-', "")).into_bytes();
+            assert!(memo.len() <= 32);
+            update::<_, ()>(
+                pic,
+                env.historian,
+                "debug_set_route",
+                SetRoute {
+                    destination_canister_id: receiver,
+                    memo: memo.clone(),
+                    total_e8s: funded,
+                },
+            )?;
+            env.append(
+                account_id(env.faucet, [0; 32]),
+                account_id(receiver, [0; 32]),
+                100_000_000,
+                Some(memo),
+            )?;
+            Ok(())
+        };
+        // Two ordinary Faucet routes. No admission or callback is seeded.
+        payout(canonical, generic, 0, 1_000_000_000)?;
+        tick(40);
+        pic.advance_time(std::time::Duration::from_secs(61));
+        // Activity in the generic ledger before the payout must not be delivered
+        // to the subscriber admitted by the subsequent canonical wake-up.
+        let observed_transfer = |target| {
+            env.append_observed(
+                account_id(env.subscriber_second, [0; 32]),
+                account_id(env.subscriber, numbered(target)),
+                100_000_000,
+                None,
+            )
+        };
+        observed_transfer(7)?;
+        payout(generic, env.subscriber, 7, 1_000_000_000)?;
+        tick(60);
+        assert_eq!(query::<_, u64>(pic, env.subscriber, "debug_pokes", ())?, 0);
+        // A second genuine payment wakes the generic at +61s, well before its
+        // Standard timer. Its observation now sees the permanent subscription.
+        pic.advance_time(std::time::Duration::from_secs(61));
+        observed_transfer(7)?;
+        payout(generic, env.subscriber, 9, 1)?;
+        tick(60);
+        assert_eq!(query::<_, u64>(pic, env.subscriber, "debug_pokes", ())?, 1);
+        assert_eq!(
+            query::<_, Option<Principal>>(pic, env.subscriber, "debug_last_caller", ())?,
+            Some(generic)
+        );
+        let message: PokeNotification = query(pic, env.subscriber, "debug_last_notification", ())?;
+        assert_eq!(message.matches.len(), 1);
+        assert_eq!(message.matches[0].target, WatchTarget::Subaccount(7));
+
+        // Loss of the notifier does not disable admission or observation. Take
+        // two ordinary Standard passes to see a new fallback-admitted account.
+        pic.stop_canister(canonical, None)
+            .map_err(|e| anyhow!("{e:?}"))?;
+        payout(generic, env.subscriber, 8, 1_000_000_000)?;
+        pic.advance_time(std::time::Duration::from_secs(601));
+        tick(60);
+        observed_transfer(8)?;
+        observed_transfer(9)?;
+        pic.advance_time(std::time::Duration::from_secs(601));
+        tick(60);
+        assert_eq!(query::<_, u64>(pic, env.subscriber, "debug_pokes", ())?, 2);
+        let message: PokeNotification = query(pic, env.subscriber, "debug_last_notification", ())?;
+        assert_eq!(
+            message.matches.len(),
+            1,
+            "insufficient endowment never becomes a subscription"
+        );
+        assert_eq!(message.matches[0].target, WatchTarget::Subaccount(8));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
+    fn production_wasm_exposes_queries_and_rejects_unauthorized_poke() -> Result<()> {
         // Keep a cold production build outside the replica's idle lifetime.
         let production_wasm = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
         let pic = PocketIcBuilder::new().with_application_subnet().build();
@@ -7474,6 +8230,17 @@ mod tests {
         let preview: Result<SubscriptionPreview, String> =
             query(&pic, id, "preview_subscription", id.to_text())?;
         assert!(preview.is_ok());
+        assert!(pic
+            .update_call(
+                id,
+                Principal::anonymous(),
+                "poke",
+                encode_one(PokeNotification {
+                    global_activity: true,
+                    matches: vec![]
+                })?,
+            )
+            .is_err());
         let result = pic.query_call(id, Principal::anonymous(), "debug_state", encode_one(())?);
         assert!(
             result.is_err(),

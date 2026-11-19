@@ -527,3 +527,5 @@ notifications. Authenticate the trusted Event Horizon principal, select
 before scheduling authoritative work. No Event Horizon fallback will bridge
 this change. Disburser-to-Historian forwarding is a separate contract and is
 not assumed to change. This release does not modify or deploy Jupiter.
+
+A generic Event Horizon can itself be an ordinary canonical ICP account subscriber. Its default-account matches can prompt admission reconciliation if it was installed with the canonical notifier. See [optional ICP admission notifications](operations/deploying-an-instance.md#optional-icp-admission-notifications) for route funding and memo limits. The callback remains a wake-up hint.

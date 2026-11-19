@@ -18,7 +18,7 @@ export const backendIdlFactory = ({ IDL }) => {
     next_carried_forward_due_to_stale_rate: IDL.Bool,
   });
   const Profile=IDL.Record({symbol:IDL.Text,decimals:IDL.Nat8,supports_icrc2_transfer_from:IDL.Bool,neuron_governance:IDL.Opt(IDL.Principal)});
-  const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),sns_root:IDL.Opt(IDL.Principal),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal)});
+  const Instance=IDL.Record({observed_ledger:IDL.Principal,observed_profile:IDL.Opt(Profile),sns_root:IDL.Opt(IDL.Principal),icp_ledger:IDL.Principal,cmc:IDL.Principal,jupiter_faucet:IDL.Principal,jupiter_historian:IDL.Principal,surplus_canister:IDL.Opt(IDL.Principal),icp_admission_notifier:IDL.Opt(IDL.Principal)});
   const Preview=IDL.Record({subscriber:IDL.Principal,subject:IDL.Opt(IDL.Principal),scope:IDL.Variant({global:IDL.Null,subaccount:IDL.Null,neuron_nonce:IDL.Null}),start:IDL.Opt(IDL.Nat64),end:IDL.Opt(IDL.Nat64),target_count:IDL.Nat32,minimum_units:IDL.Opt(IDL.Nat),alias_revision:IDL.Opt(IDL.Vec(IDL.Nat8)),aliases_refreshed_at:IDL.Opt(IDL.Nat64)});
   return IDL.Service({ preview_subscription:IDL.Func([IDL.Text],[IDL.Variant({Ok:Preview,Err:IDL.Text})],['query']), get_instance:IDL.Func([], [Instance], ['query']), get_pricing: IDL.Func([], [Pricing], ['query']) });
 };

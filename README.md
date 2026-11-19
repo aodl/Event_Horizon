@@ -75,7 +75,7 @@ range price   = ceil(20 × F / C) ICP
 global price  = ceil(1000 × F / C) ICP
 ```
 
-Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes the read-only `get_instance`, `get_pricing`, and local declaration `preview_subscription` queries; the certified frontend verifies the first against its reviewed static registry.
+Prices freeze seven days before the next first-of-month 00:00 UTC boundary. A latest rate older than seven days at freeze carries the current prices forward. The daily observation is skipped rather than spending into the protected cycles reserve. Admission uses the current price when Event Horizon evaluates the exact Historian route total. Production exposes the read-only `get_instance`, `get_pricing`, and local declaration `preview_subscription` queries and an authenticated generic admission wake-up update. The certified frontend verifies the immutable configuration against its reviewed static registry.
 
 The initial reference requirements are therefore 10 ICP for an account, 20 ICP
 for a range, and 1,000 ICP for a global subscription. These are reference bases,

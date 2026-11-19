@@ -22,7 +22,7 @@ is a separate baseline funding stream from subscriber endowments and from any
 liquid-cycles bootstrap; it is not a confirmed deposit or automatically shared
 with independently deployed Event Horizon instances.
 
-Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index. One reviewed Wasm supports every `observed_ledger` / `sns_root` / `surplus_canister` tuple.
+Canonical ICP is selected only by equality with the compiled ICP principal and uses the fixed legacy `query_blocks` adapter. Every non-ICP observed ledger uses the ICRC-3 adapter and must advertise ICRC-1, ICRC-3, and `1xfer`. This is deterministic dispatch, not fallback, and requires no Index. One reviewed Wasm supports every `observed_ledger` / `sns_root` / `surplus_canister` / `icp_admission_notifier` tuple.
 
 Event Horizon consists of an autonomous backend and a separately controlled certified frontend.
 
@@ -61,3 +61,5 @@ The hourly lane also takes one liquid-cycles observation for the surplus control
 Certified assets remain embedded in the Rust frontend Wasm. Its reviewed static registry contains ICP live and IO planned and pins each entry's backend, observed Ledger, optional SNS Root, optional surplus recipient, and expected backend hash. A selected live backend supplies `get_instance` and ICP-denominated `get_pricing`; the immutable tuple must match before memo construction. No cookie, environment, URL, local storage, mutable service, or automatic discovery supplies principals. The frontend exports only certified `http_request`.
 
 Daily pricing observation is a separate best-effort lane. It calculates the CMC query's current call cost before issuance and skips the day's attempt unless the liquid balance can retain the existing reserve floor after reserving that cost.
+
+Generic backends may use the immutable admission notifier to wake their independent ICP reader through the same account callback. The ICP instance continues the combined scan. The generic backend retains periodic live-ledger reconciliation because callbacks are best effort.

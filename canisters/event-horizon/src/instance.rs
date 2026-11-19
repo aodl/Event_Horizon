@@ -26,6 +26,7 @@ pub struct InitArgs {
     pub observed_ledger: Principal,
     pub sns_root: Option<Principal>,
     pub surplus_canister: Option<Principal>,
+    pub icp_admission_notifier: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]
@@ -42,6 +43,7 @@ pub struct InstanceConfig {
     pub observed_profile: Option<ObservedLedgerProfile>,
     pub sns_root: Option<Principal>,
     pub surplus_canister: Option<Principal>,
+    pub icp_admission_notifier: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -54,12 +56,14 @@ pub struct InstanceInfo {
     pub jupiter_faucet: Principal,
     pub jupiter_historian: Principal,
     pub surplus_canister: Option<Principal>,
+    pub icp_admission_notifier: Option<Principal>,
 }
 
 pub fn validate_init(
     observed_ledger: Principal,
     sns_root: Option<Principal>,
     surplus_canister: Option<Principal>,
+    notifier: Option<Principal>,
     icp_ledger: Principal,
     this_canister: Principal,
 ) {
@@ -75,6 +79,18 @@ pub fn validate_init(
         observed_ledger != icp_ledger || sns_root.is_none(),
         "canonical ICP must not configure sns_root"
     );
+    if let Some(notifier) = notifier {
+        assert!(
+            observed_ledger != icp_ledger,
+            "canonical ICP must not configure an admission notifier"
+        );
+        assert!(
+            notifier != Principal::anonymous()
+                && notifier != Principal::management_canister()
+                && notifier != this_canister,
+            "icp_admission_notifier must be a distinct canister principal"
+        );
+    }
     if let Some(root) = sns_root {
         assert!(
             root != Principal::anonymous() && root != Principal::management_canister(),
@@ -115,6 +131,7 @@ pub fn get_instance() -> InstanceInfo {
         jupiter_faucet: runtime.faucet_canister,
         jupiter_historian: runtime.historian_canister,
         surplus_canister: instance.surplus_canister,
+        icp_admission_notifier: instance.icp_admission_notifier,
     }
 }
 
@@ -232,7 +249,28 @@ mod tests {
         let observed = Principal::from_slice(&[1]);
         let icp = Principal::from_slice(&[2]);
         let this_canister = Principal::from_slice(&[3]);
-        validate_init(observed, None, recipient, icp, this_canister);
+        validate_init(observed, None, recipient, None, icp, this_canister);
+    }
+
+    #[test]
+    fn notifier_requires_a_generic_instance_and_distinct_principal() {
+        let ledger = Principal::from_slice(&[1, 1]);
+        let icp = Principal::from_slice(&[2, 1]);
+        let this = Principal::from_slice(&[3, 1]);
+        let notifier = Principal::from_slice(&[4, 1]);
+        validate_init(ledger, None, None, Some(notifier), icp, this);
+        validate_init(icp, None, None, None, icp, this);
+        for (observed, notifier) in [
+            (icp, notifier),
+            (ledger, Principal::anonymous()),
+            (ledger, Principal::management_canister()),
+            (ledger, this),
+        ] {
+            assert!(std::panic::catch_unwind(|| {
+                validate_init(observed, None, None, Some(notifier), icp, this);
+            })
+            .is_err());
+        }
     }
 
     #[test]

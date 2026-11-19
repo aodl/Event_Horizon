@@ -35,7 +35,7 @@ Do not continue unless all of the following are true:
   pokes, and burn rather than hypothetical yield alone;
 - the planned 3,000 ICP productive protocol endowment, subscriber endowments,
   and liquid-cycles bootstrap have been tracked as distinct funding categories;
-- the Wasm export audit permits exactly `canister_query get_instance`, `canister_query get_pricing`, and `canister_query preview_subscription`, with no update/admin application method;
+- the Wasm export audit permits exactly `canister_query get_instance`, `canister_query get_pricing`, and `canister_query preview_subscription`, plus authenticated `canister_update poke`, with no administrative method;
 - the frontend Wasm export audit permits exactly `canister_query http_request` and rejects `http_request_update`;
 - ordinary single/range, neuron single/range, and global Historian admission paths have been tested against the current prices;
 - backend and frontend artifacts reproduce byte-for-byte and the frontend's

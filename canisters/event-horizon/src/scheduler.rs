@@ -9,9 +9,11 @@ use crate::{
 };
 
 thread_local! {
-    static POLL_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
+    static POLL_TIMER: RefCell<Option<(ic_cdk_timers::TimerId, u64)>> = const { RefCell::new(None) };
     static FUNDING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
     static PRICING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
+    static ADMISSION_PENDING: Cell<bool> = const { Cell::new(false) };
+    static LAST_ADMISSION_START: Cell<Option<u64>> = const { Cell::new(None) };
     static POLL_RUNNING: Cell<bool> = const { Cell::new(false) };
     static FUNDING_RUNNING: Cell<bool> = const { Cell::new(false) };
     static PRICING_RUNNING: Cell<bool> = const { Cell::new(false) };
@@ -261,6 +263,68 @@ fn schedule_pricing(delay: Duration) {
     });
 }
 
+const ADMISSION_MIN_NS: u64 = 60_000_000_000;
+const ADMISSION_FALLBACK_NS: u64 = 300_000_000_000;
+
+fn pending_admission_at() -> Option<u64> {
+    ADMISSION_PENDING.with(Cell::get).then(|| {
+        LAST_ADMISSION_START
+            .with(Cell::get)
+            .map_or(0, |last| last.saturating_add(ADMISSION_MIN_NS))
+    })
+}
+
+pub fn request_admission() {
+    if ADMISSION_PENDING.with(|pending| pending.replace(true)) || POLL_RUNNING.with(Cell::get) {
+        return;
+    }
+    // Only advance an armed timer. Debug manual polling leaves this slot empty.
+    let now = ic_cdk::api::time();
+    let due = pending_admission_at().unwrap_or(now).max(now);
+    if POLL_TIMER.with_borrow(|slot| slot.is_some_and(|(_, at)| due < at))
+        && next_mode(state::read_metadata().polling_mode, liquid_cycles())
+            != PollingMode::ReserveProtection
+    {
+        schedule_poll(Duration::from_nanos(due - now));
+    }
+}
+
+/// Consume only the work known before the reader's first await. Pokes during a
+/// scan set a fresh pending bit. Failure or cancellation restores the old work.
+pub struct AdmissionAttempt(bool);
+
+impl AdmissionAttempt {
+    pub fn begin() -> Option<Self> {
+        let now = ic_cdk::api::time();
+        let pending = ADMISSION_PENDING.with(Cell::get);
+        if LAST_ADMISSION_START.with(Cell::get).is_some_and(|last| {
+            now.saturating_sub(last)
+                < if pending {
+                    ADMISSION_MIN_NS
+                } else {
+                    ADMISSION_FALLBACK_NS
+                }
+        }) {
+            return None;
+        }
+        ADMISSION_PENDING.with(|flag| flag.set(false));
+        LAST_ADMISSION_START.with(|start| start.set(Some(now)));
+        Some(Self(true))
+    }
+
+    pub fn finish(mut self) {
+        self.0 = false;
+    }
+}
+
+impl Drop for AdmissionAttempt {
+    fn drop(&mut self) {
+        if self.0 {
+            ADMISSION_PENDING.with(|flag| flag.set(true));
+        }
+    }
+}
+
 async fn run_poll_timer() {
     POLL_TIMER.with_borrow_mut(|slot| {
         slot.take();
@@ -287,7 +351,8 @@ async fn run_poll_timer() {
 fn schedule_poll(delay: Duration) {
     let timer_id = ic_cdk_timers::set_timer(delay, run_poll_timer());
     POLL_TIMER.with_borrow_mut(|slot| {
-        if let Some(previous) = slot.replace(timer_id) {
+        let due = ic_cdk::api::time().saturating_add(delay.as_nanos() as u64);
+        if let Some((previous, _)) = slot.replace((timer_id, due)) {
             ic_cdk_timers::clear_timer(previous);
         }
     });
@@ -346,7 +411,19 @@ fn refresh_polling_mode() -> PollingMode {
 pub fn schedule_from_balance() {
     let mode = refresh_polling_mode();
     let delay = match mode.delay_seconds() {
-        Some(seconds) => Duration::from_secs(seconds),
+        Some(seconds) => {
+            let normal = Duration::from_secs(seconds);
+            pending_admission_at().map_or(normal, |due| {
+                let now = ic_cdk::api::time();
+                // A due request can remain if profile discovery failed before
+                // the admission reader. Retry without spinning the poll lane.
+                normal.min(Duration::from_nanos(if due <= now {
+                    ADMISSION_MIN_NS
+                } else {
+                    due - now
+                }))
+            })
+        }
         None => Duration::from_secs(config::RESERVE_RECHECK_SECONDS),
     };
     schedule_poll(delay);

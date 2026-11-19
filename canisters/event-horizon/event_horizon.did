@@ -1,3 +1,17 @@
+type PokeTarget = variant {
+  subaccount : nat64;
+  neuron_nonce : nat64;
+};
+type PokeMatch = record {
+  subject : principal;
+  target : PokeTarget;
+  first_block_index : nat64;
+  max_amount : nat;
+};
+type PokeNotification = record {
+  global_activity : bool;
+  matches : vec PokeMatch;
+};
 type SubscriptionPreview = record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 };
 type Price = record { account_icp : nat64; range_icp : nat64; global_icp : nat64 };
 type Pricing = record {
@@ -16,13 +30,16 @@ type InstanceInfo = record {
   sns_root : opt principal;
   icp_ledger : principal; cmc : principal; jupiter_faucet : principal;
   jupiter_historian : principal; surplus_canister : opt principal;
+  icp_admission_notifier : opt principal;
 };
 type InitArgs = record {
   observed_ledger : principal;
   sns_root : opt principal;
   surplus_canister : opt principal;
+  icp_admission_notifier : opt principal;
 };
 service : (InitArgs) -> {
+  poke : (PokeNotification) -> ();
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
   preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;

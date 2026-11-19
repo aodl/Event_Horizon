@@ -21,7 +21,7 @@ operating costs. Neither yield nor uninterrupted service is guaranteed.
 
 The Event Horizon backend:
 
-- has exactly three production application queries, `get_instance`, `get_pricing`, and the bounded local-state-only `preview_subscription`, with no administrative interface;
+- has exactly three production application queries, `get_instance`, `get_pricing`, and the bounded local-state-only `preview_subscription`, and one authenticated admission wake-up update, `poke`, with no administrative interface;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -97,6 +97,42 @@ subscriber wanted the subscription.
 Global, range, and single-target declarations are distinct exact routes with class-specific prices. Ordinary and neuron singles use the account price; ordinary and neuron ranges use the range price. A range has one price regardless of width. The price in force when Event Horizon evaluates the declaration is authoritative. A declaration below that price remains unadmitted; later Faucet payouts may raise the exact-route total above the then-current requirement. Additional value for an admitted declaration creates no duplicate, priority, faster polling, or additional poke.
 
 If Historian is unavailable/incomplete for one payout, Event Horizon does not persist an admission-retry queue. A later perpetual Faucet payout carrying the same declaration provides a natural later admission opportunity.
+
+### Notification-driven reconciliation
+
+A generic instance may set immutable `icp_admission_notifier : opt principal`
+at installation. An absent value, including in historical install and stable
+records, preserves ICP reconciliation on every generic poll. The canonical ICP
+instance requires null and keeps its single shared legacy reader. A configured
+notifier must differ from the instance, anonymous and the management canister.
+The notifier is published by `get_instance` and cannot be changed by upgrade.
+
+The production synchronous update `poke : (PokeNotification) -> ();` uses the
+exact [subscriber callback ABI](candid/subscriber.did). It only records a wake-up
+when the caller is the configured notifier and a match identifies this
+instance as subject with `subaccount = 0`. Global activity, block index and
+amount do not participate in authorization or admission. The existing ledger
+and Historian checks determine all admission effects.
+
+A pending request can advance the existing one-shot poll timer and coalesces
+with work already scheduled or running. The same poll lane completes its
+observed-ledger work and captures the existing global membership before the
+reader can admit subscriptions. A fresh admission reader establishes its
+prospective tip even if observed-ledger metadata is unavailable. That initial
+request records only the tip. Configured admission scan starts are separated by at
+least 60 seconds during a runtime. A poke after an admission attempt begins
+remains pending for a later pass. An incomplete, failed or cancelled attempt
+also leaves pending work. Reserve Protection still suspends this work. With no
+hint, reconciliation is due at the first ordinary poll at least five minutes
+after the previous attempt, subject to the current adaptive cadence. Standard
+normally checks every ten minutes, Economy every hour, and delays can be longer.
+Install and upgrade make admission due on the first eligible pass using the
+existing prospective bootstrap and durable cursors. Pending work and scan
+spacing are transient and recover through that pass.
+
+Notifications remain best effort. Reconciliation reads the live ledger and
+preserves `HISTORY_GAP` reporting when archived ranges are encountered. No
+interval guarantees recovery of payouts across an archive gap or long outage.
 
 ## 6. Ledger reader
 
@@ -391,13 +427,13 @@ Polling, funding, and pricing are independent one-shot, single-flight lanes. If 
 
 ## 12. Production observability and immutability
 
-The production install configuration is immutable `observed_ledger` plus optional `sns_root` and optional `surplus_canister`. `surplus_canister` is an independent canister principal and need not belong to the observed Ledger, SNS, or Jupiter; all diverted value remains ICP. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain Wasm-level compiled trust anchors. The same reviewed production Wasm serves every instance and contains no recipient-specific build input.
+The production install configuration is immutable `observed_ledger` plus optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier`. `surplus_canister` is an independent canister principal and need not belong to the observed Ledger, SNS, or Jupiter; all diverted value remains ICP. Canonical ICP requires `sns_root = null`, uses legacy `query_blocks`, must advertise ICRC-1, and reports ICRC-2 support independently of ICRC-3 block types. Every non-ICP observed ledger must advertise ICRC-1, ICRC-3, and `1xfer`; `2xfer` is optional. Symbol (bounded to 32 UTF-8 bytes), decimals, and transfer-from support are queried and persisted once. The Protocol ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain Wasm-level compiled trust anchors. The same reviewed production Wasm serves every instance and contains no recipient-specific build input.
 
 Admission and observed activity have separate prospective durable cursors. Fresh ICP streams bootstrap to legacy `chain_length`; fresh generic streams bootstrap to ICRC-3 `log_length`, without replay. When both roles use ICP, one legacy page stream feeds both roles in authoritative block order and both cursors commit together. Otherwise failures are independent and observed scanning precedes admission so new admissions are not retroactive. Archive callbacks are never called; only explicit contiguous archived ranges may advance a cursor. A malformed identified transfer or unexplained hole preserves it.
 
 Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
 
-The production backend exposes exactly the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries. The release audit rejects every other application query, composite query, or update.
+The production backend exposes the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the synchronous `poke : (PokeNotification) -> ();` update. The release audit rejects every other application method.
 
 Before controller removal:
 

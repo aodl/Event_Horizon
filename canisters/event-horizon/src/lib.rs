@@ -1,6 +1,6 @@
 //! Event Horizon backend.
 //!
-//! Production exposes only `get_instance`, `get_pricing`, and `preview_subscription` read-only queries.
+//! Production exposes three read-only queries and one authenticated admission wake-up.
 //! Autonomous timers drive the ledger readers and ICP-to-cycles maintenance. The
 //! `debug_api` feature exists only for local/PocketIC validation and must not be present
 //! in the canonical production Wasm.
@@ -44,6 +44,7 @@ fn init(args: InitArgs) {
         args.observed_ledger,
         args.sns_root,
         args.surplus_canister,
+        args.icp_admission_notifier,
         config::RuntimeConfig::production(args.observed_ledger, args.surplus_canister).icp_ledger,
         ic_cdk::api::canister_self(),
     );
@@ -53,6 +54,7 @@ fn init(args: InitArgs) {
         observed_profile: None,
         sns_root: args.sns_root,
         surplus_canister: args.surplus_canister,
+        icp_admission_notifier: args.icp_admission_notifier,
     });
     instance::log_config();
     scheduler::start();
@@ -82,6 +84,35 @@ fn preview_subscription(suffix: String) -> Result<memo::SubscriptionPreview, Str
     memo::preview(suffix)
 }
 
+fn is_admission_notifier(caller: candid::Principal) -> bool {
+    let config = state::read_instance_config();
+    config.icp_admission_notifier == Some(caller)
+        && config.observed_ledger != config::runtime().icp_ledger
+}
+
+#[ic_cdk::inspect_message]
+fn inspect_message() {
+    if ic_cdk::api::msg_method_name() != "poke" || is_admission_notifier(ic_cdk::api::msg_caller())
+    {
+        ic_cdk::api::accept_message();
+    }
+}
+
+#[ic_cdk::update]
+fn poke(notification: clients::subscriber::PokeNotification) {
+    if !is_admission_notifier(ic_cdk::api::msg_caller()) {
+        return;
+    }
+    let own_id = ic_cdk::api::canister_self();
+    if notification
+        .matches
+        .iter()
+        .any(|matched| matched.subject == own_id && matched.target == WatchTarget::Subaccount(0))
+    {
+        scheduler::request_admission();
+    }
+}
+
 #[cfg(feature = "debug_api")]
 mod debug {
     use super::*;
@@ -97,6 +128,7 @@ mod debug {
         pub faucet_canister: Principal,
         pub surplus_canister: Option<Principal>,
         pub sns_root: Option<Principal>,
+        pub icp_admission_notifier: Option<Principal>,
     }
 
     impl From<DebugInitArgs> for config::RuntimeConfig {
@@ -119,6 +151,7 @@ mod debug {
             args.observed_ledger,
             args.sns_root,
             args.surplus_canister,
+            args.icp_admission_notifier,
             args.icp_ledger,
             ic_cdk::api::canister_self(),
         );
@@ -127,6 +160,7 @@ mod debug {
             observed_profile: None,
             sns_root: args.sns_root,
             surplus_canister: args.surplus_canister,
+            icp_admission_notifier: args.icp_admission_notifier,
         });
         state::write_debug_config(args.into());
         // Debug builds are manually driven to keep PocketIC tests deterministic.

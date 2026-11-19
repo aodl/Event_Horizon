@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["generic_icrc3"]
 generic_icrc3 = []
+interleaving_gate = []
 
 [dependencies]
 candid = { workspace = true }

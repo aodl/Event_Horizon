@@ -858,9 +858,56 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
     }
     types
 }
-#[cfg(feature = "generic_icrc3")]
+#[cfg(all(feature = "generic_icrc3", not(feature = "interleaving_gate")))]
 #[ic_cdk::query]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    icrc3_blocks_response(args)
+}
+
+#[cfg(all(feature = "generic_icrc3", feature = "interleaving_gate"))]
+mod blocks_gate {
+    use super::*;
+    use std::cell::Cell;
+
+    thread_local! {
+        static HOLD: Cell<bool> = const { Cell::new(false) };
+        static ENTERED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    #[ic_cdk::update]
+    fn debug_blocks_gate(hold: bool) {
+        HOLD.set(hold);
+        if hold {
+            ENTERED.set(false);
+        }
+    }
+
+    #[ic_cdk::query]
+    fn debug_blocks_gate_entered() -> bool {
+        ENTERED.get()
+    }
+
+    #[ic_cdk::update]
+    fn debug_blocks_gate_tick() {}
+
+    #[ic_cdk::update]
+    async fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+        let response = icrc3_blocks_response(args);
+        ENTERED.set(true);
+        while HOLD.get() {
+            ic_cdk::call::Call::bounded_wait(
+                ic_cdk::api::canister_self(),
+                "debug_blocks_gate_tick",
+            )
+            .await
+            .expect("mock gate tick");
+        }
+        response
+    }
+}
+
+#[cfg(feature = "generic_icrc3")]
+fn icrc3_blocks_response(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     STATE.with(|state| {
         let state = state.borrow();
         let mut blocks = Vec::new();

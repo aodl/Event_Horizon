@@ -2,7 +2,7 @@
 
 This guide is for deploying an additional immutable Event Horizon instance for another observed ledger.
 
-The same reviewed `event_horizon.wasm` serves every compatible instance. Immutable install configuration supplies `observed_ledger`, optional `sns_root`, and optional `surplus_canister`. ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain compiled protocol anchors. A surplus recipient is an independent canister principal; it need not belong to the observed Ledger, an SNS, or Jupiter, and any diverted value remains ICP.
+The same reviewed `event_horizon.wasm` serves every compatible instance. Immutable install configuration supplies `observed_ledger`, optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier`. ICP Ledger, NNS Governance, CMC, Jupiter Faucet, and Jupiter Historian remain compiled protocol anchors. A surplus recipient is an independent canister principal; it need not belong to the observed Ledger, an SNS, or Jupiter, and any diverted value remains ICP.
 
 Every fresh instance inherits the common 10 ICP account, 20 ICP range, and
 1,000 ICP global reference bases and the same dynamic monthly pricing formula.
@@ -19,6 +19,7 @@ Generic non-SNS:
   observed_ledger = principal "<ledger>";
   sns_root = null;
   surplus_canister = opt principal "<recipient>";
+  icp_admission_notifier = opt principal "eo6ei-gaaaa-aaaar-qchra-cai";
 })
 ```
 
@@ -29,6 +30,7 @@ SNS-aware:
   observed_ledger = principal "<sns-ledger>";
   sns_root = opt principal "<sns-root>";
   surplus_canister = opt principal "<recipient>";
+  icp_admission_notifier = null;
 })
 ```
 
@@ -58,13 +60,13 @@ operator afterward.
 Canonical frontend listing requires evidence of: a published alias; the reviewed
 fixed legacy ICP protocol plus ICRC-1 metadata for canonical ICP, or ICRC-1,
 ICRC-3, and `1xfer` for a non-ICP Observed Ledger; matching
-`get_instance` observed Ledger, SNS Root, and surplus recipient plus matching CONFIG/HEALTH evidence; a reviewed backend
+`get_instance` observed Ledger, SNS Root, surplus recipient, and ICP admission notifier plus matching CONFIG/HEALTH evidence; a reviewed backend
 Wasm hash; public status/logs; adequate cycles funding; reproducible source
 evidence; `controllers = []`; and a frontend PR containing the static registry
 entry and expected hash. Listing provides discoverability, not authority and
 does not broaden legacy support beyond canonical ICP.
 
-The verification tuple is backend canister ID + module hash + empty controllers + observed Ledger + SNS Root + surplus recipient from `get_instance`/logs + Jupiter alias. A module hash alone is insufficient.
+The verification tuple is backend canister ID + module hash + empty controllers + observed Ledger + SNS Root + surplus recipient + ICP admission notifier from `get_instance`/logs + Jupiter alias. A module hash alone is insufficient.
 
 `get_instance` reports the backend's immutable instance configuration and its
 observed Ledger profile; it does not return or independently authenticate the
@@ -73,6 +75,46 @@ Computer's native canister status, and independently verify empty controllers
 plus public status and log visibility. The reviewed Wasm hash, immutable
 configuration, and actual installed state must all agree before declaring an
 instance verified.
+
+## Optional ICP admission notifications
+
+1. Verify the observed Ledger and any SNS relationship as above. Identify the
+   current reviewed canonical ICP Event Horizon principal. At this writing it
+   is `eo6ei-gaaaa-aaaar-qchra-cai`. Verify its installed identity independently.
+2. For a new generic instance, install with that principal in
+   `icp_admission_notifier`, as in the first example. Use null for legacy
+   admission polling. Existing instances that omitted the field stay in legacy
+   mode after upgrade. The setting is immutable. Any future decision to
+   reinstall a stateful instance is separate and risks destroying its state.
+3. Bootstrap liquid cycles, allow the observed profile and both prospective
+   cursors to establish, and verify the notifier in `get_instance`. Arrange
+   the generic instance's own approved Jupiter alias and payout route.
+4. Separately fund an ordinary **account** subscription on canonical ICP for
+   the generic canister's own default account, subaccount 0. The conceptual
+   declaration is `E.<generic-event-horizon-principal>.0`, or
+   `E.<verified-Historian-alias>.0` when needed. Measure the full UTF-8 memo,
+   including the route prefix, against Jupiter's 32-byte limit. If neither the
+   compact principal nor a published identity alias fits, the route cannot
+   currently be funded. Use canonical `get_pricing` to verify the current
+   dynamic account requirement and review any higher frozen upcoming price.
+   The reference basis is a 10 ICP productive endowment, distinct from liquid
+   cycles and the generic instance's own payout route.
+5. Jupiter staking and payout take time. Verify complete canonical-route
+   Historian evidence and a qualifying Faucet payout to canonical ICP. Prove
+   activation by controlled default-account activity and reconciliation before
+   relying on the notification subscription. The notifier configuration alone
+   provides no evidence that the subscription was admitted.
+6. In a controlled acceptance environment, confirm a genuine qualifying Faucet
+   payout to the generic default account causes a canonical poke and a generic
+   admission scan. Confirm independent observed-ledger polling and verify
+   fallback by withholding a poke while the payout is still live. An archived
+   payout can be missed, with `HISTORY_GAP` reported. Spacing is 60 seconds and
+   fallback is due after five minutes on the existing lane. Standard and Economy
+   may reconcile only every ten minutes and every hour respectively, and reserve
+   mode suspends ordinary polling entirely.
+7. Complete normal module-hash, cycle-reserve, public visibility, controller
+   review and frontend listing checks. Include the immutable notifier value in
+   the reviewed tuple.
 
 ## Canonical transitions
 

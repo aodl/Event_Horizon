@@ -856,16 +856,29 @@ fn failure(s: Stream, e: &str) {
 pub async fn run_poll() {
     let r = config::runtime();
     let shared = r.observed_ledger == r.icp_ledger;
+    let notification_driven = !shared
+        && state::read_instance_config()
+            .icp_admission_notifier
+            .is_some();
+    // Capture the prospective tip independently of observed-ledger readiness.
+    // With an uninitialized cursor this reads only the tip and admits nothing.
     if !state::read_metadata().admission_bootstrapped {
-        let stream = if shared {
-            Stream::Shared
-        } else {
-            Stream::Admission
-        };
-        if let Err(e) = scan_legacy(stream, 0).await {
-            failure(stream, &e);
-            if shared {
-                return;
+        let attempt = notification_driven
+            .then(crate::scheduler::AdmissionAttempt::begin)
+            .flatten();
+        if !notification_driven || attempt.is_some() {
+            let stream = if shared {
+                Stream::Shared
+            } else {
+                Stream::Admission
+            };
+            if let Err(e) = scan_legacy(stream, 0).await {
+                failure(stream, &e);
+                if shared {
+                    return;
+                }
+            } else if let Some(attempt) = attempt {
+                attempt.finish();
             }
         }
     }
@@ -917,9 +930,19 @@ pub async fn run_poll() {
         } else {
             Vec::new()
         };
-        match scan_legacy(Stream::Admission, profile.decimals).await {
-            Ok(_) => logging::icp_admission_ledger_recovered(),
-            Err(e) => failure(Stream::Admission, &e),
+        let attempt = notification_driven
+            .then(crate::scheduler::AdmissionAttempt::begin)
+            .flatten();
+        if !notification_driven || attempt.is_some() {
+            match scan_legacy(Stream::Admission, profile.decimals).await {
+                Ok(_) => {
+                    if let Some(attempt) = attempt {
+                        attempt.finish();
+                    }
+                    logging::icp_admission_ledger_recovered();
+                }
+                Err(e) => failure(Stream::Admission, &e),
+            }
         }
         if activity {
             for p in globals {

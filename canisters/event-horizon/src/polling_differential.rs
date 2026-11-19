@@ -295,6 +295,7 @@ fn duplicate_stage_keeps_pending_improvement_and_cache_generation() {
             observed_profile: None,
             sns_root: None,
             surplus_canister: None,
+            icp_admission_notifier: None,
         });
         let make = |minimum| {
             SubjectSubscription::self_subject(Subscription {
@@ -362,6 +363,7 @@ fn unchanged_stable_declarations_reuse_one_key_and_do_not_publish_or_invalidate(
             observed_profile: None,
             sns_root: None,
             surplus_canister: None,
+            icp_admission_notifier: None,
         });
         let make = |minimum| {
             SubjectSubscription::self_subject(Subscription {

@@ -36,9 +36,10 @@ fn effective_stable_snapshot(env: &Env) -> StableSnapshot {
             out.insert($id, vec![(vec![], cell.get().0.clone())]);
         }};
     }
-    for id in [0u8, 2, 3, 8, 10] {
+    for id in [0u8, 3, 8, 10] {
         cell!(id, 256);
     }
+    cell!(2, 272);
     for id in [6u8, 7] {
         cell!(id, 512);
     }
@@ -97,6 +98,28 @@ fn assert_effective_snapshots_equal(old: &StableSnapshot, new: &StableSnapshot) 
     }
     Ok(())
 }
+// Fresh installs intentionally encode the new optional field. Compare the
+// complete logical instance record across schema versions, keeping all other
+// regions byte-exact. The in-place upgrade test still compares raw cell bytes.
+fn fresh_install_snapshot(env: &Env) -> Result<StableSnapshot> {
+    #[derive(CandidType, Deserialize)]
+    struct InstanceConfig {
+        observed_ledger: Principal,
+        observed_profile: Option<ObservedProfile>,
+        sns_root: Option<Principal>,
+        surplus_canister: Option<Principal>,
+        icp_admission_notifier: Option<Principal>,
+    }
+    let mut snapshot = effective_stable_snapshot(env);
+    let region = snapshot.get_mut(&2).context("missing instance config cell")?;
+    assert_eq!(region.len(), 1);
+    let config: Option<InstanceConfig> = decode_one(&region[0].1)?;
+    let config = config.context("instance config must be initialized")?;
+    assert_eq!(config.icp_admission_notifier, None, "legacy test instances stay unconfigured");
+    region[0].1 = encode_one(Some(config))?;
+    Ok(snapshot)
+}
+
 fn complete_stable_differential(generic: bool) -> Result<()> {
     let old = baseline()?;
     let new = wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?;
@@ -148,7 +171,7 @@ fn complete_stable_differential(generic: bool) -> Result<()> {
         }
         env.poll()?;
         env.admit_global(100_000 * ICP_E8S)?;
-        let first = effective_stable_snapshot(&env);
+        let first = fresh_install_snapshot(&env)?;
         assert_eq!(first[&1].len(), 258);
         assert_eq!(first[&11].len(), 257);
         assert_eq!(first[&4].len(), 1);
@@ -201,7 +224,7 @@ fn complete_stable_differential(generic: bool) -> Result<()> {
                 max_amount: 3_000_000u64.into()
             }]
         );
-        let second = effective_stable_snapshot(&env);
+        let second = fresh_install_snapshot(&env)?;
         // Stage a representative durable journal under identical supplied
         // liquidity, with fixed timestamps at the financial decision point.
         env.pic
@@ -226,7 +249,7 @@ fn complete_stable_differential(generic: bool) -> Result<()> {
             .state()?
             .cmc_state
             .contains("planned_surplus: Some(PlannedSurplus"));
-        let third = effective_stable_snapshot(&env);
+        let third = fresh_install_snapshot(&env)?;
         if let Some((a, b, c)) = &reference {
             assert_effective_snapshots_equal(a, &first)?;
             assert_effective_snapshots_equal(b, &second)?;

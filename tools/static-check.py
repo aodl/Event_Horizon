@@ -183,7 +183,7 @@ assert 'get_pricing : () -> (Pricing) query;' in backend_did
 assert 'get_instance : () -> (InstanceInfo) query;' in backend_did
 assert 'account_icp : nat64; range_icp : nat64; global_icp : nat64' in backend_did
 assert backend_did.count(' query;') == 3
-assert ' -> ();' not in backend_did
+assert backend_did.count(' -> ();') == 1
 subscriber_did=(root/'candid/subscriber.did').read_text()
 assert 'target : PokeTarget' in subscriber_did and 'max_amount : nat' in subscriber_did
 assert 'first_block_index : nat64' in subscriber_did
@@ -238,7 +238,7 @@ registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert registry.count('surplusCanisterId:null') == 2
-assert "expectedBackendWasmSha256:'f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970'" in registry
+assert "expectedBackendWasmSha256:'246e639cef13ecbd39d23b240924609fc12493381f7332ed969f7ca6b11f4821'" in registry
 assert "alias:'E'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
@@ -379,7 +379,7 @@ assert 'r.observed_ledger==r.icp_ledger' in polling.replace(' ', '')
 assert 'Call::bounded_wait(ledger, "query_blocks")' in ledger
 assert 'icrc3_get_blocks' in (root/'canisters/event-horizon/src/clients/icrc3.rs').read_text()
 mock_icp=(root/'tests/mocks/mock-icp-ledger/src/lib.rs').read_text()
-assert '#[cfg(feature = "generic_icrc3")]\n#[ic_cdk::query]\nfn icrc3_get_blocks' in mock_icp
+assert '#[cfg(all(feature = "generic_icrc3", not(feature = "interleaving_gate")))]\n#[ic_cdk::query]\nfn icrc3_get_blocks' in mock_icp
 assert 'default = ["generic_icrc3"]' in (root/'tests/mocks/mock-icrc3-ledger/Cargo.toml').read_text()
 assert 'Call::bounded_wait(ledger, "icrc1_balance_of")' in ledger
 assert 'Call::bounded_wait(ledger, "icrc1_fee")' in ledger
@@ -575,6 +575,9 @@ for path in ['canisters/event-horizon/src/clients/subscriber.rs', 'tests/mocks/m
 assert 'no block index, complete transaction record' not in spec
 
 assert 'preview_subscription : (text)' in backend_did
+assert 'poke : (PokeNotification) -> ();' in backend_did
+assert backend_did.startswith(subscriber_did.split('service :', 1)[0])
+assert backend_did.count('icp_admission_notifier : opt principal') == 2
 assert 'poke : (PokeNotification) -> ();' in subscriber_did
 assert 'global_activity : bool' in subscriber_did
 assert 'matches : vec PokeMatch' in subscriber_did

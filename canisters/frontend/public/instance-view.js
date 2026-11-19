@@ -6,12 +6,14 @@ export function verifyInstanceConfiguration(registry, instance) {
   const observedLedger = instance.observed_ledger.toText();
   const snsRoot = optionalPrincipal(instance.sns_root);
   const surplusCanister = optionalPrincipal(instance.surplus_canister);
+  const notifier = optionalPrincipal(instance.icp_admission_notifier);
   if (observedLedger !== registry.observedLedgerCanisterId
       || snsRoot !== registry.snsRootCanisterId
-      || surplusCanister !== registry.surplusCanisterId) {
+      || surplusCanister !== registry.surplusCanisterId
+      || notifier !== registry.icpAdmissionNotifierId) {
     throw new ConfigurationMismatchError(
       `Configuration mismatch: backend reports observed ledger ${observedLedger}, `
-      + `SNS Root ${snsRoot ?? 'none'}, and surplus recipient ${surplusCanister ?? 'none'}.`,
+      + `SNS Root ${snsRoot ?? 'none'}, surplus recipient ${surplusCanister ?? 'none'}, and ICP admission notifier ${notifier ?? 'none'}.`,
     );
   }
   if (!instance.observed_profile.length) {
@@ -34,6 +36,7 @@ export function registryMarkup(instance, profile = null) {
     + `Observed ledger: ${instance.observedLedgerCanisterId ?? 'pending'}<br>`
     + `SNS Root: ${instance.snsRootCanisterId ?? 'none'}<br>`
     + `Surplus recipient: ${instance.surplusCanisterId ?? 'none'}<br>`
+    + `ICP admission notifier: ${instance.icpAdmissionNotifierId ?? (instance.status === 'live' ? 'none' : 'pending')}<br>`
     + `Neuron Governance: ${profile ? governance : 'pending'}<br>`
     + `Expected backend Wasm SHA-256: ${instance.expectedBackendWasmSha256 ?? 'pending'}<br>`
     + `${instance.canonical ? 'Canonical' : 'Community'} listing`;

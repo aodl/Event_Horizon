@@ -73,8 +73,9 @@ def main() -> None:
     if args.backend:
         if b"eo6ei-gaaaa-aaaar-qchra-cai" in data:
             raise SystemExit("generic backend must not embed the canonical instance identity")
-        expected = ["canister_query get_instance", "canister_query get_pricing", "canister_query preview_subscription"]
-        if app_methods != expected:
+        expected = ["canister_query get_instance", "canister_query get_pricing",
+                    "canister_query preview_subscription", "canister_update poke"]
+        if sorted(app_methods) != sorted(expected):
             raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")
         # The IC system import `debug_print` is used for exceptional logs.
         forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_pricing_once",

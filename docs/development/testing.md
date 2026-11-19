@@ -87,6 +87,18 @@ record receiver independently verifies each mixed notification. The existing
 large full-record decoding regression is unchanged; see the
 [Index interoperability report](../codex/index-poke-validation.md).
 
+### Admission notifier tests
+
+The two-production-Wasm scenario funds two ordinary Faucet/Historian routes,
+observes the canonical one-way delivery through the resulting generic
+subscription, and verifies fallback with the notifier stopped. Deterministic
+debug fixtures exercise authenticated payload filtering, throttling, in-flight
+work, archive gaps and historical configuration. The combined-cycle scenario
+uses the existing ledger request counters and reads cycle balances on both
+sides of the calls. It fixes poll cadence and simulated time and uses mocks,
+so it measures controlled costs rather than mainnet billing or guaranteed
+archive-window retention.
+
 ## What PocketIC covers
 
 The integration suite builds purpose-specific mock Wasms and exercises:
@@ -310,6 +322,33 @@ The shared-account capacity case measures 1,024 indexed external watchers with
 claims cross-canister execution ordering.
 
 ## Cycle optimisation experiments
+
+The [notification-driven admission CSV](../codex/notification-driven-admission-cycles.csv)
+records paired PocketIC results for four workloads. Each pair compares legacy
+polling with configured notifications over 36 ten-second poll opportunities per
+generic instance. The unrelated-activity workload adds 360 ICP blocks. The
+payout workloads add two real fixture payouts per generic. The CSV includes
+actual reader and callback counts and cycle balance deltas for the canonical
+instance, generic instances, both ledgers, and Historian.
+
+Reproduce the measurements from the repository root. Each command starts a
+separate PocketIC process, and each scenario prints the legacy and configured
+rows as `admission_benchmark` records with the same field names as the CSV.
+
+```bash
+for scenario in quiet unrelated_activity occasional_payouts shared_notifier; do
+  DFX_IDENTITY=codex_local POCKET_IC_MUTE_SERVER=1 \
+    cargo test --locked -p event-horizon-pocketic --lib \
+      "tests::admission_cycles_${scenario}" \
+      -- --exact --ignored --nocapture --test-threads=1 || break
+done
+```
+
+Combined cycles are the sum of the five measured fixture components. The
+measurements include the controlled test-driver traffic and use manually driven
+poll opportunities on one PocketIC subnet. Production timer, cross-subnet, and
+hosting costs are outside this comparison. Fixture cycle savings are specific
+to these workloads.
 
 The measured refactor uses a separately preserved reviewed baseline and serial
 paired PocketIC instances. See the [experiment definitions and reproduction commands](../codex/cycle-optimisation-experiments.md)

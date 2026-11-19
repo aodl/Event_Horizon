@@ -10,7 +10,7 @@ get_pricing : () -> (Pricing) query;
 preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
 ```
 
-They expose immutable configuration/profile, pricing, and a bounded local-state-only declaration preview. Preview returns resolved subscriber/subject, scope, endpoints/count, optional raw threshold, and cached alias revision/refresh time, or an error. It performs no awaits, admission, funding verification, writes or pricing mutation. The audit requires exactly `canister_query get_instance`, `canister_query get_pricing`, and `canister_query preview_subscription` and rejects all other application methods. Debug inspection remains behind `debug_api`.
+They expose immutable configuration/profile, pricing, and a bounded local-state-only declaration preview. Preview returns resolved subscriber/subject, scope, endpoints/count, optional raw threshold, and cached alias revision/refresh time, or an error. It performs no awaits, admission, funding verification, writes or pricing mutation. The audit requires exactly `canister_query get_instance`, `canister_query get_pricing`, and `canister_query preview_subscription` plus `canister_update poke`, and rejects all other application methods. The update only schedules reconciliation for an authenticated default-account match and uses the existing subscriber ABI. Debug inspection remains behind `debug_api`.
 
 Each current/frozen public price contains `account_icp`, derived `range_icp`, and `global_icp`. This record extension adds no method and does not alter the export surface.
 

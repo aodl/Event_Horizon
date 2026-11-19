@@ -26,7 +26,7 @@ hash or controller state; verify those independently.
 
 ## Immutable configuration and ledger modes
 
-Installation persists `observed_ledger`, optional `sns_root`, and optional `surplus_canister` exactly once. The latter is an independent canister principal whose default all-zero-subaccount ICP AccountIdentifier receives eligible surplus ICP. `null` disables diversion. Ordinary upgrades take no configuration argument, and production exposes no setter or administrator method. The ICP Ledger, CMC, NNS Governance, Jupiter Historian, and Jupiter Faucet remain Wasm-level protocol anchors, so every instance uses the same reviewed backend bytes.
+Installation persists `observed_ledger`, optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier` exactly once. The surplus recipient is an independent canister principal whose default all-zero-subaccount ICP AccountIdentifier receives eligible surplus ICP. `null` disables diversion. Ordinary upgrades take no configuration argument, and production exposes no setter or administrator method. The ICP Ledger, CMC, NNS Governance, Jupiter Historian, and Jupiter Faucet remain Wasm-level protocol anchors, so every instance uses the same reviewed backend bytes.
 
 The canonical ICP instance reads the legacy ICP `query_blocks` log for both admission and observation and uses fixed NNS Governance ownership for neuron targets. Generic instances retain ICP as the admission and funding asset while reading a compatible ICRC-1/ICRC-3 observed ledger. A generic SNS instance enables neuron targets only after verifying the configured SNS Root's Root/Ledger/Governance tuple and the Ledger's Governance-default minting account. No Index canister is required.
 
@@ -111,6 +111,7 @@ record {
   observed_ledger : principal;
   sns_root : opt principal;
   surplus_canister : opt principal;
+  icp_admission_notifier : opt principal;
 }
 ```
 
@@ -120,7 +121,7 @@ recipient, but imposes no relationship to the observed Ledger, SNS, or Jupiter.
 
 ## Production surface and state
 
-The production application surface contains only the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
+The production application surface contains the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the authenticated `poke` admission wake-up. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
 
 Stable state holds immutable instance/profile data, reader cursors, subscriptions, pricing history, and funding recovery state. Schema evolution is additive and covered by upgrade scenarios. The canonical production Wasm deliberately remains separate from debug/test Wasms.
 

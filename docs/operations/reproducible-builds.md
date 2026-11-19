@@ -54,7 +54,7 @@ service : {
 }
 ```
 
-The audit rejects backend update methods and debug markers. The frontend must expose exactly `canister_query http_request`, with no HTTP update, pricing proxy, or administrative application method. These binary audits supplement rather than replace the checked-in Candid interfaces.
+The audit permits only `poke` as a backend application update and rejects debug markers. The frontend must expose exactly `canister_query http_request`, with no HTTP update, pricing proxy, or administrative application method. These binary audits supplement rather than replace the checked-in Candid interfaces.
 
 The backend build has no surplus-recipient environment variable, build argument,
 feature, source substitution, or recipient-specific Docker path. One backend

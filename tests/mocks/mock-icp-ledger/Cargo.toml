@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 [features]
 generic_icrc3 = []
+interleaving_gate = []
 [lib]
 crate-type = ["cdylib", "rlib"]
 [dependencies]

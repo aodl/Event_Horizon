@@ -26,7 +26,7 @@ fn observed_54d8b4b_production_upgrades_preserving_financial_state() -> Result<(
     let candidate = std::fs::read(root.join("release-artifacts/event_horizon.wasm"))?;
     assert_eq!(
         format!("{:x}", Sha256::digest(&candidate)),
-        "f93cd920a6a7e147462d5a359fa33a4c1bbae7677bbe2de6242b01ac690f8970"
+        "246e639cef13ecbd39d23b240924609fc12493381f7332ed969f7ca6b11f4821"
     );
     for surplus in [false, true] {
         for transfer_pending in [false, true] {
