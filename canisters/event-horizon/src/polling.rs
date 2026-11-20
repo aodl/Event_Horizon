@@ -574,8 +574,23 @@ async fn icrc_prefix(
             None => error,
         };
         let referral = icrc_archived(&response.archived_blocks, &requested).map_err(context)?;
-        let blocks = icrc_blocks(response.blocks, &requested).map_err(context)?;
+        let mut blocks = icrc_blocks(response.blocks, &requested).map_err(context)?;
         if blocks.first().is_some_and(|(id, _)| *id == requested.start) {
+            // A single reply can advertise a hole between locally available blocks.
+            // Commit the validated prefix and let the next root request resolve it.
+            if let Some((index, pair)) = blocks
+                .windows(2)
+                .enumerate()
+                .find(|(_, pair)| pair[0].0 + 1 != pair[1].0)
+            {
+                let missing = pair[0].0 + 1; // Both IDs are below the exclusive end.
+                if icrc_archived(&response.archived_blocks, &(missing..requested.end))
+                    .map_err(context)?
+                    .is_some()
+                {
+                    blocks.truncate(index + 1);
+                }
+            }
             return Ok(blocks);
         }
         let (end, callback) = referral.ok_or_else(|| {

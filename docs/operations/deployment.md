@@ -118,6 +118,12 @@ a prior Jupiter upgrade while no existing subscriptions depend on callbacks or
 admission during the transition. Jupiter's deployment process is outside this
 Event Horizon procedure.
 
+For the archive-recovery release, the new frontend registry pins the SHA-256
+of the new canonical backend artifact. The presently deployed backend may
+still have the previous hash. Upgrade and verify the backend first, then
+upgrade the frontend whose bundled registry pins that verified hash. The
+canonical artifact manifest records the exact hashes for both modules.
+
 #### C. Begin an unsubscribed observation period
 
 Observe Ledger progress, pricing, funding/recovery maintenance, cycles and the

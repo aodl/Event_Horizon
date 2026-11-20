@@ -983,8 +983,13 @@ fn icrc3_blocks_response(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
                 .saturating_add(length)
                 .min(state.icrc_blocks.len() as u64);
             let archive_end = state.first_local.min(end);
-            if start < archive_end && !state.suppress_archive_info {
-                if state.archive_routes.is_empty() {
+            let missing = state
+                .archive_missing_index
+                .filter(|id| (start..end).contains(id));
+            if !state.suppress_archive_info && (start < archive_end || missing.is_some()) {
+                if !state.archive_routes.is_empty() {
+                    archived_blocks.extend(icrc_referrals(&state.archive_routes));
+                } else if start < archive_end {
                     archived_blocks.push(ArchivedBlocks {
                         args: vec![GetBlocksRequest {
                             start: start.into(),
@@ -997,11 +1002,9 @@ fn icrc3_blocks_response(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
                             "read_icrc_history",
                         ),
                     });
-                } else {
-                    archived_blocks.extend(icrc_referrals(&state.archive_routes));
                 }
             }
-            for id in start.max(state.first_local)..end {
+            for id in (start.max(state.first_local)..end).filter(|id| Some(*id) != missing) {
                 blocks.push(BlockWithId {
                     id: id.into(),
                     block: state.icrc_blocks[id as usize].clone(),

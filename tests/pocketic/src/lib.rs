@@ -5842,6 +5842,80 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
+    fn generic_icrc3_recovers_archive_between_root_local_blocks() -> Result<()> {
+        for available in [true, false] {
+            let env = Env::new_two_ledgers()?;
+            let ledger = env.observed_ledger;
+            env.append_observed_batch(DebugBatchKind::Irrelevant, 100)?;
+            env.poll()?;
+            env.admit(7, None, 1_000_000_000)?;
+
+            let source = account_id(Principal::from_slice(&[8]), [0; 32]);
+            let target = account_id(env.subscriber, numbered(7));
+            assert_eq!(
+                env.append_observed(source.clone(), target.clone(), 5, None)?,
+                100
+            );
+            assert_eq!(
+                env.append_observed(source.clone(), target.clone(), 17, None)?,
+                101
+            );
+            assert_eq!(env.append_observed(source, target, 11, None)?, 102);
+            let archive = env.archive(ledger, 102)?;
+            update::<_, ()>(&env.pic, ledger, "debug_set_first_local_block", 0u64)?;
+            update::<_, ()>(
+                &env.pic,
+                ledger,
+                "debug_set_archive_missing_index",
+                Some(101u64),
+            )?;
+            env.set_archive_routes(
+                ledger,
+                vec![ArchiveRoute::new(
+                    archive,
+                    "record_icrc_archive_request",
+                    vec![(101, 1)],
+                )],
+            )?;
+            if !available {
+                update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 0u64)?;
+            }
+            let requests =
+                || query::<_, Vec<(u64, u64)>>(&env.pic, archive, "debug_archive_requests", ());
+            let pokes = env.subscriber_observation()?.pokes;
+
+            env.poll()?;
+
+            if !available {
+                assert_eq!(
+                    env.state()?.observed_next_block,
+                    101,
+                    "commit block 100 and stop at the unavailable block 101"
+                );
+                assert_eq!(requests()?, vec![(101, 1)]);
+                assert_eq!(env.subscriber_observation()?.pokes, pokes);
+
+                update::<_, ()>(&env.pic, archive, "debug_set_archive_reply_limit", 256u64)?;
+                env.poll()?;
+            }
+            assert_eq!(env.state()?.observed_next_block, 103);
+            assert_eq!(requests()?, vec![(101, 1); if available { 1 } else { 2 }]);
+            let recovered = env.wait_for_pokes(pokes + 1)?;
+            assert_eq!(
+                recovered.matches,
+                vec![PokeMatch {
+                    subject: env.subscriber,
+                    target: WatchTarget::Subaccount(7),
+                    first_block_index: if available { 100 } else { 101 },
+                    max_amount: 17u8.into(),
+                }]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "builds wasm and runs PocketIC"]
     fn generic_icrc3_routes_disjoint_ranges_with_bounded_redirects() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         let ledger = env.observed_ledger;
