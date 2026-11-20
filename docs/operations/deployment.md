@@ -289,8 +289,12 @@ EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
   icp deploy event_horizon -e ic --mode upgrade --no-create
 ```
 
-No constructor or upgrade arguments are supplied. Then, after confirming the
-installed backend and its matching registry pin, separately upgrade the frontend:
+The ordinary command supplies no arguments and preserves the worker list.
+To replace the canonical worker allowlist, supply the optional Candid argument
+documented in the [backend README](../../canisters/event-horizon/README.md#configure-worker-wakes)
+in the same state-preserving upgrade. Review the exact principals and argument
+before authorizing the upgrade. After confirming the installed backend and
+its matching registry pin, separately upgrade the frontend:
 
 ```bash
 EVENT_HORIZON_USE_CANONICAL_ARTIFACTS=1 \
@@ -314,6 +318,8 @@ record {
   observed_ledger = principal "ryjl3-tyaaa-aaaaa-aaaba-cai";
   sns_root = null;
   surplus_canister = null;
+  icp_admission_notifier = null;
+  allowed_poke_callers = null;
 }
 ```
 

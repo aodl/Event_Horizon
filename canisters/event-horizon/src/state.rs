@@ -184,6 +184,8 @@ candid_value!(ObservationValue, Observation, 128);
 candid_value!(PricingStateValue, PricingState, 512);
 candid_value!(FundingStateValue, FundingState, 512);
 candid_value!(SurplusPolicyStateValue, SurplusPolicyState, 256);
+// Candid header plus up to 16 principals of 29 bytes and their wire tags/lengths.
+candid_value!(PokeCallersValue, Vec<candid::Principal>, 512);
 #[cfg(feature = "debug_api")]
 candid_value!(DebugConfigValue, RuntimeConfig, 256);
 
@@ -200,6 +202,20 @@ thread_local! {
     static SURPLUS_POLICY_STATE: RefCell<Option<StableCell<SurplusPolicyStateValue, Memory>>> = const { RefCell::new(None) };
     #[cfg(feature = "debug_api")]
     static DEBUG_CONFIG: RefCell<Option<StableCell<DebugConfigValue, Memory>>> = const { RefCell::new(None) };
+}
+
+thread_local! {
+    static POKE_CALLERS: RefCell<StableCell<PokeCallersValue, Memory>> = MEMORY_MANAGER.with_borrow(|manager| {
+        RefCell::new(StableCell::init(manager.get(POKE_CALLERS_MEMORY_ID), PokeCallersValue(Vec::new())))
+    });
+}
+
+pub fn is_allowed_poke_caller(caller: candid::Principal) -> bool {
+    POKE_CALLERS.with_borrow(|cell| cell.get().0.contains(&caller))
+}
+
+pub fn set_poke_callers(callers: Vec<candid::Principal>) {
+    POKE_CALLERS.with_borrow_mut(|cell| cell.set(PokeCallersValue(callers)));
 }
 
 fn with_instance_config<R>(f: impl FnOnce(&mut StableCell<InstanceConfigValue, Memory>) -> R) -> R {
@@ -304,6 +320,8 @@ fn with_surplus_policy<R>(
 }
 
 pub fn initialize_if_needed() {
+    // Initialize the default in a replicated context before ingress inspection.
+    POKE_CALLERS.with(|_| ());
     with_aliases(|_| ());
     with_alias_metadata(|_| ());
     with_external(|_| ());
@@ -612,6 +630,7 @@ mod account_key_tests {
 const ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9);
 const ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10);
 const EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11);
+const POKE_CALLERS_MEMORY_ID: MemoryId = MemoryId::new(12);
 candid_value!(AliasMetadataValue, crate::aliases::AliasMetadata, 256);
 candid_value!(ExternalValue, crate::subscription::SubjectSubscription, 512);
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -915,6 +934,40 @@ mod external_key_tests {
 #[cfg(test)]
 mod unchanged_write_tests {
     use super::*;
+
+    #[test]
+    fn poke_callers_encode_within_bound_and_membership_defaults_to_empty() {
+        use crate::instance::{validate_poke_callers, MAX_POKE_CALLERS};
+        let workers: Vec<_> = (1..=MAX_POKE_CALLERS as u8)
+            .map(|byte| candid::Principal::from_slice(&[byte; 29]))
+            .collect();
+        assert!(validate_poke_callers(&[], false).is_ok());
+        assert!(validate_poke_callers(&workers, true).is_ok());
+        assert!(validate_poke_callers(&workers, false).is_err());
+        for invalid in [
+            vec![candid::Principal::anonymous()],
+            vec![candid::Principal::management_canister()],
+            vec![workers[0]; 2],
+            vec![workers[0]; MAX_POKE_CALLERS + 1],
+        ] {
+            assert!(validate_poke_callers(&invalid, true).is_err());
+        }
+        let value = PokeCallersValue(workers.clone());
+        assert_eq!(
+            PokeCallersValue::from_bytes(value.to_bytes_checked()),
+            value
+        );
+        std::thread::spawn(move || {
+            assert!(!is_allowed_poke_caller(workers[0]));
+            set_poke_callers(workers.clone());
+            assert!(is_allowed_poke_caller(workers[0]));
+            assert!(!is_allowed_poke_caller(candid::Principal::anonymous()));
+            set_poke_callers(vec![]);
+            assert!(!is_allowed_poke_caller(workers[0]));
+        })
+        .join()
+        .unwrap();
+    }
     #[test]
     fn instance_config_accepts_historical_bytes_and_fits_existing_cell() {
         #[derive(CandidType)]

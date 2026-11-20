@@ -87,6 +87,14 @@ fn debug_set_trap(value: bool) {
     STATE.with(|s| s.borrow_mut().trap = value)
 }
 
+#[ic_cdk::update]
+async fn debug_forward_poke(backend: Principal) -> Result<(), String> {
+    ic_cdk::call::Call::bounded_wait(backend, "poke")
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 ic_cdk::export_candid!();
 
 #[cfg(test)]

@@ -41,8 +41,13 @@ mod tests {
     }
 
     fn wasm(cache: &OnceLock<Vec<u8>>, package: &str, features: Option<&str>) -> Result<Vec<u8>> {
-        if package == "event-horizon" && features == Some("debug_api") {
-            if let Some(path) = std::env::var_os("EH_TEST_BACKEND_WASM") {
+        if package == "event-horizon" {
+            let candidate = match features {
+                None => std::env::var_os("EH_TEST_PRODUCTION_WASM"),
+                Some("debug_api") => std::env::var_os("EH_TEST_BACKEND_WASM"),
+                _ => None,
+            };
+            if let Some(path) = candidate {
                 return std::fs::read(&path)
                     .with_context(|| format!("test backend {}", PathBuf::from(path).display()));
             }
@@ -8065,7 +8070,7 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn generic_admission_hints_filter_coalesce_throttle_and_recover() -> Result<()> {
+    fn generic_admission_pokes_coalesce_throttle_and_recover() -> Result<()> {
         let env = Env::new_two_ledgers()?;
         let pic = &env.pic;
         let notifier = env.event_horizon;
@@ -8073,60 +8078,32 @@ mod tests {
         let poll = || update::<_, ()>(pic, generic, "debug_poll_once", ());
         let reads = || query::<_, u64>(pic, generic, "debug_legacy_query_blocks_calls", ());
         let state = || query::<_, DebugState>(pic, generic, "debug_state", ());
-        let reply = |caller, matches, global_activity| {
-            pic.update_call(
-                generic,
-                caller,
-                "poke",
-                encode_one(PokeNotification {
-                    global_activity,
-                    matches,
-                })
-                .unwrap(),
-            )
-        };
-        let valid = PokeMatch {
-            subject: generic,
-            target: WatchTarget::Subaccount(0),
-            first_block_index: u64::MAX,
-            max_amount: candid::Nat(candid::Nat::from(1u64).0 << 32768usize),
-        };
+        let poke =
+            |caller| pic.update_call(generic, caller, "poke", candid::encode_args(()).unwrap());
         poll()?;
         assert_eq!(reads()?, 1);
         pic.advance_time(std::time::Duration::from_secs(61));
         for caller in [Principal::anonymous(), env.subscriber] {
-            assert!(reply(caller, vec![valid.clone()], false).is_err());
+            assert!(poke(caller).is_err());
         }
-        let unrelated = [
-            PokeMatch {
-                target: WatchTarget::Subaccount(1),
-                ..valid.clone()
-            },
-            PokeMatch {
-                target: WatchTarget::NeuronNonce(0),
-                ..valid.clone()
-            },
-            PokeMatch {
-                subject: env.subscriber,
-                ..valid.clone()
-            },
-        ];
-        reply(notifier, unrelated.to_vec(), true).unwrap();
-        reply(notifier, vec![], true).unwrap();
         poll()?;
-        assert_eq!(reads()?, 1);
+        assert_eq!(
+            reads()?,
+            1,
+            "rejected calls did not request an admission pass"
+        );
         for _ in 0..3 {
-            reply(notifier, vec![unrelated[2].clone(), valid.clone()], true).unwrap();
+            poke(notifier).unwrap();
         }
         poll()?;
         assert_eq!(reads()?, 2);
         assert_eq!(
             state()?.admission_next_block,
             0,
-            "payload cannot advance a cursor"
+            "a wake alone cannot advance a cursor"
         );
         assert_eq!(state()?.subscriptions, 0);
-        reply(notifier, vec![valid], false).unwrap();
+        poke(notifier).unwrap();
         poll()?;
         assert_eq!(reads()?, 2);
         pic.advance_time(std::time::Duration::from_secs(61));
@@ -8212,21 +8189,7 @@ mod tests {
             Some(10u128),
         )?;
         update::<_, ()>(pic, generic, "debug_start_schedulers", ())?;
-        pic.update_call(
-            generic,
-            notifier,
-            "poke",
-            encode_one(PokeNotification {
-                global_activity: false,
-                matches: vec![PokeMatch {
-                    subject: generic,
-                    target: WatchTarget::Subaccount(0),
-                    first_block_index: 1,
-                    max_amount: 0u8.into(),
-                }],
-            })?,
-        )
-        .map_err(|e| anyhow!("{e:?}"))?;
+        poke(notifier).map_err(|e| anyhow!("{e:?}"))?;
         pic.advance_time(std::time::Duration::from_secs(3601));
         for _ in 0..12 {
             pic.tick();
@@ -8282,21 +8245,8 @@ mod tests {
             assert_eq!(reads()?, 2, "the ordinary poll reconciles once");
 
             for _ in 0..3 {
-                pic.update_call(
-                    generic,
-                    env.event_horizon,
-                    "poke",
-                    encode_one(PokeNotification {
-                        global_activity: false,
-                        matches: vec![PokeMatch {
-                            subject: generic,
-                            target: WatchTarget::Subaccount(0),
-                            first_block_index: 0,
-                            max_amount: 0u8.into(),
-                        }],
-                    })?,
-                )
-                .map_err(|error| anyhow!("poke: {error:?}"))?;
+                pic.update_call(generic, env.event_horizon, "poke", candid::encode_args(())?)
+                    .map_err(|error| anyhow!("poke: {error:?}"))?;
             }
             advance(59);
             tick();
@@ -8329,21 +8279,8 @@ mod tests {
         let notifier = env.event_horizon;
         let generic = env.install_debug_reader(env.observed_ledger, Some(notifier))?;
         let send_hint = || -> Result<()> {
-            pic.update_call(
-                generic,
-                notifier,
-                "poke",
-                encode_one(PokeNotification {
-                    global_activity: false,
-                    matches: vec![PokeMatch {
-                        subject: generic,
-                        target: WatchTarget::Subaccount(0),
-                        first_block_index: 0,
-                        max_amount: 0u8.into(),
-                    }],
-                })?,
-            )
-            .map_err(|e| anyhow!("{e:?}"))?;
+            pic.update_call(generic, notifier, "poke", candid::encode_args(())?)
+                .map_err(|e| anyhow!("{e:?}"))?;
             Ok(())
         };
         let poll = || update::<_, ()>(pic, generic, "debug_poll_once", ());
@@ -8450,7 +8387,8 @@ mod tests {
 
     #[test]
     #[ignore = "builds wasm and runs PocketIC"]
-    fn production_canonical_wakes_generic_admission_with_real_oneway_poke() -> Result<()> {
+    fn production_canonical_record_bearing_poke_wakes_zero_argument_generic_receiver() -> Result<()>
+    {
         let production = wasm(&EVENT_HORIZON_PROD_WASM, "event-horizon", None)?;
         let debug = wasm(&EVENT_HORIZON_WASM, "event-horizon", Some("debug_api"))?;
         let env = Env::with_anchors(debug, 8_000_000_000_000, false, true, false, true)?;
@@ -8587,15 +8525,7 @@ mod tests {
             query(&pic, id, "preview_subscription", id.to_text())?;
         assert!(preview.is_ok());
         assert!(pic
-            .update_call(
-                id,
-                Principal::anonymous(),
-                "poke",
-                encode_one(PokeNotification {
-                    global_activity: true,
-                    matches: vec![]
-                })?,
-            )
+            .update_call(id, Principal::anonymous(), "poke", candid::encode_args(())?,)
             .is_err());
         let result = pic.query_call(id, Principal::anonymous(), "debug_state", encode_one(())?);
         assert!(
@@ -9070,4 +9000,5 @@ mod tests {
         Ok(())
     }
     include!("cycle_optimisation.rs");
+    include!("inbound_poke.rs");
 }

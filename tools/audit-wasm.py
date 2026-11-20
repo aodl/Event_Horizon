@@ -77,6 +77,8 @@ def main() -> None:
                     "canister_query preview_subscription", "canister_update poke"]
         if sorted(app_methods) != sorted(expected):
             raise SystemExit(f"production backend application surface is {app_methods}, expected {expected}")
+        if "canister_inspect_message" not in names:
+            raise SystemExit("production backend is missing the ingress inspection hook")
         # The IC system import `debug_print` is used for exceptional logs.
         forbidden = [b"debug_poll_once", b"debug_funding_once", b"debug_pricing_once",
                      b"debug_start_schedulers", b"debug_timer_count",

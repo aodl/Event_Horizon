@@ -13,6 +13,7 @@ thread_local! {
     static FUNDING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
     static PRICING_TIMER: RefCell<Option<ic_cdk_timers::TimerId>> = const { RefCell::new(None) };
     static ADMISSION_PENDING: Cell<bool> = const { Cell::new(false) };
+    static POLL_WAKE_PENDING: Cell<bool> = const { Cell::new(false) };
     static LAST_ADMISSION_START: Cell<Option<u64>> = const { Cell::new(None) };
     static POLL_RUNNING: Cell<bool> = const { Cell::new(false) };
     static FUNDING_RUNNING: Cell<bool> = const { Cell::new(false) };
@@ -140,6 +141,9 @@ impl Drop for LaneGuard {
     fn drop(&mut self) {
         if !self.armed {
             return;
+        }
+        if matches!(self.lane, Lane::Poll) {
+            POLL_WAKE_PENDING.with(|pending| pending.set(false));
         }
         self.lane.clear_running();
         if !self.lane.has_timer() {
@@ -289,6 +293,17 @@ pub fn request_admission() {
     }
 }
 
+pub fn request_external_poll() {
+    if next_mode(state::read_metadata().polling_mode, liquid_cycles())
+        == PollingMode::ReserveProtection
+    {
+        return;
+    }
+    if !POLL_WAKE_PENDING.with(|pending| pending.replace(true)) && !POLL_RUNNING.with(Cell::get) {
+        schedule_poll(Duration::ZERO);
+    }
+}
+
 /// Consume only the work known before the reader's first await. Pokes during a
 /// scan set a fresh pending bit. Failure or cancellation restores the old work.
 pub struct AdmissionAttempt(bool);
@@ -331,12 +346,16 @@ async fn run_poll_timer() {
     });
     let Some(guard) = Lane::Poll.try_acquire() else {
         debug_note_busy(Lane::Poll);
-        schedule_poll(Duration::from_secs(1));
+        // The owner schedules either the next poll or delayed recovery.
         return;
     };
+    // Consume only wakes received before acquiring the lane. A wake that
+    // arrives across an await belongs to the next scan.
+    POLL_WAKE_PENDING.with(|pending| pending.set(false));
     debug_note_start(Lane::Poll);
     maybe_debug_exercise_overlap(Lane::Poll).await;
     if refresh_polling_mode() == PollingMode::ReserveProtection {
+        POLL_WAKE_PENDING.with(|pending| pending.set(false));
         schedule_poll(Duration::from_secs(config::RESERVE_RECHECK_SECONDS));
         guard.finish();
         return;
@@ -344,14 +363,19 @@ async fn run_poll_timer() {
     let trap_after_await = take_debug_post_await_trap(Lane::Poll);
     polling::run_poll().await;
     maybe_debug_trap_after_await(trap_after_await, "poll");
-    schedule_from_balance();
+    schedule_next_poll(refresh_polling_mode());
     guard.finish();
 }
 
 fn schedule_poll(delay: Duration) {
+    let due = ic_cdk::api::time().saturating_add(delay.as_nanos() as u64);
+    if POLL_WAKE_PENDING.with(Cell::get)
+        && POLL_TIMER.with_borrow(|slot| slot.is_some_and(|(_, previous)| previous <= due))
+    {
+        return;
+    }
     let timer_id = ic_cdk_timers::set_timer(delay, run_poll_timer());
     POLL_TIMER.with_borrow_mut(|slot| {
-        let due = ic_cdk::api::time().saturating_add(delay.as_nanos() as u64);
         if let Some((previous, _)) = slot.replace((timer_id, due)) {
             ic_cdk_timers::clear_timer(previous);
         }
@@ -410,7 +434,16 @@ fn refresh_polling_mode() -> PollingMode {
 
 pub fn schedule_from_balance() {
     let mode = refresh_polling_mode();
+    // An active poll owns rescheduling, including any wake it received while
+    // awaiting. Funding can still publish the newly computed mode.
+    if !POLL_RUNNING.with(Cell::get) {
+        schedule_next_poll(mode);
+    }
+}
+
+fn schedule_next_poll(mode: PollingMode) {
     let delay = match mode.delay_seconds() {
+        Some(_) if POLL_WAKE_PENDING.with(Cell::get) => Duration::ZERO,
         Some(seconds) => {
             let normal = Duration::from_secs(seconds);
             pending_admission_at().map_or(normal, |due| {
@@ -424,7 +457,10 @@ pub fn schedule_from_balance() {
                 }))
             })
         }
-        None => Duration::from_secs(config::RESERVE_RECHECK_SECONDS),
+        None => {
+            POLL_WAKE_PENDING.with(|pending| pending.set(false));
+            Duration::from_secs(config::RESERVE_RECHECK_SECONDS)
+        }
     };
     schedule_poll(delay);
 }

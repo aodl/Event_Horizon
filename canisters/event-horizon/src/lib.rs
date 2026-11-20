@@ -1,6 +1,6 @@
 //! Event Horizon backend.
 //!
-//! Production exposes three read-only queries and one authenticated admission wake-up.
+//! Production exposes three read-only queries and one authenticated poll wake.
 //! Autonomous timers drive the ledger readers and ICP-to-cycles maintenance. The
 //! `debug_api` feature exists only for local/PocketIC validation and must not be present
 //! in the canonical production Wasm.
@@ -21,7 +21,6 @@ mod state;
 mod subscription;
 mod surplus;
 
-#[cfg(feature = "debug_api")]
 use candid::Principal;
 
 #[cfg(feature = "debug_api")]
@@ -40,15 +39,21 @@ pub use subscription::{merge_subscription, Subscription, WatchTarget};
 #[cfg(not(feature = "debug_api"))]
 #[ic_cdk::init]
 fn init(args: InitArgs) {
+    let icp_ledger =
+        config::RuntimeConfig::production(args.observed_ledger, args.surplus_canister).icp_ledger;
     instance::validate_init(
         args.observed_ledger,
         args.sns_root,
         args.surplus_canister,
         args.icp_admission_notifier,
-        config::RuntimeConfig::production(args.observed_ledger, args.surplus_canister).icp_ledger,
+        icp_ledger,
         ic_cdk::api::canister_self(),
     );
     state::initialize_if_needed();
+    configure_poke_callers(
+        args.allowed_poke_callers,
+        args.observed_ledger == icp_ledger,
+    );
     state::initialize_instance_config(instance::InstanceConfig {
         observed_ledger: args.observed_ledger,
         observed_profile: None,
@@ -62,9 +67,9 @@ fn init(args: InitArgs) {
 }
 
 #[cfg(not(feature = "debug_api"))]
-#[ic_cdk::post_upgrade]
-fn post_upgrade() {
-    state::initialize_if_needed();
+#[ic_cdk::post_upgrade(decode_with = "decode_poke_upgrade")]
+fn post_upgrade(callers: Option<Vec<Principal>>) {
+    restore_poke_callers(callers);
     scheduler::start();
     aliases::start();
 }
@@ -84,32 +89,69 @@ fn preview_subscription(suffix: String) -> Result<memo::SubscriptionPreview, Str
     memo::preview(suffix)
 }
 
-fn is_admission_notifier(caller: candid::Principal) -> bool {
-    let config = state::read_instance_config();
-    config.icp_admission_notifier == Some(caller)
-        && config.observed_ledger != config::runtime().icp_ledger
+fn decode_poke_upgrade(bytes: Vec<u8>) -> Option<Vec<Principal>> {
+    if bytes.is_empty() {
+        return None;
+    }
+    // Do not silently discard an incompatible argument through Candid's opt rule.
+    let mut config = candid::DecoderConfig::new();
+    config.set_skipping_quota(0);
+    let mut decoder = candid::de::IDLDeserialize::new_with_config(&bytes, &config)
+        .expect("invalid upgrade arguments");
+    let callers = decoder
+        .get_value()
+        .expect("invalid poke allowlist argument");
+    assert!(decoder.is_done(), "unexpected extra upgrade arguments");
+    decoder.done().expect("invalid upgrade arguments");
+    callers
+}
+
+fn configure_poke_callers(callers: Option<Vec<Principal>>, canonical: bool) {
+    if let Some(callers) = callers {
+        instance::validate_poke_callers(&callers, canonical)
+            .unwrap_or_else(|error| ic_cdk::trap(error));
+        state::set_poke_callers(callers);
+    }
+}
+
+fn restore_poke_callers(callers: Option<Vec<Principal>>) {
+    state::initialize_if_needed();
+    if callers.is_some() {
+        let runtime = config::runtime();
+        configure_poke_callers(callers, runtime.observed_ledger == runtime.icp_ledger);
+    }
+}
+
+enum PokeWake {
+    Poll,
+    Admission,
+}
+
+fn authorised_poke(caller: Principal) -> Option<PokeWake> {
+    let runtime = config::runtime();
+    if runtime.observed_ledger == runtime.icp_ledger {
+        state::is_allowed_poke_caller(caller).then_some(PokeWake::Poll)
+    } else {
+        (state::read_instance_config().icp_admission_notifier == Some(caller))
+            .then_some(PokeWake::Admission)
+    }
 }
 
 #[ic_cdk::inspect_message]
 fn inspect_message() {
-    if ic_cdk::api::msg_method_name() != "poke" || is_admission_notifier(ic_cdk::api::msg_caller())
+    if ic_cdk::api::msg_method_name() != "poke"
+        || authorised_poke(ic_cdk::api::msg_caller()).is_some()
     {
         ic_cdk::api::accept_message();
     }
 }
 
 #[ic_cdk::update]
-fn poke(notification: clients::subscriber::PokeNotification) {
-    if !is_admission_notifier(ic_cdk::api::msg_caller()) {
-        return;
-    }
-    let own_id = ic_cdk::api::canister_self();
-    if notification
-        .matches
-        .iter()
-        .any(|matched| matched.subject == own_id && matched.target == WatchTarget::Subaccount(0))
-    {
-        scheduler::request_admission();
+fn poke() {
+    match authorised_poke(ic_cdk::api::msg_caller()) {
+        Some(PokeWake::Poll) => scheduler::request_external_poll(),
+        Some(PokeWake::Admission) => scheduler::request_admission(),
+        None => ic_cdk::trap("unauthorised poke"),
     }
 }
 
@@ -129,10 +171,11 @@ mod debug {
         pub surplus_canister: Option<Principal>,
         pub sns_root: Option<Principal>,
         pub icp_admission_notifier: Option<Principal>,
+        pub allowed_poke_callers: Option<Vec<Principal>>,
     }
 
-    impl From<DebugInitArgs> for config::RuntimeConfig {
-        fn from(value: DebugInitArgs) -> Self {
+    impl From<&DebugInitArgs> for config::RuntimeConfig {
+        fn from(value: &DebugInitArgs) -> Self {
             Self {
                 observed_ledger: value.observed_ledger,
                 icp_ledger: value.icp_ledger,
@@ -162,13 +205,17 @@ mod debug {
             surplus_canister: args.surplus_canister,
             icp_admission_notifier: args.icp_admission_notifier,
         });
-        state::write_debug_config(args.into());
+        state::write_debug_config((&args).into());
+        configure_poke_callers(
+            args.allowed_poke_callers,
+            args.observed_ledger == args.icp_ledger,
+        );
         // Debug builds are manually driven to keep PocketIC tests deterministic.
     }
 
-    #[ic_cdk::post_upgrade]
-    fn post_upgrade() {
-        state::initialize_if_needed();
+    #[ic_cdk::post_upgrade(decode_with = "decode_poke_upgrade")]
+    fn post_upgrade(callers: Option<Vec<Principal>>) {
+        restore_poke_callers(callers);
     }
 
     #[derive(CandidType, Deserialize)]
@@ -417,3 +464,30 @@ mod debug {
 }
 
 ic_cdk::export_candid!();
+
+#[cfg(test)]
+mod poke_tests {
+    use super::*;
+
+    #[test]
+    fn upgrade_argument_distinguishes_preserve_replace_and_clear() {
+        assert_eq!(decode_poke_upgrade(vec![]), None);
+        assert_eq!(decode_poke_upgrade(candid::encode_args(()).unwrap()), None);
+        assert_eq!(decode_poke_upgrade(candid::encode_one(()).unwrap()), None);
+        let worker = Principal::from_slice(&[1, 2]);
+        for policy in [Some(vec![worker]), Some(vec![]), None] {
+            assert_eq!(
+                decode_poke_upgrade(candid::encode_one(&policy).unwrap()),
+                policy
+            );
+        }
+        for invalid in [
+            b"invalid".to_vec(),
+            candid::encode_one("invalid").unwrap(),
+            candid::encode_one(Some(vec!["invalid"])).unwrap(),
+            candid::encode_args((None::<Vec<Principal>>, 1u8)).unwrap(),
+        ] {
+            assert!(std::panic::catch_unwind(|| decode_poke_upgrade(invalid)).is_err());
+        }
+    }
+}

@@ -2,7 +2,7 @@
 
 Event Horizon uses **an empty controller list** for final immutability. It does not transfer control to a blackhole canister.
 
-This procedure is intentionally manual and irreversible. There is no in-protocol administration or self-upgrade mechanism.
+This procedure is intentionally manual and irreversible. There is no in-protocol administration or self-upgrade mechanism. Resolve the canonical worker allowlist before removal. After removal, a previously authorized worker cannot be revoked and a disabled endpoint cannot be enabled by an upgrade.
 
 These requirements are stricter than initial deployment. An unsubscribed backend
 and its separately controlled frontend may be upgraded and observed independently

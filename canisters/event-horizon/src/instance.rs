@@ -27,6 +27,30 @@ pub struct InitArgs {
     pub sns_root: Option<Principal>,
     pub surplus_canister: Option<Principal>,
     pub icp_admission_notifier: Option<Principal>,
+    pub allowed_poke_callers: Option<Vec<Principal>>,
+}
+
+pub(crate) const MAX_POKE_CALLERS: usize = 16;
+
+pub(crate) fn validate_poke_callers(
+    callers: &[Principal],
+    canonical: bool,
+) -> Result<(), &'static str> {
+    if !canonical && !callers.is_empty() {
+        return Err("only canonical ICP can configure allowed_poke_callers");
+    }
+    if callers.len() > MAX_POKE_CALLERS {
+        return Err("at most 16 allowed_poke_callers are supported");
+    }
+    for (index, caller) in callers.iter().enumerate() {
+        if *caller == Principal::anonymous() || *caller == Principal::management_canister() {
+            return Err("invalid allowed_poke_callers principal");
+        }
+        if callers[..index].contains(caller) {
+            return Err("duplicate allowed_poke_callers principal");
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq)]

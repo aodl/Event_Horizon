@@ -238,7 +238,7 @@ registry=(root/'canisters/frontend/public/instances.js').read_text()
 assert "backendCanisterId:'eo6ei-gaaaa-aaaar-qchra-cai'" in registry
 assert "observedLedgerCanisterId:'ryjl3-tyaaa-aaaaa-aaaba-cai'" in registry
 assert registry.count('surplusCanisterId:null') == 2
-assert "expectedBackendWasmSha256:'d889b6447273769776f4e5043bbfe73574dc6763225a62242a88da7927bd5e84'" in registry
+assert "expectedBackendWasmSha256:'b861ad08971a2539eb244a8d22a93ae2d527fcefe2c192f88bea6c00f715e9ec'" in registry
 assert "alias:'E'" in registry and "alias:'I'" in registry
 assert '0a2b83a113fcbaa7277844a72e2a51d8004169e4a44df9ee1b025ca37b84daeb' not in registry, 'obsolete backend hash remains pinned'
 assert "'https://icp-api.io'" in frontend_client
@@ -582,8 +582,8 @@ for path in ['canisters/event-horizon/src/clients/subscriber.rs', 'tests/mocks/m
 assert 'no block index, complete transaction record' not in spec
 
 assert 'preview_subscription : (text)' in backend_did
-assert 'poke : (PokeNotification) -> ();' in backend_did
-assert backend_did.startswith(subscriber_did.split('service :', 1)[0])
+assert 'poke : () -> ();' in backend_did
+assert 'allowed_poke_callers : opt vec principal;' in backend_did
 assert backend_did.count('icp_admission_notifier : opt principal') == 2
 assert 'poke : (PokeNotification) -> ();' in subscriber_did
 assert 'global_activity : bool' in subscriber_did
@@ -604,7 +604,7 @@ receiver = (root/'tests/mocks/mock-subscriber/src/lib.rs').read_text()
 assert 'fn poke(notification: PokeNotification)' in receiver
 assert 'decode_with' not in receiver and 'skipping_quota' not in receiver
 assert 'MAX_SPECIFIC_TARGETS_PER_POKE: usize = 256' in polling
-for region in ['ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9)', 'ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10)', 'EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11)']:
+for region in ['ALIASES_MEMORY_ID: MemoryId = MemoryId::new(9)', 'ALIAS_METADATA_MEMORY_ID: MemoryId = MemoryId::new(10)', 'EXTERNAL_SUBSCRIPTIONS_MEMORY_ID: MemoryId = MemoryId::new(11)', 'POKE_CALLERS_MEMORY_ID: MemoryId = MemoryId::new(12)']:
     assert region in (root/'canisters/event-horizon/src/state.rs').read_text()
 assert 'resolve_subscription_memo(memo, state::alias)' in polling
 assert 'memo.to_vec()' in polling

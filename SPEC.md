@@ -21,7 +21,7 @@ operating costs. Neither yield nor uninterrupted service is guaranteed.
 
 The Event Horizon backend:
 
-- has exactly three production application queries, `get_instance`, `get_pricing`, and the bounded local-state-only `preview_subscription`, and one authenticated admission wake-up update, `poke`, with no administrative interface;
+- has exactly three production application queries, `get_instance`, `get_pricing`, and the bounded local-state-only `preview_subscription`, and one authenticated wake update, `poke`, with no administrative interface;
 - is intended to be observed in production while controlled, then made immutable by setting its controller list to empty;
 - uses native public canister status and public canister logs for operational observability;
 - is independently funded and operational after subscriptions have been admitted.
@@ -107,12 +107,26 @@ instance requires null and keeps its single shared legacy reader. A configured
 notifier must differ from the instance, anonymous and the management canister.
 The notifier is published by `get_instance` and cannot be changed by upgrade.
 
-The production synchronous update `poke : (PokeNotification) -> ();` uses the
-exact [subscriber callback ABI](candid/subscriber.did). It only records a wake-up
-when the caller is the configured notifier and a match identifies this
-instance as subject with `subaccount = 0`. Global activity, block index and
-amount do not participate in authorization or admission. The existing ledger
-and Historian checks determine all admission effects.
+The production synchronous update `poke : () -> ();` promptly acknowledges an
+accepted or coalesced request. Reconciliation and subscriber delivery proceed
+independently. On a generic instance only the configured
+notifier can request admission reconciliation. The canonical notifier still
+sends the ordinary [subscriber callback record](candid/subscriber.did). Candid
+allows the receiver to ignore the extra argument. The notifier principal alone
+authorizes this wake. The existing ledger and Historian checks determine all
+admission effects.
+
+On a canonical ICP instance only principals in `allowed_poke_callers` can
+request early execution of the shared ledger poll. The list defaults to empty,
+which disables the endpoint. It contains at most 16 distinct principals and
+excludes anonymous and management principals. Both roles check authorization
+at ingress and inside the update. The caller supplies no authoritative
+transaction information.
+
+Canonical wakes use the existing poll lane and can advance its ordinary
+deadline. Requests pending before a scan coalesce, and requests received
+during it coalesce into one follow-up. Reserve Protection and delayed trap
+recovery still apply. Autonomous polling continues at the existing cadence.
 
 A pending request can advance the existing one-shot poll timer and coalesces
 with work already scheduled or running. The same poll lane completes its
@@ -434,7 +448,7 @@ Admission and observed activity have separate prospective durable cursors. Fresh
 
 Global subscriptions match every processed block. Specific targets match only incoming `1xfer`, `2xfer`, or backward-compatible `tx.op = "xfer"` transfers to their resolved watched accounts. Thresholds are observed-token units; subscription prices and endowments are ICP.
 
-The production backend exposes the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the synchronous `poke : (PokeNotification) -> ();` update. The release audit rejects every other application method.
+The production backend exposes the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the synchronous `poke : () -> ();` update. The release audit rejects every other application method. Canonical instances accept `allowed_poke_callers : opt vec principal` at installation and an optional replacement list at upgrade. Argument-free upgrades and a null replacement preserve the list. An explicit empty vector disables worker wakes. Generic instances use their immutable notifier and accept only an empty or absent worker list. There is no policy setter.
 
 Before controller removal:
 

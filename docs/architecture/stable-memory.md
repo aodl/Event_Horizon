@@ -13,6 +13,8 @@ Stable-memory IDs are permanent protocol identifiers and are never reused.
 | 6 | Pricing initialization, current/frozen epochs, timestamps, attempt day, and measured call cost |
 | 7 | `FundingState`: the complete authoritative retained/CMC/surplus operation |
 | 8 | `SurplusPolicyState`: initialization, epoch start, hourly observed minimum, and level `0..19` |
+| 9–11 | Alias map, alias refresh metadata, and external subscription relations |
+| 12 | Canonical ICP worker allowlist, a bounded Candid vector in a separate cell |
 
 No migration from the pre-generic acceptance deployment or intermediate development schemas is supported; that historical zero-state transition used a deliberate reinstall. The deployed current schema is preserved by ordinary argument-free upgrades, including reader-only patches.
 
@@ -59,3 +61,7 @@ Pending shared-reader admissions use the same relation identity, publish only
 after page success, and commit with the cursor without an intervening await.
 
 The immutable instance cell encodes `icp_admission_notifier` as an optional Candid field. Historical bytes decode as null. The maximum supported record encodes to 266 bytes, so the declared cell bound is 272 bytes. The memory ID, cell header and all durable cursors are unchanged. Notification scheduling is reconstructed on upgrade.
+
+ID 12 initializes to an empty vector on historical instances. Only an explicit
+replacement list changes it on upgrade. Canonical worker wakes and pending
+generic admission wakes live in transient scheduler state.

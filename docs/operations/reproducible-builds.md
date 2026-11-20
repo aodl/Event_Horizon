@@ -44,17 +44,18 @@ It is useful for local inspection but is not canonical reproducibility evidence.
 
 ## Production-surface audit
 
-`tools/audit-wasm.py` parses the Wasm export section directly. The build fails unless the backend application surface consists of exactly these three queries:
+`tools/audit-wasm.py` parses the Wasm export section directly. The build fails unless the backend application surface consists of exactly these methods:
 
 ```candid
 service : {
   get_instance : () -> (InstanceInfo) query;
   get_pricing : () -> (Pricing) query;
   preview_subscription : (text) -> (variant { Ok : SubscriptionPreview; Err : text }) query;
+  poke : () -> ();
 }
 ```
 
-The audit permits only `poke` as a backend application update and rejects debug markers. The frontend must expose exactly `canister_query http_request`, with no HTTP update, pricing proxy, or administrative application method. These binary audits supplement rather than replace the checked-in Candid interfaces.
+The audit requires the backend's system-level ingress inspection hook and rejects debug markers. The frontend must expose exactly `canister_query http_request`, with no HTTP update, pricing proxy, or administrative application method. These binary audits supplement the checked-in Candid interfaces.
 
 The backend build has no surplus-recipient environment variable, build argument,
 feature, source substitution, or recipient-specific Docker path. One backend

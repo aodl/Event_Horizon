@@ -34,7 +34,7 @@ SNS-aware:
 })
 ```
 
-Use `surplus_canister = null` to disable diversion. For example, a CHAT-observing instance may name an entirely independent ICP treasury canister. The constructor rejects anonymous, management-canister, and self recipients. Installation writes the tuple once; ordinary upgrade has no configuration argument, and no production method can change it.
+Use `surplus_canister = null` to disable diversion. For example, a CHAT-observing instance may name an entirely independent ICP treasury canister. The constructor rejects anonymous, management-canister, and self recipients. Installation writes the tuple once; ordinary upgrades preserve it, and no production method can change it. The separate canonical worker allowlist can be supplied at installation or replaced at upgrade using the [worker wake arguments](../../canisters/event-horizon/README.md#configure-worker-wakes).
 
 For an SNS-aware instance, externally verify the observed token Ledger and SNS Root tuple against canonical SNS-WASM inventory or reviewed primary evidence. Confirm Root `list_sns_canisters` reports that Root, Ledger, and SNS Governance and that Ledger `icrc1_minting_account` is Governance's default account. Install with those immutable principals, wait for profile initialization, then verify `get_instance` reports the Ledger, SNS Root, surplus recipient, and observed Ledger profile, including neuron Governance. Perform controlled tests, remove all controllers, and only then propose frontend listing. Event Horizon never calls SNS-WASM and, after profile caching, does not call Root or Governance. ICP and non-SNS generic installs use `sns_root = null`.
 

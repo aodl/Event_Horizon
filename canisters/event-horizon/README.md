@@ -26,7 +26,7 @@ hash or controller state; verify those independently.
 
 ## Immutable configuration and ledger modes
 
-Installation persists `observed_ledger`, optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier` exactly once. The surplus recipient is an independent canister principal whose default all-zero-subaccount ICP AccountIdentifier receives eligible surplus ICP. `null` disables diversion. Ordinary upgrades take no configuration argument, and production exposes no setter or administrator method. The ICP Ledger, CMC, NNS Governance, Jupiter Historian, and Jupiter Faucet remain Wasm-level protocol anchors, so every instance uses the same reviewed backend bytes.
+Installation persists `observed_ledger`, optional `sns_root`, optional `surplus_canister`, and optional `icp_admission_notifier` exactly once. The surplus recipient is an independent canister principal whose default all-zero-subaccount ICP AccountIdentifier receives eligible surplus ICP. `null` disables diversion. Ordinary upgrades preserve these fields. Production exposes no setter or administrator method. The ICP Ledger, CMC, NNS Governance, Jupiter Historian, and Jupiter Faucet remain Wasm-level protocol anchors, so every instance uses the same reviewed backend bytes.
 
 The canonical ICP instance reads the legacy ICP `query_blocks` log for both admission and observation and uses fixed NNS Governance ownership for neuron targets. Generic instances retain ICP as the admission and funding asset while reading a compatible ICRC-1/ICRC-3 observed ledger. A generic SNS instance enables neuron targets only after verifying the configured SNS Root's Root/Ledger/Governance tuple and the Ledger's Governance-default minting account. No Index canister is required.
 
@@ -117,6 +117,7 @@ record {
   sns_root : opt principal;
   surplus_canister : opt principal;
   icp_admission_notifier : opt principal;
+  allowed_poke_callers : opt vec principal;
 }
 ```
 
@@ -124,9 +125,25 @@ Installation rejects an anonymous, management-canister, or self surplus
 recipient, but imposes no relationship to the observed Ledger, SNS, or Jupiter.
 `get_instance` and the initial CONFIG log expose the complete immutable tuple.
 
+### Configure worker wakes
+
+On canonical ICP, omit `allowed_poke_callers` or set it to `null` to disable
+worker wakes on install. To enable it, add
+`allowed_poke_callers = opt vec { principal "<WORKER_PRINCIPAL>" }` to the
+constructor record, replacing the placeholder with the reviewed principal.
+At most 16 distinct principals are accepted. Generic installations omit this
+field or leave it empty. Their immutable `icp_admission_notifier` is their
+sole authorized sender.
+
+An ordinary upgrade with no argument or `()` preserves the worker list. To
+replace it during a state-preserving canonical upgrade, supply
+`(opt vec { principal "<WORKER_PRINCIPAL>" })`. An explicit `(null)` preserves
+the list and `(opt vec {} : opt vec principal)` clears it. Controller removal
+prevents subsequent policy changes.
+
 ## Production surface and state
 
-The production application surface contains the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the authenticated `poke` admission wake-up. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
+The production application surface contains the read-only `get_instance`, `get_pricing`, and `preview_subscription` queries and the authenticated `poke : () -> ();` update. A canonical wake requests the existing guarded poll and a generic wake requests paced admission. Acknowledgment means accepted or coalesced. It does not report reconciliation or delivery. Debug/test methods are built only with the test feature and are absent from canonical production Wasm.
 
 Stable state holds immutable instance/profile data, reader cursors, subscriptions, pricing history, and funding recovery state. Schema evolution is additive and covered by upgrade scenarios. The canonical production Wasm deliberately remains separate from debug/test Wasms.
 

@@ -1,17 +1,3 @@
-type PokeTarget = variant {
-  subaccount : nat64;
-  neuron_nonce : nat64;
-};
-type PokeMatch = record {
-  subject : principal;
-  target : PokeTarget;
-  first_block_index : nat64;
-  max_amount : nat;
-};
-type PokeNotification = record {
-  global_activity : bool;
-  matches : vec PokeMatch;
-};
 type SubscriptionPreview = record { subscriber : principal; subject : opt principal; scope : variant { global; subaccount; neuron_nonce }; start : opt nat64; end : opt nat64; target_count : nat32; minimum_units : opt nat; alias_revision : opt blob; aliases_refreshed_at : opt nat64 };
 type AliasMetadata = record { revision : opt blob; last_success : opt nat64; last_attempt : opt nat64 };
 type PollingMode = variant { ReserveProtection; Economy; Standard; Fast; VeryFast; Continuous };
@@ -28,6 +14,7 @@ type DebugInitArgs = record {
   historian_canister : principal; faucet_canister : principal;
   surplus_canister : opt principal;
   icp_admission_notifier : opt principal;
+  allowed_poke_callers : opt vec principal;
   sns_root : opt principal;
 };
 type DebugState = record {
@@ -44,7 +31,7 @@ service : (DebugInitArgs) -> {
   debug_refresh_aliases : () -> ();
   debug_alias_metadata : () -> (AliasMetadata) query;
   debug_seed_external : (record { subject : principal; start : nat64; count : nat64 }) -> ();
-  poke : (PokeNotification) -> ();
+  poke : () -> ();
   get_instance : () -> (record {
     observed_ledger : principal;
     observed_profile : opt record { symbol : text; decimals : nat8; supports_icrc2_transfer_from : bool; neuron_governance : opt principal };

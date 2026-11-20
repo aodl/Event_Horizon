@@ -460,6 +460,53 @@ against intentional local global interest, and coalesce bounded work. Empty
 matches do not imply a global match. Existing Index canisters are not assumed
 to export this method or to complete reconciliation before other subscribers.
 
+### Implementing a subscriber receiver
+
+For the standard protocol, use the [full notification record](../candid/subscriber.did)
+for a standard receiver. Authenticate the sending instance inside your update,
+using the caller principal to select the trusted ledger. Apply local interest
+and amount filters before accepting a wake. Treat all notification fields as
+hints and reconcile against the authoritative ledger with your own durable
+cursor and periodic fallback.
+
+As an optional defensive optimization, reject unauthorized ingress early where your
+runtime supports message inspection. Keep the check inside the update because
+inspection does not run for inter-canister calls. A single in-flight worker and
+one pending bit can absorb bursts without losing a wake received after the
+worker captured its ledger boundary. This example shows one trusted ledger:
+
+```text
+poke(notification):
+    require caller is a trusted Event Horizon instance
+    if notification is relevant to local policy for caller:
+        pending = true
+        if worker is idle and none is scheduled:
+            schedule one worker
+    acknowledge
+
+worker (shared with periodic reconciliation):
+    acquire single-flight ownership
+    pending = false
+    reconcile the authoritative ledger from the durable cursor
+    release ownership
+    if pending:
+        schedule one follow-up
+```
+
+Keep claiming ownership and consuming the pending bit synchronous, and release
+ownership on failure using your runtime's cleanup mechanism. Use one scheduled
+worker even if more messages arrive before it starts. An ordinary update can
+acknowledge acceptance before work finishes. A Candid `oneway` method provides
+no application acknowledgment. Event Horizon sends its notifications without
+awaiting a response in either case.
+
+Event Horizon's own backend uses a deliberate special case. Its permissioned
+`poke()` receives a general wake from a configured worker or from the
+configured ICP admission notifier. The role and caller determine which
+reconciliation to request. When the notifier sends the full subscription
+record, the zero-argument backend receiver ignores it. Third-party receivers
+that filter for local interest need the notification-bearing interface above.
+
 ## Proposed zero-argument Index receiver
 
 The standard interface required for new subscription receivers remains:
@@ -528,4 +575,4 @@ before scheduling authoritative work. No Event Horizon fallback will bridge
 this change. Disburser-to-Historian forwarding is a separate contract and is
 not assumed to change. This release does not modify or deploy Jupiter.
 
-A generic Event Horizon can itself be an ordinary canonical ICP account subscriber. Its default-account matches can prompt admission reconciliation if it was installed with the canonical notifier. See [optional ICP admission notifications](operations/deploying-an-instance.md#optional-icp-admission-notifications) for route funding and memo limits. The callback remains a wake-up hint.
+A generic Event Horizon can itself be an ordinary canonical ICP account subscriber. A default-account subscription can prompt admission reconciliation if the generic instance was installed with the canonical notifier. Its permissioned backend receives the wake through the zero-argument interface above. See [optional ICP admission notifications](operations/deploying-an-instance.md#optional-icp-admission-notifications) for route funding and memo limits. The callback remains a wake-up hint.

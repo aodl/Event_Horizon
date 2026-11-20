@@ -3,4 +3,5 @@
   sns_root = null;
   surplus_canister = null;
   icp_admission_notifier = null;
+  allowed_poke_callers = null;
 })
