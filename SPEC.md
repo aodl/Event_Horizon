@@ -281,9 +281,11 @@ and is not implicitly changed by Event Horizon's callback ABI.
 Direct-Ledger subscribers need no Index. They use bounded legacy ICP
 `query_blocks` or generic `icrc3_get_blocks` reads, follow the corresponding
 archive retrieval paths themselves when needed, and reconcile further history
-from their own persistent cursors. Event Horizon serves no historical records
-and never traverses archives. Direct reads can fail or be stale: retain bounded
-retry/backoff, idempotent processing and independent periodic reconciliation.
+from their own persistent cursors. Event Horizon serves no historical
+records. It retrieves required unread blocks through ledger-advertised
+archive callbacks, as specified in section 7. Direct reads can fail or be
+stale: retain bounded retry/backoff, idempotent processing and independent
+periodic reconciliation.
 No hint establishes Ledger freshness, Index visibility or transaction completion.
 
 Each Event Horizon backend observes exactly one immutable ledger. After the subscriber authenticates `caller`, that caller identifies the ledger context of the poke. A subscriber may trust multiple Event Horizon instances; `PokeTarget`, `first_block_index` and `max_amount` are interpreted within each caller's immutable observed-ledger/profile context. The ledger is therefore not repeated in every match.
