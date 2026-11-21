@@ -55,6 +55,7 @@ measurements, offline modelling, report generation, and the tracked example
 input.
 
 The runner streams child output, records suite durations and parsed Cargo/libtest or Node counts, continues to later independent suites after safe failures, and prints all failure details and rerun commands again in a final `Failures:` section. A successful zero-test selection is rejected.
+See the managed `test_all` summary for the Rust, frontend, and PocketIC test counts for your checkout.
 
 To investigate one PocketIC scenario directly:
 
@@ -79,8 +80,7 @@ on ICP, ICRC-3 and SNS, including the combined 256-match cap. Production has
 one notification protocol and no alternate method.
 
 A separate, test-only `mock-index-poke` compiles an authenticated genuine
-`poke : () -> ()` receiving method. The current inventory has 146 Rust unit tests, 138 frontend tests and 128
-isolated PocketIC scenarios. The three Index-specific scenarios cover
+`poke : () -> ()` receiving method. The three Index-specific scenarios cover
 canonical ICP global wakes, generic ICRC-3 global wakes with ICP-only admission,
 and real specific/global mixed envelopes through the 256-match cap. They reuse
 the harness's Wasm cache and bounded receiver counter/caller waits. A standard
@@ -93,8 +93,8 @@ large full-record decoding regression is unchanged; see the
 The two-production-Wasm scenario funds two ordinary Faucet/Historian routes,
 observes the canonical one-way delivery through the resulting generic
 subscription, and verifies fallback with the notifier stopped. Deterministic
-debug fixtures exercise authenticated payload filtering, throttling, in-flight
-work, archived payouts and historical configuration. The combined-cycle scenario
+debug fixtures exercise caller authorization, coalescing, admission pacing,
+in-flight work, archived payouts, and historical configuration. The combined-cycle scenario
 uses the existing ledger request counters and reads cycle balances on both
 sides of the calls. It fixes poll cadence and simulated time and uses mocks,
 so it measures controlled costs rather than mainnet billing or guaranteed
