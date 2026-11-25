@@ -26,7 +26,8 @@ temporary filesystem make the resource and restart checks below relevant.
    If migrating a worker with saved progress, stop the original installation
    first and import its own trusted checkpoint into the root of the persistent
    data volume through the creation-time data import workflow. A checkpoint
-   override must be absolute and on the persistent volume.
+   override must be an absolute file path inside `NIBRUN_DATA_DIR`. The worker
+   rejects symlinks within the checkpoint path on that volume at startup.
 4. On the trusted deployment computer, check app activation before relying on
    continuous polling. Substitute the real app name. The status JSON must show
    `"activation": "always"`. [CLI status command](https://github.com/ilbertt/nibrun/blob/main/packages/cli/src/commands/apps/status.ts)

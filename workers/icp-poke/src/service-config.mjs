@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { lstat, open, realpath } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { readConfig } from './config.mjs';
 import { createFileStore } from './file-store.mjs';
 import { publicError } from './runtime.mjs';
@@ -29,6 +29,44 @@ export async function readSettings(filename, options) {
   } finally {
     await file?.close();
   }
+}
+
+async function nibrunCheckpoint(dataDir, checkpoint) {
+  if (typeof dataDir !== 'string' || !isAbsolute(dataDir) || dataDir.includes('\0')) {
+    throw new Error('NIBRUN_DATA_DIR must be an absolute directory path');
+  }
+  const root = resolve(dataDir);
+  const directoryError = 'NIBRUN_DATA_DIR must name an existing, non-symlinked data directory';
+  if (root === sep) throw new Error(directoryError);
+  const metadata = await lstat(root).catch(() => { throw new Error(directoryError); });
+  if (!metadata.isDirectory()) throw new Error(directoryError);
+  const canonicalRoot = await realpath(root);
+
+  checkpoint ??= join(root, 'checkpoint.json');
+  createFileStore(checkpoint); // Apply the shared absolute-file-path validation.
+  const child = relative(root, resolve(checkpoint));
+  const components = child.split(sep);
+  if (!child || isAbsolute(child) || components[0] === '..') {
+    throw new Error('Checkpoint must be within NIBRUN_DATA_DIR');
+  }
+
+  const canonicalCheckpoint = join(canonicalRoot, child);
+  let current = canonicalRoot;
+  for (const [index, component] of components.entries()) {
+    current = join(current, component);
+    const entry = await lstat(current).catch(error => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    // A missing descendant can be created by the store. Check every existing
+    // ancestor without following links, including dangling symlinks.
+    if (!entry) break;
+    if (entry.isSymbolicLink()) throw new Error('Checkpoint path must not use symlinks within NIBRUN_DATA_DIR');
+    if (index === components.length - 1 ? !entry.isFile() : !entry.isDirectory()) {
+      throw new Error('Checkpoint path must name a file within NIBRUN_DATA_DIR');
+    }
+  }
+  return canonicalCheckpoint;
 }
 
 export async function serviceOptions(args, ambient = process.env) {
@@ -62,14 +100,12 @@ export async function serviceOptions(args, ambient = process.env) {
   }
 
   let checkpoint = options.get('--checkpoint') ?? env.EH_CHECKPOINT_PATH;
-  if (checkpoint === undefined && ambient.NIBRUN_DATA_DIR !== undefined) {
-    if (!isAbsolute(ambient.NIBRUN_DATA_DIR)) throw new Error('NIBRUN_DATA_DIR must be absolute');
-    checkpoint = join(ambient.NIBRUN_DATA_DIR, 'checkpoint.json');
-  }
-  if (!validate || checkpoint !== undefined) {
+  if (ambient.NIBRUN_DATA_DIR !== undefined) {
+    checkpoint = await nibrunCheckpoint(ambient.NIBRUN_DATA_DIR, checkpoint);
+  } else if (!validate || checkpoint !== undefined) {
     createFileStore(checkpoint); // Validate the path without touching disk.
-    env.EH_CHECKPOINT_PATH = checkpoint;
   }
+  if (checkpoint !== undefined) env.EH_CHECKPOINT_PATH = checkpoint;
 
   const port = options.get('--http-port') ?? ambient.NIBRUN_HTTP_PORT;
   if (port !== undefined && (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535)) {
@@ -77,6 +113,6 @@ export async function serviceOptions(args, ambient = process.env) {
   }
   return {
     env, config, httpPort: port === undefined ? undefined : Number(port), validate,
-    checkpointToValidate: options.get('--checkpoint'),
+    checkpointToValidate: options.has('--checkpoint') ? checkpoint : undefined,
   };
 }

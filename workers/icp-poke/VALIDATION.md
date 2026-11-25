@@ -2,9 +2,9 @@
 
 ## Local checks, 25 November 2026
 
-The artifact was built from Git base
-`5f7ee49d22b3144b490497a97ee03d1a064c55cd` with local worker integration and
-hosting changes. `dist/BUILD.txt` records the exact staged build and installer
+The artifact was rebuilt from Git base
+`67096371f3d72c7a8bf473c00094d837d2f20a00` with local Nibrun checkpoint path
+validation changes. `dist/BUILD.txt` records the exact build and installer
 input digests. The compiler and embedded runtime are Bun
 `1.4.5+a7733435c`, targeting `bun-linux-x64`. The build and source tests used
 Node.js 24.15.0 and npm 11.12.1. The unchanged npm lockfile pins
@@ -16,25 +16,31 @@ in the archive byte for byte. Build reproducibility was not evaluated.
 
 | Output under `workers/icp-poke/dist/` | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `eh-poke-linux-x86_64` | 109,619,376 | `464144e11afc8e33d0ed61aa4998c0569fbe68313c5ff1ccab84dea746e47479` |
-| `eh-poke-vps-linux-x86_64.tar.gz` | 51,283,107 | `264b8cd97148aa1e5100382d173262a2bb170b0e9f05c9aec83130ab42699785` |
-| `BUILD.txt` | 1,689 | `ccb2fd9ac1a8df232e5661898a6e78a9dc71a25cedefc96f584ec3f29de95f2c` |
+| `eh-poke-linux-x86_64` | 109,619,376 | `e314094bee2b4556c3c4cfbbbd46f13a2ae197f441f96094bc5bdb619937643b` |
+| `eh-poke-vps-linux-x86_64.tar.gz` | 51,283,558 | `84e524ec3a7f9be5188b82d04f1e0a1b298348de656f21840b4beb967d816e69` |
+| `BUILD.txt` | 1,689 | `626788bf8b09cac9d2cf519edaca33dca68587269911b0b95934fb5b0908e4c2` |
 
-Run the [build and test commands](README.md#build-and-test) for fresh test
-summaries and hashes. The Node source suite covers configuration precedence,
-permission and redaction checks, scheduling, recovery, and an actual child
-SIGTERM while a pass is active and HTTP has a keep-alive connection. The
-artifact suite runs relevant existing suites under Bun, then tests the
-production executable in isolation and a separate compiled harness. The
-production executable checks include offline validation, a bind conflict,
-startup and retry status, and graceful HTTP shutdown with no external runtime.
+This rebuild passed 74 Node source tests, 62 Bun source tests and 10 artifact
+tests. The integrated VPS baseline had 71 source tests. The executable work
+moved four installer/package tests to the artifact suite and added three
+source cases, bringing that count to 70. This update adds four source cases
+for Nibrun checkpoint containment.
+[Build and test commands](README.md#build-and-test)
+
+The Bun run repeats seven shared-module suites from the Node suite. They cover
+accounts, config, matching, file storage, ICP SDK interaction, Candid and
+poll timing. Node still runs the source CLI and launcher tests. The artifact
+suite separately exercises the actual release executable and the compiled
+harness. Release checks include offline validation, Nibrun checkpoint
+containment, a bind conflict, startup and retry status, and graceful HTTP
+shutdown in an isolated environment without an external runtime.
 The harness verifies a signed zero-argument SDK request, rejects an HTTP 202
 without certified acknowledgement, cancels real fixture transport, and
 checks the durable file store. Signature settings and mocked SDK configuration
 checks exercise local contracts. Authorised certified mainnet acceptance is
 still pending.
 
-The installation archive also passed in a disposable, network-isolated
+The preceding build's installation archive passed in a disposable, network-isolated
 Ubuntu 24.04 QEMU guest with systemd 255 and an emulated Nehalem CPU.
 Synthetic settings were used. Preflight left the service and account absent.
 Group-writable input and a symlinked installation directory failed before
@@ -42,7 +48,8 @@ installation. Fresh installation was disabled and inactive with the intended
 ownership and modes. The unit ran the executable and held the local lock.
 An active update and a changed start block were rejected. A stopped update
 preserved the protected settings and checkpoint byte for byte, including
-after the service restarted. The worker logged a graceful stop.
+after the service restarted. The worker logged a graceful stop. This rebuild
+reran the packaged installer preflight and archive tests.
 
 The archive contains four regular files, comprising the executable, installer,
 unit, and build record. Archive and input checksums, the worker dependency
@@ -58,9 +65,9 @@ Both runs used Ubuntu 24.04 containers with one CPU, a 256 MiB cgroup memory
 limit, no extra swap and no external network. The release executable ran
 with HTTP enabled and made five attempts against a closed loopback HTTPS
 endpoint over a 16-second interval. Linux `/proc` reported a peak RSS of
-61,568 KiB and 0.36 seconds of process CPU. It exited on SIGTERM.
+62,064 KiB and 0.32 seconds of process CPU. It exited on SIGTERM.
 
-Successful polling was measured with a separate compiled harness. It used the
+Earlier successful polling was measured with a separate compiled harness. It used the
 production poll loop, SDK actor/identity construction, ledger Candid types,
 scan logic and file store. It supplied bounded decoded fixture pages in place
 of live gateway responses. The idle case decoded ten empty replies. Catch-up

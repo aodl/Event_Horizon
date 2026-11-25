@@ -4,7 +4,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { Agent, get } from 'node:http';
 import { createServer } from 'node:net';
-import { chmod, copyFile, mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -123,6 +123,24 @@ test('release executable binds assigned HTTP, exposes retry state and exits on S
   assert.ok(!(stdout + stderr + retry.body).includes(settings.EH_IDENTITY_SEED));
   assert.deepEqual(await readdir(cwd), ['worker']);
   assert.deepEqual(await readdir(data), []);
+});
+
+test('release executable keeps Nibrun checkpoints on the persistent volume', { timeout: 20_000 }, async context => {
+  const { app, cwd, data, env } = await isolated(context);
+  const options = { cwd, env: { ...env, ...settings, NIBRUN_DATA_DIR: data } };
+  const checkpoint = join(data, 'nested', 'checkpoint.json');
+  assert.match((await execute(app, ['--validate', '--checkpoint', checkpoint], options)).stdout, /Offline validation passed/);
+  assert.deepEqual(await readdir(data), []);
+  await symlink(cwd, join(data, 'nested'));
+  await assert.rejects(execute(app, ['--validate', '--checkpoint', checkpoint], options), error => {
+    assert.equal(error.code, 1);
+    assert.match(error.stderr, /symlinks within NIBRUN_DATA_DIR/);
+    return true;
+  });
+  await assert.rejects(execute(app, ['--validate'], {
+    ...options, env: { ...options.env, EH_CHECKPOINT_PATH: join(cwd, 'checkpoint.json') },
+  }), error => error.code === 1 && /within NIBRUN_DATA_DIR/.test(error.stderr));
+  assert.deepEqual(await readdir(cwd), ['worker']);
 });
 
 test('compiled test harness verifies signed SDK requests, cancellation and durable checkpoints', { timeout: 20_000 }, async context => {

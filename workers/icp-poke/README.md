@@ -105,9 +105,11 @@ Use `--settings PATH` for a protected JSON file with string values. This file
 is the sole source of worker values when selected. Otherwise the service reads
 `EH_*` values from its environment. Checkpoint precedence is
 `--checkpoint PATH`, then the selected source's `EH_CHECKPOINT_PATH`, then
-`NIBRUN_DATA_DIR/checkpoint.json` when the platform supplies an absolute data
-directory. A running service requires an absolute checkpoint file path. Choose
-a persistent location and retain the existing checkpoint for that identity.
+`NIBRUN_DATA_DIR/checkpoint.json`. When supplied, `NIBRUN_DATA_DIR` must be an
+existing absolute directory. The checkpoint must stay within it. The service
+rejects symlinks at that directory and along the checkpoint path below it.
+On a VPS, choose an absolute checkpoint file path on persistent storage.
+Retain the checkpoint for that identity.
 
 HTTP is off by default. `--http-port PORT_NUMBER` overrides
 `NIBRUN_HTTP_PORT`. The ordinary `PORT` environment variable has no effect.

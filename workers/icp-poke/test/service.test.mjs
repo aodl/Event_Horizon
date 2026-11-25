@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { Agent, get } from 'node:http';
-import { chmod, mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, symlink, writeFile, rm, readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,10 +75,73 @@ test('file and platform values share validation with deterministic isolation, pa
   const override = await serviceOptions(['--http-port', '8080'], { ...platform, EH_CHECKPOINT_PATH: checkpoint });
   assert.equal(override.httpPort, 8080);
   assert.equal(override.env.EH_CHECKPOINT_PATH, checkpoint);
-  await assert.rejects(serviceOptions([], { ...platform, NIBRUN_DATA_DIR: 'data' }), /absolute/);
   await assert.rejects(serviceOptions([], { ...platform, NIBRUN_HTTP_PORT: '65536' }), /HTTP port/);
   await assert.rejects(serviceOptions([], { ...env, PORT: '3000' }), /absolute/);
   await assert.rejects(serviceOptions([], { ...platform, EH_START_BLOCK: '-1' }), /EH_START_BLOCK/);
+});
+
+test('Nibrun accepts the persistent default and normalized overrides inside its data directory', async context => {
+  const directory = await temporary(context);
+  const platform = { ...env, NIBRUN_DATA_DIR: `${directory}/./` };
+  const checkpoint = join(directory, 'checkpoint.json');
+  assert.equal((await serviceOptions([], platform)).env.EH_CHECKPOINT_PATH, checkpoint);
+  await writeFile(checkpoint, '{}');
+  assert.equal((await serviceOptions([], platform)).env.EH_CHECKPOINT_PATH, checkpoint);
+  const nested = join(directory, 'new', 'worker.json');
+  const override = { ...platform, EH_CHECKPOINT_PATH: nested };
+  assert.equal((await serviceOptions([], override)).env.EH_CHECKPOINT_PATH, nested);
+  const cli = await serviceOptions(['--validate', '--checkpoint', `${directory}/new/../worker.json`], override);
+  assert.equal(cli.env.EH_CHECKPOINT_PATH, join(directory, 'worker.json'));
+  assert.equal(cli.checkpointToValidate, cli.env.EH_CHECKPOINT_PATH);
+});
+
+test('Nibrun rejects outside paths, parent traversal and prefix lookalikes for both overrides', async context => {
+  const directory = await temporary(context);
+  const data = join(directory, 'data');
+  await mkdir(data);
+  await mkdir(`${data}-other`);
+  const platform = { ...env, NIBRUN_DATA_DIR: data };
+  for (const checkpoint of [
+    join(directory, 'checkpoint.json'), `${data}/nested/../../checkpoint.json`,
+    `${data}-other/checkpoint.json`, data,
+  ]) {
+    await assert.rejects(serviceOptions([], { ...platform, EH_CHECKPOINT_PATH: checkpoint }), /within NIBRUN_DATA_DIR/);
+    await assert.rejects(serviceOptions(['--validate', '--checkpoint', checkpoint], platform), /within NIBRUN_DATA_DIR/);
+  }
+  const outside = join(directory, 'checkpoint.json');
+  assert.equal((await serviceOptions(['--checkpoint', outside], env)).env.EH_CHECKPOINT_PATH, outside);
+});
+
+test('Nibrun rejects symlink escapes through checkpoint parents and the default filename', async context => {
+  const directory = await temporary(context);
+  const data = join(directory, 'data');
+  const outside = join(directory, 'outside');
+  await mkdir(data);
+  await mkdir(outside);
+  await symlink(outside, join(data, 'redirect'));
+  await symlink(join(outside, 'missing'), join(data, 'dangling'));
+  await symlink(join(outside, 'checkpoint.json'), join(data, 'checkpoint.json'));
+  const platform = { ...env, NIBRUN_DATA_DIR: data };
+  await assert.rejects(serviceOptions([], platform), /symlinks within NIBRUN_DATA_DIR/);
+  const nested = join(data, 'redirect', 'new', 'checkpoint.json');
+  await assert.rejects(serviceOptions([], { ...platform, EH_CHECKPOINT_PATH: nested }), /symlinks within NIBRUN_DATA_DIR/);
+  const dangling = join(data, 'dangling', 'checkpoint.json');
+  await assert.rejects(serviceOptions(['--checkpoint', dangling], platform), /symlinks within NIBRUN_DATA_DIR/);
+});
+
+test('Nibrun validates its platform directory even with a checkpoint override', async context => {
+  const directory = await temporary(context);
+  const file = join(directory, 'file');
+  const alias = join(directory, 'alias');
+  await writeFile(file, '');
+  await symlink(directory, alias);
+  for (const dataDir of ['', 'data', `${directory}\0`, '/', file, alias, join(directory, 'missing')]) {
+    const platform = { ...env, NIBRUN_DATA_DIR: dataDir };
+    const checkpoint = join(directory, 'worker.json');
+    await assert.rejects(serviceOptions([], platform), /NIBRUN_DATA_DIR must/);
+    await assert.rejects(serviceOptions([], { ...platform, EH_CHECKPOINT_PATH: checkpoint }), /NIBRUN_DATA_DIR must/);
+    await assert.rejects(serviceOptions(['--validate', '--checkpoint', checkpoint], platform), /NIBRUN_DATA_DIR must/);
+  }
 });
 
 test('HTTP reads are observational through startup, retry, recovery and fatal pass failure', { timeout: 15_000 }, async () => {
