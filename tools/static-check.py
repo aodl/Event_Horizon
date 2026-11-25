@@ -583,6 +583,12 @@ assert 'no block index, complete transaction record' not in spec
 
 assert 'preview_subscription : (text)' in backend_did
 assert 'poke : () -> ();' in backend_did
+worker = root/'workers/icp-poke'
+assert 'poke: IDL.Func([], [], [])' in (worker/'src/idl.mjs').read_text()
+worker_service = (worker/'systemd/event-horizon-poke.service').read_text()
+assert 'User=ehworker\n' in worker_service and '/usr/bin/flock --no-fork -n' in worker_service
+assert 'StateDirectoryMode=0700\n' in worker_service and 'NoNewPrivileges=true\n' in worker_service
+assert '/opt/event-horizon-worker/eh-poke-linux-x86_64 --settings ' in worker_service
 assert 'allowed_poke_callers : opt vec principal;' in backend_did
 assert backend_did.count('icp_admission_notifier : opt principal') == 2
 assert 'poke : (PokeNotification) -> ();' in subscriber_did

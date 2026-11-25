@@ -1,0 +1,18 @@
+{
+  "name": "@event-horizon/icp-poke-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:artifact": "bash scripts/test-artifact.sh",
+    "check": "node scripts/cli.mjs check",
+    "identity": "node scripts/cli.mjs identity",
+    "start": "node scripts/run-service.mjs",
+    "package": "bash scripts/package.sh"
+  },
+  "dependencies": {
+    "@icp-sdk/core": "6.1.0"
+  }
+}

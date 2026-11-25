@@ -48,6 +48,13 @@ integration process. The managed command sets `POCKET_IC_MUTE_SERVER=1` and
 
 PocketIC is supplied by the Rust dependency and test harness; Event Horizon has no separately managed local-replica integration layer.
 
+The [off-chain ICP worker](../../workers/icp-poke/README.md) has a separate
+Node.js 24 suite. Run `npm ci --ignore-scripts` and `npm test` from
+`workers/icp-poke`. The worker workflow also audits the locked dependencies,
+builds the Linux executable and installation archive, and runs
+`npm run test:artifact` with the pinned Bun compiler. See the
+[worker build and test commands](../../workers/icp-poke/README.md#build-and-test).
+
 The resource-intensive cadence experiments are a separate binary, not ignored
 tests, so `test_all` does not discover or execute them. See
 [cadence calibration](cadence-calibration.md) for bounded smoke/full

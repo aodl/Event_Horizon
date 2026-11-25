@@ -1,5 +1,7 @@
 # Event Horizon
 
+For the optional off-chain ICP worker on Webdock, netcup or always-on Nibrun, see the [worker setup guide](workers/icp-poke/START_HERE.md).
+
 ![img](/canisters/frontend/public/og/event-horizon-preview-v1.jpg)
 
 Event Horizon is a ledger-generic low-latency wake-up service funded by

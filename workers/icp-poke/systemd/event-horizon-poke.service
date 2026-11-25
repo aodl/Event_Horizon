@@ -1,0 +1,28 @@
+[Unit]
+Description=Event Horizon ICP ledger poke watcher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ehworker
+Group=ehworker
+WorkingDirectory=/opt/event-horizon-worker
+StateDirectory=event-horizon-worker
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/bin/flock --no-fork -n /var/lib/event-horizon-worker/worker.lock /opt/event-horizon-worker/eh-poke-linux-x86_64 --settings /etc/event-horizon/worker.settings.json --checkpoint /var/lib/event-horizon-worker/checkpoint.json
+Restart=always
+RestartSec=5
+TimeoutStopSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,60 @@
+name: ICP poke worker
+
+on:
+  pull_request:
+    paths:
+      - 'workers/icp-poke/**'
+      - 'canisters/event-horizon/event_horizon.did'
+      - '.github/workflows/icp-poke-worker.yml'
+      - 'tools/static-check.py'
+      - 'tools/scripts/source-manifest'
+  push:
+    branches:
+      - main
+    paths:
+      - 'workers/icp-poke/**'
+      - 'canisters/event-horizon/event_horizon.did'
+      - '.github/workflows/icp-poke-worker.yml'
+      - 'tools/static-check.py'
+      - 'tools/scripts/source-manifest'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/icp-poke
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: workers/icp-poke/package-lock.json
+      - name: Install locked worker dependencies and pinned compiler
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --prefix .local/toolchain --ignore-scripts --no-audit --no-fund --save-exact @oven/bun-linux-x64@1.4.5
+          printf 'BUN=%s\n' "$PWD/.local/toolchain/node_modules/@oven/bun-linux-x64/bin/bun" >> "$GITHUB_ENV"
+      - run: umask 077 && npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run package
+      - run: umask 077 && npm run test:artifact
+      - name: Check archive and scripts
+        run: |
+          for script in scripts/*.sh; do bash -n "$script"; done
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Check repository source and manifest
+        working-directory: .
+        run: |
+          python3 tools/static-check.py
+          ./tools/scripts/source-manifest verify
+          git diff --check
+          git diff --check HEAD^ HEAD

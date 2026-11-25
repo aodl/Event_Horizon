@@ -7,3 +7,4 @@
 *.wasm.gz
 .DS_Store
 observations/
+/event-horizon-worker-vps-ready.zip
